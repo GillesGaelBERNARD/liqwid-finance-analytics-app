@@ -1,4 +1,4 @@
-# Liqwid Finance Market Dynamics
+# Liqwid Finance Analytics App
 
 An open-source, client-side web application and data pipeline for monitoring and analyzing Cardano's [Liqwid Finance](https://liqwid.finance) market dynamics, liquidity, interest gaps, borrow/repayment trends, and bad debt history.
 
@@ -35,28 +35,31 @@ An open-source, client-side web application and data pipeline for monitoring and
 - Node.js >= 20
 - Python 3.10+ (for data scripts and app bundler)
 
-### Running the App Locally
+### Running the App & Opening Data Archive
 
-You can open the generated standalone application directly in your browser:
-```bash
-# Open data/liqwid/liqwid-analysis-app.html in your web browser
-```
+1. **Launch the Application**: Open `data/liqwid/liqwid-analysis-app.html` directly in any web browser (Chrome, Firefox, Edge, etc.).
+2. **Open Existing Data Archive (`.zip`)**:
+   - Inside the app, click the **"Open Archive"** / **"Load Data Archive"** button in the header or data management section.
+   - Select the pre-packaged archive at `data/liqwid/liqwid-data.zip` (or select the `data/liqwid` local directory if using the File System Access API).
+   - The application will instantaneously unpack and render the entire historical analytics workspace, protocol aggregates, and per-market dynamics offline.
 
-Or generate/rebuild the bundle:
+### Rebuilding the Application Bundle
+
+To rebuild the single-file HTML application (`data/liqwid/liqwid-analysis-app.html`):
 ```bash
 npm run build:app
 ```
 
 ### Running Tests
 
-Run the test suite:
+Run the full automated test suite:
 ```bash
 npm test
 ```
 
 ### Rebuilding Data Archive
 
-To re-build the portable `.zip` data archive and manifest from local data:
+To re-generate the portable `.zip` data archive (`liqwid-data.zip`) and its CSV manifest (`liqwid-portable-manifest.csv`) from local data:
 ```bash
 python scripts/rebuild_data_archive.py --data-root data/liqwid
 ```
