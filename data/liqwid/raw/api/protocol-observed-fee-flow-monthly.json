@@ -1,0 +1,680 @@
+{
+  "fetchedAt": "2026-07-19T09:29:05.962454+00:00",
+  "source": "https://v2.api.liqwid.finance/graphql",
+  "queryName": "analytics.overview monthly observed fee components",
+  "formula": "combined observed fee flow only; not retained protocol revenue",
+  "rows": [
+    {
+      "date": "2023-02-01",
+      "periodStartDay": "2023-02-02",
+      "periodEndDay": "2023-02-28",
+      "fromDate": "2023-02-02T00:00:00.000Z",
+      "toDate": "2023-02-28T23:59:59.000Z",
+      "observedRepaidInterestFeeFlowInUsd": 1537.238419504502,
+      "observedOriginationFeeFlowInUsd": 0.0,
+      "combinedObservedFeeFlowInUsd": 1537.238419504502,
+      "isComplete": false,
+      "variables": {
+        "startDate": "2023-02-02T00:00:00Z",
+        "endDate": "2023-02-28T23:59:59Z"
+      },
+      "fetchError": null
+    },
+    {
+      "date": "2023-03-01",
+      "periodStartDay": "2023-03-01",
+      "periodEndDay": "2023-03-31",
+      "fromDate": "2023-03-01T00:00:00.000Z",
+      "toDate": "2023-03-31T23:59:59.000Z",
+      "observedRepaidInterestFeeFlowInUsd": 4466.20516573689,
+      "observedOriginationFeeFlowInUsd": 0.0,
+      "combinedObservedFeeFlowInUsd": 4466.20516573689,
+      "isComplete": true,
+      "variables": {
+        "startDate": "2023-03-01T00:00:00Z",
+        "endDate": "2023-03-31T23:59:59Z"
+      },
+      "fetchError": null
+    },
+    {
+      "date": "2023-04-01",
+      "periodStartDay": "2023-04-01",
+      "periodEndDay": "2023-04-30",
+      "fromDate": "2023-04-01T00:00:00.000Z",
+      "toDate": "2023-04-30T23:59:59.000Z",
+      "observedRepaidInterestFeeFlowInUsd": 25942.150177184536,
+      "observedOriginationFeeFlowInUsd": 0.0,
+      "combinedObservedFeeFlowInUsd": 25942.150177184536,
+      "isComplete": true,
+      "variables": {
+        "startDate": "2023-04-01T00:00:00Z",
+        "endDate": "2023-04-30T23:59:59Z"
+      },
+      "fetchError": null
+    },
+    {
+      "date": "2023-05-01",
+      "periodStartDay": "2023-05-01",
+      "periodEndDay": "2023-05-31",
+      "fromDate": "2023-05-01T00:00:00.000Z",
+      "toDate": "2023-05-31T23:59:59.000Z",
+      "observedRepaidInterestFeeFlowInUsd": 2526.076348712304,
+      "observedOriginationFeeFlowInUsd": 0.0,
+      "combinedObservedFeeFlowInUsd": 2526.076348712304,
+      "isComplete": true,
+      "variables": {
+        "startDate": "2023-05-01T00:00:00Z",
+        "endDate": "2023-05-31T23:59:59Z"
+      },
+      "fetchError": null
+    },
+    {
+      "date": "2023-06-01",
+      "periodStartDay": "2023-06-01",
+      "periodEndDay": "2023-06-30",
+      "fromDate": "2023-06-01T00:00:00.000Z",
+      "toDate": "2023-06-30T23:59:59.000Z",
+      "observedRepaidInterestFeeFlowInUsd": 4426.001529305449,
+      "observedOriginationFeeFlowInUsd": 0.0,
+      "combinedObservedFeeFlowInUsd": 4426.001529305449,
+      "isComplete": true,
+      "variables": {
+        "startDate": "2023-06-01T00:00:00Z",
+        "endDate": "2023-06-30T23:59:59Z"
+      },
+      "fetchError": null
+    },
+    {
+      "date": "2023-07-01",
+      "periodStartDay": "2023-07-01",
+      "periodEndDay": "2023-07-31",
+      "fromDate": "2023-07-01T00:00:00.000Z",
+      "toDate": "2023-07-31T23:59:59.000Z",
+      "observedRepaidInterestFeeFlowInUsd": 1904.466741616594,
+      "observedOriginationFeeFlowInUsd": 0.0,
+      "combinedObservedFeeFlowInUsd": 1904.466741616594,
+      "isComplete": true,
+      "variables": {
+        "startDate": "2023-07-01T00:00:00Z",
+        "endDate": "2023-07-31T23:59:59Z"
+      },
+      "fetchError": null
+    },
+    {
+      "date": "2023-08-01",
+      "periodStartDay": "2023-08-01",
+      "periodEndDay": "2023-08-31",
+      "fromDate": "2023-08-01T00:00:00.000Z",
+      "toDate": "2023-08-31T23:59:59.000Z",
+      "observedRepaidInterestFeeFlowInUsd": 2237.6972482292913,
+      "observedOriginationFeeFlowInUsd": 0.0,
+      "combinedObservedFeeFlowInUsd": 2237.6972482292913,
+      "isComplete": true,
+      "variables": {
+        "startDate": "2023-08-01T00:00:00Z",
+        "endDate": "2023-08-31T23:59:59Z"
+      },
+      "fetchError": null
+    },
+    {
+      "date": "2023-09-01",
+      "periodStartDay": "2023-09-01",
+      "periodEndDay": "2023-09-30",
+      "fromDate": "2023-09-01T00:00:00.000Z",
+      "toDate": "2023-09-30T23:59:59.000Z",
+      "observedRepaidInterestFeeFlowInUsd": 1085.0243115215633,
+      "observedOriginationFeeFlowInUsd": 0.0,
+      "combinedObservedFeeFlowInUsd": 1085.0243115215633,
+      "isComplete": true,
+      "variables": {
+        "startDate": "2023-09-01T00:00:00Z",
+        "endDate": "2023-09-30T23:59:59Z"
+      },
+      "fetchError": null
+    },
+    {
+      "date": "2023-10-01",
+      "periodStartDay": "2023-10-01",
+      "periodEndDay": "2023-10-31",
+      "fromDate": "2023-10-01T00:00:00.000Z",
+      "toDate": "2023-10-31T23:59:59.000Z",
+      "observedRepaidInterestFeeFlowInUsd": 1669.6312400296015,
+      "observedOriginationFeeFlowInUsd": 0.0,
+      "combinedObservedFeeFlowInUsd": 1669.6312400296015,
+      "isComplete": true,
+      "variables": {
+        "startDate": "2023-10-01T00:00:00Z",
+        "endDate": "2023-10-31T23:59:59Z"
+      },
+      "fetchError": null
+    },
+    {
+      "date": "2023-11-01",
+      "periodStartDay": "2023-11-01",
+      "periodEndDay": "2023-11-30",
+      "fromDate": "2023-11-01T00:00:00.000Z",
+      "toDate": "2023-11-30T23:59:59.000Z",
+      "observedRepaidInterestFeeFlowInUsd": 2694.059411511744,
+      "observedOriginationFeeFlowInUsd": 0.0,
+      "combinedObservedFeeFlowInUsd": 2694.059411511744,
+      "isComplete": true,
+      "variables": {
+        "startDate": "2023-11-01T00:00:00Z",
+        "endDate": "2023-11-30T23:59:59Z"
+      },
+      "fetchError": null
+    },
+    {
+      "date": "2023-12-01",
+      "periodStartDay": "2023-12-01",
+      "periodEndDay": "2023-12-31",
+      "fromDate": "2023-12-01T00:00:00.000Z",
+      "toDate": "2023-12-31T23:59:59.000Z",
+      "observedRepaidInterestFeeFlowInUsd": 7292.350718130417,
+      "observedOriginationFeeFlowInUsd": 0.0,
+      "combinedObservedFeeFlowInUsd": 7292.350718130417,
+      "isComplete": true,
+      "variables": {
+        "startDate": "2023-12-01T00:00:00Z",
+        "endDate": "2023-12-31T23:59:59Z"
+      },
+      "fetchError": null
+    },
+    {
+      "date": "2024-01-01",
+      "periodStartDay": "2024-01-01",
+      "periodEndDay": "2024-01-31",
+      "fromDate": "2024-01-01T00:00:00.000Z",
+      "toDate": "2024-01-31T23:59:59.000Z",
+      "observedRepaidInterestFeeFlowInUsd": 24974.874811489684,
+      "observedOriginationFeeFlowInUsd": 0.0,
+      "combinedObservedFeeFlowInUsd": 24974.874811489684,
+      "isComplete": true,
+      "variables": {
+        "startDate": "2024-01-01T00:00:00Z",
+        "endDate": "2024-01-31T23:59:59Z"
+      },
+      "fetchError": null
+    },
+    {
+      "date": "2024-02-01",
+      "periodStartDay": "2024-02-01",
+      "periodEndDay": "2024-02-29",
+      "fromDate": "2024-02-01T00:00:00.000Z",
+      "toDate": "2024-02-29T23:59:59.000Z",
+      "observedRepaidInterestFeeFlowInUsd": 2867.7611216776063,
+      "observedOriginationFeeFlowInUsd": 0.0,
+      "combinedObservedFeeFlowInUsd": 2867.7611216776063,
+      "isComplete": true,
+      "variables": {
+        "startDate": "2024-02-01T00:00:00Z",
+        "endDate": "2024-02-29T23:59:59Z"
+      },
+      "fetchError": null
+    },
+    {
+      "date": "2024-03-01",
+      "periodStartDay": "2024-03-01",
+      "periodEndDay": "2024-03-31",
+      "fromDate": "2024-03-01T00:00:00.000Z",
+      "toDate": "2024-03-31T23:59:59.000Z",
+      "observedRepaidInterestFeeFlowInUsd": 9736.704723049745,
+      "observedOriginationFeeFlowInUsd": 0.0,
+      "combinedObservedFeeFlowInUsd": 9736.704723049745,
+      "isComplete": true,
+      "variables": {
+        "startDate": "2024-03-01T00:00:00Z",
+        "endDate": "2024-03-31T23:59:59Z"
+      },
+      "fetchError": null
+    },
+    {
+      "date": "2024-04-01",
+      "periodStartDay": "2024-04-01",
+      "periodEndDay": "2024-04-30",
+      "fromDate": "2024-04-01T00:00:00.000Z",
+      "toDate": "2024-04-30T23:59:59.000Z",
+      "observedRepaidInterestFeeFlowInUsd": 29745.41939634409,
+      "observedOriginationFeeFlowInUsd": 5913.139718884479,
+      "combinedObservedFeeFlowInUsd": 35658.55911522857,
+      "isComplete": true,
+      "variables": {
+        "startDate": "2024-04-01T00:00:00Z",
+        "endDate": "2024-04-30T23:59:59Z"
+      },
+      "fetchError": null
+    },
+    {
+      "date": "2024-05-01",
+      "periodStartDay": "2024-05-01",
+      "periodEndDay": "2024-05-31",
+      "fromDate": "2024-05-01T00:00:00.000Z",
+      "toDate": "2024-05-31T23:59:59.000Z",
+      "observedRepaidInterestFeeFlowInUsd": 3465.847467936214,
+      "observedOriginationFeeFlowInUsd": 8169.13554254912,
+      "combinedObservedFeeFlowInUsd": 11634.983010485334,
+      "isComplete": true,
+      "variables": {
+        "startDate": "2024-05-01T00:00:00Z",
+        "endDate": "2024-05-31T23:59:59Z"
+      },
+      "fetchError": null
+    },
+    {
+      "date": "2024-06-01",
+      "periodStartDay": "2024-06-01",
+      "periodEndDay": "2024-06-30",
+      "fromDate": "2024-06-01T00:00:00.000Z",
+      "toDate": "2024-06-30T23:59:59.000Z",
+      "observedRepaidInterestFeeFlowInUsd": 14642.580303461173,
+      "observedOriginationFeeFlowInUsd": 13168.19717119535,
+      "combinedObservedFeeFlowInUsd": 27810.777474656523,
+      "isComplete": true,
+      "variables": {
+        "startDate": "2024-06-01T00:00:00Z",
+        "endDate": "2024-06-30T23:59:59Z"
+      },
+      "fetchError": null
+    },
+    {
+      "date": "2024-07-01",
+      "periodStartDay": "2024-07-01",
+      "periodEndDay": "2024-07-31",
+      "fromDate": "2024-07-01T00:00:00.000Z",
+      "toDate": "2024-07-31T23:59:59.000Z",
+      "observedRepaidInterestFeeFlowInUsd": 13049.483429013604,
+      "observedOriginationFeeFlowInUsd": 10860.730494093905,
+      "combinedObservedFeeFlowInUsd": 23910.21392310751,
+      "isComplete": true,
+      "variables": {
+        "startDate": "2024-07-01T00:00:00Z",
+        "endDate": "2024-07-31T23:59:59Z"
+      },
+      "fetchError": null
+    },
+    {
+      "date": "2024-08-01",
+      "periodStartDay": "2024-08-01",
+      "periodEndDay": "2024-08-31",
+      "fromDate": "2024-08-01T00:00:00.000Z",
+      "toDate": "2024-08-31T23:59:59.000Z",
+      "observedRepaidInterestFeeFlowInUsd": 8924.155821971217,
+      "observedOriginationFeeFlowInUsd": 12353.364504243795,
+      "combinedObservedFeeFlowInUsd": 21277.52032621501,
+      "isComplete": true,
+      "variables": {
+        "startDate": "2024-08-01T00:00:00Z",
+        "endDate": "2024-08-31T23:59:59Z"
+      },
+      "fetchError": null
+    },
+    {
+      "date": "2024-09-01",
+      "periodStartDay": "2024-09-01",
+      "periodEndDay": "2024-09-30",
+      "fromDate": "2024-09-01T00:00:00.000Z",
+      "toDate": "2024-09-30T23:59:59.000Z",
+      "observedRepaidInterestFeeFlowInUsd": 1974.5106358302412,
+      "observedOriginationFeeFlowInUsd": 19316.50834927456,
+      "combinedObservedFeeFlowInUsd": 21291.0189851048,
+      "isComplete": true,
+      "variables": {
+        "startDate": "2024-09-01T00:00:00Z",
+        "endDate": "2024-09-30T23:59:59Z"
+      },
+      "fetchError": null
+    },
+    {
+      "date": "2024-10-01",
+      "periodStartDay": "2024-10-01",
+      "periodEndDay": "2024-10-31",
+      "fromDate": "2024-10-01T00:00:00.000Z",
+      "toDate": "2024-10-31T23:59:59.000Z",
+      "observedRepaidInterestFeeFlowInUsd": 2478.450772122446,
+      "observedOriginationFeeFlowInUsd": 30195.57950284312,
+      "combinedObservedFeeFlowInUsd": 32674.030274965568,
+      "isComplete": true,
+      "variables": {
+        "startDate": "2024-10-01T00:00:00Z",
+        "endDate": "2024-10-31T23:59:59Z"
+      },
+      "fetchError": null
+    },
+    {
+      "date": "2024-11-01",
+      "periodStartDay": "2024-11-01",
+      "periodEndDay": "2024-11-30",
+      "fromDate": "2024-11-01T00:00:00.000Z",
+      "toDate": "2024-11-30T23:59:59.000Z",
+      "observedRepaidInterestFeeFlowInUsd": 12925.5797647795,
+      "observedOriginationFeeFlowInUsd": 47307.92278060276,
+      "combinedObservedFeeFlowInUsd": 60233.50254538226,
+      "isComplete": true,
+      "variables": {
+        "startDate": "2024-11-01T00:00:00Z",
+        "endDate": "2024-11-30T23:59:59Z"
+      },
+      "fetchError": null
+    },
+    {
+      "date": "2024-12-01",
+      "periodStartDay": "2024-12-01",
+      "periodEndDay": "2024-12-31",
+      "fromDate": "2024-12-01T00:00:00.000Z",
+      "toDate": "2024-12-31T23:59:59.000Z",
+      "observedRepaidInterestFeeFlowInUsd": 11766.352672392544,
+      "observedOriginationFeeFlowInUsd": 69448.53505217728,
+      "combinedObservedFeeFlowInUsd": 81214.88772456982,
+      "isComplete": true,
+      "variables": {
+        "startDate": "2024-12-01T00:00:00Z",
+        "endDate": "2024-12-31T23:59:59Z"
+      },
+      "fetchError": null
+    },
+    {
+      "date": "2025-01-01",
+      "periodStartDay": "2025-01-01",
+      "periodEndDay": "2025-01-31",
+      "fromDate": "2025-01-01T00:00:00.000Z",
+      "toDate": "2025-01-31T23:59:59.000Z",
+      "observedRepaidInterestFeeFlowInUsd": 8397.365082199469,
+      "observedOriginationFeeFlowInUsd": 28573.426977152747,
+      "combinedObservedFeeFlowInUsd": 36970.792059352214,
+      "isComplete": true,
+      "variables": {
+        "startDate": "2025-01-01T00:00:00Z",
+        "endDate": "2025-01-31T23:59:59Z"
+      },
+      "fetchError": null
+    },
+    {
+      "date": "2025-02-01",
+      "periodStartDay": "2025-02-01",
+      "periodEndDay": "2025-02-28",
+      "fromDate": "2025-02-01T00:00:00.000Z",
+      "toDate": "2025-02-28T23:59:59.000Z",
+      "observedRepaidInterestFeeFlowInUsd": 28095.13749288177,
+      "observedOriginationFeeFlowInUsd": 37086.16697478462,
+      "combinedObservedFeeFlowInUsd": 65181.304467666385,
+      "isComplete": true,
+      "variables": {
+        "startDate": "2025-02-01T00:00:00Z",
+        "endDate": "2025-02-28T23:59:59Z"
+      },
+      "fetchError": null
+    },
+    {
+      "date": "2025-03-01",
+      "periodStartDay": "2025-03-01",
+      "periodEndDay": "2025-03-31",
+      "fromDate": "2025-03-01T00:00:00.000Z",
+      "toDate": "2025-03-31T23:59:59.000Z",
+      "observedRepaidInterestFeeFlowInUsd": 8073.461679164278,
+      "observedOriginationFeeFlowInUsd": 24994.109428368767,
+      "combinedObservedFeeFlowInUsd": 33067.57110753305,
+      "isComplete": true,
+      "variables": {
+        "startDate": "2025-03-01T00:00:00Z",
+        "endDate": "2025-03-31T23:59:59Z"
+      },
+      "fetchError": null
+    },
+    {
+      "date": "2025-04-01",
+      "periodStartDay": "2025-04-01",
+      "periodEndDay": "2025-04-30",
+      "fromDate": "2025-04-01T00:00:00.000Z",
+      "toDate": "2025-04-30T23:59:59.000Z",
+      "observedRepaidInterestFeeFlowInUsd": 15147.564029019104,
+      "observedOriginationFeeFlowInUsd": 23166.65044913344,
+      "combinedObservedFeeFlowInUsd": 38314.21447815254,
+      "isComplete": true,
+      "variables": {
+        "startDate": "2025-04-01T00:00:00Z",
+        "endDate": "2025-04-30T23:59:59Z"
+      },
+      "fetchError": null
+    },
+    {
+      "date": "2025-05-01",
+      "periodStartDay": "2025-05-01",
+      "periodEndDay": "2025-05-31",
+      "fromDate": "2025-05-01T00:00:00.000Z",
+      "toDate": "2025-05-31T23:59:59.000Z",
+      "observedRepaidInterestFeeFlowInUsd": 3373.422487309378,
+      "observedOriginationFeeFlowInUsd": 15993.022284381092,
+      "combinedObservedFeeFlowInUsd": 19366.44477169047,
+      "isComplete": true,
+      "variables": {
+        "startDate": "2025-05-01T00:00:00Z",
+        "endDate": "2025-05-31T23:59:59Z"
+      },
+      "fetchError": null
+    },
+    {
+      "date": "2025-06-01",
+      "periodStartDay": "2025-06-01",
+      "periodEndDay": "2025-06-30",
+      "fromDate": "2025-06-01T00:00:00.000Z",
+      "toDate": "2025-06-30T23:59:59.000Z",
+      "observedRepaidInterestFeeFlowInUsd": 25437.705559867678,
+      "observedOriginationFeeFlowInUsd": 20867.898537996476,
+      "combinedObservedFeeFlowInUsd": 46305.604097864154,
+      "isComplete": true,
+      "variables": {
+        "startDate": "2025-06-01T00:00:00Z",
+        "endDate": "2025-06-30T23:59:59Z"
+      },
+      "fetchError": null
+    },
+    {
+      "date": "2025-07-01",
+      "periodStartDay": "2025-07-01",
+      "periodEndDay": "2025-07-31",
+      "fromDate": "2025-07-01T00:00:00.000Z",
+      "toDate": "2025-07-31T23:59:59.000Z",
+      "observedRepaidInterestFeeFlowInUsd": 2459.939514835398,
+      "observedOriginationFeeFlowInUsd": 16073.884592078264,
+      "combinedObservedFeeFlowInUsd": 18533.824106913664,
+      "isComplete": true,
+      "variables": {
+        "startDate": "2025-07-01T00:00:00Z",
+        "endDate": "2025-07-31T23:59:59Z"
+      },
+      "fetchError": null
+    },
+    {
+      "date": "2025-08-01",
+      "periodStartDay": "2025-08-01",
+      "periodEndDay": "2025-08-31",
+      "fromDate": "2025-08-01T00:00:00.000Z",
+      "toDate": "2025-08-31T23:59:59.000Z",
+      "observedRepaidInterestFeeFlowInUsd": 7732.7362874704995,
+      "observedOriginationFeeFlowInUsd": 22398.967694798743,
+      "combinedObservedFeeFlowInUsd": 30131.703982269242,
+      "isComplete": true,
+      "variables": {
+        "startDate": "2025-08-01T00:00:00Z",
+        "endDate": "2025-08-31T23:59:59Z"
+      },
+      "fetchError": null
+    },
+    {
+      "date": "2025-09-01",
+      "periodStartDay": "2025-09-01",
+      "periodEndDay": "2025-09-30",
+      "fromDate": "2025-09-01T00:00:00.000Z",
+      "toDate": "2025-09-30T23:59:59.000Z",
+      "observedRepaidInterestFeeFlowInUsd": 37257.83562847975,
+      "observedOriginationFeeFlowInUsd": 21024.583533770136,
+      "combinedObservedFeeFlowInUsd": 58282.419162249884,
+      "isComplete": true,
+      "variables": {
+        "startDate": "2025-09-01T00:00:00Z",
+        "endDate": "2025-09-30T23:59:59Z"
+      },
+      "fetchError": null
+    },
+    {
+      "date": "2025-10-01",
+      "periodStartDay": "2025-10-01",
+      "periodEndDay": "2025-10-31",
+      "fromDate": "2025-10-01T00:00:00.000Z",
+      "toDate": "2025-10-31T23:59:59.000Z",
+      "observedRepaidInterestFeeFlowInUsd": 41078.5807632487,
+      "observedOriginationFeeFlowInUsd": 32729.48207707497,
+      "combinedObservedFeeFlowInUsd": 73808.06284032366,
+      "isComplete": true,
+      "variables": {
+        "startDate": "2025-10-01T00:00:00Z",
+        "endDate": "2025-10-31T23:59:59Z"
+      },
+      "fetchError": null
+    },
+    {
+      "date": "2025-11-01",
+      "periodStartDay": "2025-11-01",
+      "periodEndDay": "2025-11-30",
+      "fromDate": "2025-11-01T00:00:00.000Z",
+      "toDate": "2025-11-30T23:59:59.000Z",
+      "observedRepaidInterestFeeFlowInUsd": 88252.52641197729,
+      "observedOriginationFeeFlowInUsd": 11388.50817992167,
+      "combinedObservedFeeFlowInUsd": 99641.03459189896,
+      "isComplete": true,
+      "variables": {
+        "startDate": "2025-11-01T00:00:00Z",
+        "endDate": "2025-11-30T23:59:59Z"
+      },
+      "fetchError": null
+    },
+    {
+      "date": "2025-12-01",
+      "periodStartDay": "2025-12-01",
+      "periodEndDay": "2025-12-31",
+      "fromDate": "2025-12-01T00:00:00.000Z",
+      "toDate": "2025-12-31T23:59:59.000Z",
+      "observedRepaidInterestFeeFlowInUsd": 53039.02701425422,
+      "observedOriginationFeeFlowInUsd": 37414.10079289251,
+      "combinedObservedFeeFlowInUsd": 90453.12780714672,
+      "isComplete": true,
+      "variables": {
+        "startDate": "2025-12-01T00:00:00Z",
+        "endDate": "2025-12-31T23:59:59Z"
+      },
+      "fetchError": null
+    },
+    {
+      "date": "2026-01-01",
+      "periodStartDay": "2026-01-01",
+      "periodEndDay": "2026-01-31",
+      "fromDate": "2026-01-01T00:00:00.000Z",
+      "toDate": "2026-01-31T23:59:59.000Z",
+      "observedRepaidInterestFeeFlowInUsd": 113555.23247652,
+      "observedOriginationFeeFlowInUsd": 4904.974788798714,
+      "combinedObservedFeeFlowInUsd": 118460.20726531872,
+      "isComplete": true,
+      "variables": {
+        "startDate": "2026-01-01T00:00:00Z",
+        "endDate": "2026-01-31T23:59:59Z"
+      },
+      "fetchError": null
+    },
+    {
+      "date": "2026-02-01",
+      "periodStartDay": "2026-02-01",
+      "periodEndDay": "2026-02-28",
+      "fromDate": "2026-02-01T00:00:00.000Z",
+      "toDate": "2026-02-28T23:59:59.000Z",
+      "observedRepaidInterestFeeFlowInUsd": 48393.79628889466,
+      "observedOriginationFeeFlowInUsd": 8348.684996250873,
+      "combinedObservedFeeFlowInUsd": 56742.48128514553,
+      "isComplete": true,
+      "variables": {
+        "startDate": "2026-02-01T00:00:00Z",
+        "endDate": "2026-02-28T23:59:59Z"
+      },
+      "fetchError": null
+    },
+    {
+      "date": "2026-03-01",
+      "periodStartDay": "2026-03-01",
+      "periodEndDay": "2026-03-31",
+      "fromDate": "2026-03-01T00:00:00.000Z",
+      "toDate": "2026-03-31T23:59:59.000Z",
+      "observedRepaidInterestFeeFlowInUsd": 6674.557120200199,
+      "observedOriginationFeeFlowInUsd": 18255.676645103733,
+      "combinedObservedFeeFlowInUsd": 24930.233765303932,
+      "isComplete": true,
+      "variables": {
+        "startDate": "2026-03-01T00:00:00Z",
+        "endDate": "2026-03-31T23:59:59Z"
+      },
+      "fetchError": null
+    },
+    {
+      "date": "2026-04-01",
+      "periodStartDay": "2026-04-01",
+      "periodEndDay": "2026-04-30",
+      "fromDate": "2026-04-01T00:00:00.000Z",
+      "toDate": "2026-04-30T23:59:59.000Z",
+      "observedRepaidInterestFeeFlowInUsd": 6106.319454257873,
+      "observedOriginationFeeFlowInUsd": 6809.466872714801,
+      "combinedObservedFeeFlowInUsd": 12915.786326972673,
+      "isComplete": true,
+      "variables": {
+        "startDate": "2026-04-01T00:00:00Z",
+        "endDate": "2026-04-30T23:59:59Z"
+      },
+      "fetchError": null
+    },
+    {
+      "date": "2026-05-01",
+      "periodStartDay": "2026-05-01",
+      "periodEndDay": "2026-05-31",
+      "fromDate": "2026-05-01T00:00:00.000Z",
+      "toDate": "2026-05-31T23:59:59.000Z",
+      "observedRepaidInterestFeeFlowInUsd": 1778.0218105762715,
+      "observedOriginationFeeFlowInUsd": 2091.784862641976,
+      "combinedObservedFeeFlowInUsd": 3869.8066732182474,
+      "isComplete": true,
+      "variables": {
+        "startDate": "2026-05-01T00:00:00Z",
+        "endDate": "2026-05-31T23:59:59Z"
+      },
+      "fetchError": null
+    },
+    {
+      "date": "2026-06-01",
+      "periodStartDay": "2026-06-01",
+      "periodEndDay": "2026-06-30",
+      "fromDate": "2026-06-01T00:00:00.000Z",
+      "toDate": "2026-06-30T23:59:59.000Z",
+      "observedRepaidInterestFeeFlowInUsd": 47382.15604522099,
+      "observedOriginationFeeFlowInUsd": 1752.7756966983893,
+      "combinedObservedFeeFlowInUsd": 49134.931741919376,
+      "isComplete": true,
+      "variables": {
+        "startDate": "2026-06-01T00:00:00Z",
+        "endDate": "2026-06-30T23:59:59Z"
+      },
+      "fetchError": null
+    },
+    {
+      "date": "2026-07-01",
+      "periodStartDay": "2026-07-01",
+      "periodEndDay": "2026-07-09",
+      "fromDate": "2026-07-01T00:00:00.000Z",
+      "toDate": "2026-07-09T23:59:59.000Z",
+      "observedRepaidInterestFeeFlowInUsd": 521.238590292985,
+      "observedOriginationFeeFlowInUsd": 0.0,
+      "combinedObservedFeeFlowInUsd": 521.238590292985,
+      "isComplete": false,
+      "variables": {
+        "startDate": "2026-07-01T00:00:00Z",
+        "endDate": "2026-07-09T23:59:59Z"
+      },
+      "fetchError": null
+    }
+  ]
+}

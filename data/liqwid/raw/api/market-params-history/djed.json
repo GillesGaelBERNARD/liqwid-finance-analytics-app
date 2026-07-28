@@ -1,0 +1,32 @@
+{
+  "fetchedAt": "2026-07-11T07:02:38.147Z",
+  "source": "https://v2.api.liqwid.finance/graphql",
+  "marketId": "DJED",
+  "variables": {
+    "marketId": "DJED",
+    "startDate": "2026-07-10",
+    "endDate": "2026-07-11"
+  },
+  "rows": [
+    {
+      "timestamp": "2026-07-07T09:53:20.000Z",
+      "txHash": "38dd0994c22f6fcdffaf9f173f742157ff3fb05cde98282a40020f677d376845",
+      "baseRate": 0.000002791536457,
+      "utilMultiplier": 0.0000178472203607,
+      "utilMultiplierJump": 0.0004382463557246,
+      "kink": 0.9,
+      "supplyCap": 4645850.895662,
+      "borrowCap": null,
+      "incomeRatioSum": 10,
+      "incomeRatioSuppliers": 8,
+      "incomeRatioDividends": 0,
+      "incomeRatioTreasury": 0,
+      "baseBorrowerAPR": 0.04499999999985378,
+      "baseSupplierAPY": 0,
+      "optimalBorrowerAPR": 0.34620243570276793,
+      "optimalSupplierAPY": 0.2492657537059929,
+      "maxBorrowerAPR": 1.7633010852737938,
+      "maxSupplierAPY": 1.410640868219035
+    }
+  ]
+}

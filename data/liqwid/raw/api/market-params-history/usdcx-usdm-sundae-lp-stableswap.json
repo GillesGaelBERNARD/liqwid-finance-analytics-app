@@ -1,0 +1,32 @@
+{
+  "fetchedAt": "2026-07-11T07:02:45.587Z",
+  "source": "https://v2.api.liqwid.finance/graphql",
+  "marketId": "USDCx-USDM-SUNDAE-LP-STABLESWAP",
+  "variables": {
+    "marketId": "USDCx-USDM-SUNDAE-LP-STABLESWAP",
+    "startDate": "2026-07-10",
+    "endDate": "2026-07-11"
+  },
+  "rows": [
+    {
+      "timestamp": "2026-07-09T19:36:50.000Z",
+      "txHash": "864d4c3dcac27c377489d0d421419da8ed50ed0e3cc09237248c216f0c9ffb8e",
+      "baseRate": 0,
+      "utilMultiplier": 1.58351e-7,
+      "utilMultiplierJump": 0.000004733873381,
+      "kink": 0.8,
+      "supplyCap": null,
+      "borrowCap": null,
+      "incomeRatioSum": 10,
+      "incomeRatioSuppliers": 8,
+      "incomeRatioDividends": 0,
+      "incomeRatioTreasury": 0,
+      "baseBorrowerAPR": 0,
+      "baseSupplierAPY": 0,
+      "optimalBorrowerAPR": 0.001999499065459951,
+      "optimalSupplierAPY": 0.0012796794018943686,
+      "maxBorrowerAPR": 0.01757832375309244,
+      "maxSupplierAPY": 0.01406265900247395
+    }
+  ]
+}

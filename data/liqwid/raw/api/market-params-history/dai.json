@@ -1,0 +1,32 @@
+{
+  "fetchedAt": "2026-07-11T07:02:37.785Z",
+  "source": "https://v2.api.liqwid.finance/graphql",
+  "marketId": "DAI",
+  "variables": {
+    "marketId": "DAI",
+    "startDate": "2026-07-10",
+    "endDate": "2026-07-11"
+  },
+  "rows": [
+    {
+      "timestamp": "2026-06-09T16:24:55.000Z",
+      "txHash": "fdad801342d4b070d6f10fec5f2a56b7c701e6c7d08700353e5ddc3f7fdbfc1e",
+      "baseRate": 0.0000030942567006,
+      "utilMultiplier": 0.0000180860934242,
+      "utilMultiplierJump": 0.0004382463557246,
+      "kink": 0.9,
+      "supplyCap": null,
+      "borrowCap": null,
+      "incomeRatioSum": 10,
+      "incomeRatioSuppliers": 8,
+      "incomeRatioDividends": 0,
+      "incomeRatioTreasury": 0,
+      "baseBorrowerAPR": 0.050000000001072596,
+      "baseSupplierAPY": 0,
+      "optimalBorrowerAPR": 0.35723650399016754,
+      "optimalSupplierAPY": 0.25721028287292064,
+      "maxBorrowerAPR": 1.7869987525617612,
+      "maxSupplierAPY": 1.429599002049409
+    }
+  ]
+}

@@ -1,0 +1,12 @@
+{
+  "fetchedAt": "2026-07-11T07:02:43.629Z",
+  "source": "https://v2.api.liqwid.finance/graphql",
+  "marketId": "SHEN",
+  "variables": {
+    "marketId": "SHEN",
+    "startDate": "2026-07-10",
+    "endDate": "2026-07-11",
+    "interval": "DAY"
+  },
+  "rows": []
+}

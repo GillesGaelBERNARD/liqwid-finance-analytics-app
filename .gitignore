@@ -1,0 +1,19 @@
+# Dependencies
+node_modules/
+
+# AI Coding Project & Scratch files
+AGENTS.md
+scratch/
+tmp/
+.gemini/
+.brain/
+
+# System / IDE files
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.log
+
+# Temp download zips
+data/liqwid/liqwid-data (*).zip

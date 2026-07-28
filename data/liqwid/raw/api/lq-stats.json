@@ -1,0 +1,12 @@
+{
+  "fetchedAt": "2026-07-27T12:56:08.081197Z",
+  "rowCount": 1,
+  "payload": {
+    "totalSupply": 21000000,
+    "currencySymbol": "da8c30857834c6ae7203935b89278c532b3995245295456f993e1d24",
+    "price": 0.16352,
+    "staked": 3133999.733178,
+    "circulatingSupply": 20306624.928212,
+    "treasury": 693375.071788
+  }
+}

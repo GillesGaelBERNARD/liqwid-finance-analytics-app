@@ -1,0 +1,32 @@
+{
+  "fetchedAt": "2026-07-11T07:02:36.552Z",
+  "source": "https://v2.api.liqwid.finance/graphql",
+  "marketId": "AGIX",
+  "variables": {
+    "marketId": "AGIX",
+    "startDate": "2026-07-10",
+    "endDate": "2026-07-11"
+  },
+  "rows": [
+    {
+      "timestamp": "2026-06-09T16:24:55.000Z",
+      "txHash": "fdad801342d4b070d6f10fec5f2a56b7c701e6c7d08700353e5ddc3f7fdbfc1e",
+      "baseRate": 0.000001874608697827185,
+      "utilMultiplier": 0.00002133915693969257,
+      "utilMultiplierJump": 0.0001234164272720939,
+      "kink": 0.65,
+      "supplyCap": 62400,
+      "borrowCap": 0.5,
+      "incomeRatioSum": 10,
+      "incomeRatioSuppliers": 8,
+      "incomeRatioDividends": 0,
+      "incomeRatioTreasury": 0,
+      "baseBorrowerAPR": 0.030000000000215698,
+      "baseSupplierAPY": 0,
+      "optimalBorrowerAPR": 0.28180105452174964,
+      "optimalSupplierAPY": 0.1465365483513098,
+      "maxBorrowerAPR": 0.21871314475367842,
+      "maxSupplierAPY": 0.08748525790147138
+    }
+  ]
+}

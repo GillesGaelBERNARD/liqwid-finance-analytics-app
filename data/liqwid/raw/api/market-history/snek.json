@@ -1,0 +1,12 @@
+{
+  "fetchedAt": "2026-07-11T07:02:43.945Z",
+  "source": "https://v2.api.liqwid.finance/graphql",
+  "marketId": "SNEK",
+  "variables": {
+    "marketId": "SNEK",
+    "startDate": "2026-07-10",
+    "endDate": "2026-07-11",
+    "interval": "DAY"
+  },
+  "rows": []
+}

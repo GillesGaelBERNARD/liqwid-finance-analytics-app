@@ -1,0 +1,32 @@
+{
+  "fetchedAt": "2026-07-11T07:02:41.912Z",
+  "source": "https://v2.api.liqwid.finance/graphql",
+  "marketId": "LQ",
+  "variables": {
+    "marketId": "LQ",
+    "startDate": "2026-07-10",
+    "endDate": "2026-07-11"
+  },
+  "rows": [
+    {
+      "timestamp": "2026-06-09T14:21:17.000Z",
+      "txHash": "050408f5402a040aacabc8fce0831cb285014e96dfba6fedc629516e34c653d9",
+      "baseRate": 0,
+      "utilMultiplier": 0,
+      "utilMultiplierJump": 0,
+      "kink": 1,
+      "supplyCap": 1659547,
+      "borrowCap": 0,
+      "incomeRatioSum": 10,
+      "incomeRatioSuppliers": 8,
+      "incomeRatioDividends": 1,
+      "incomeRatioTreasury": 1,
+      "baseBorrowerAPR": 0,
+      "baseSupplierAPY": 0,
+      "optimalBorrowerAPR": 0,
+      "optimalSupplierAPY": 0,
+      "maxBorrowerAPR": 0,
+      "maxSupplierAPY": 0
+    }
+  ]
+}

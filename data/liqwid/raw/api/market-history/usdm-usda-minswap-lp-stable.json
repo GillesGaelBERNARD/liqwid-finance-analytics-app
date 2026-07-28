@@ -1,0 +1,12 @@
+{
+  "fetchedAt": "2026-07-11T07:02:45.993Z",
+  "source": "https://v2.api.liqwid.finance/graphql",
+  "marketId": "USDM-USDA-MINSWAP-LP-STABLE",
+  "variables": {
+    "marketId": "USDM-USDA-MINSWAP-LP-STABLE",
+    "startDate": "2026-07-10",
+    "endDate": "2026-07-11",
+    "interval": "DAY"
+  },
+  "rows": []
+}

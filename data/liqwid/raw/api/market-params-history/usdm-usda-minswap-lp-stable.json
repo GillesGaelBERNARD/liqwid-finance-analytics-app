@@ -1,0 +1,32 @@
+{
+  "fetchedAt": "2026-07-11T07:02:46.235Z",
+  "source": "https://v2.api.liqwid.finance/graphql",
+  "marketId": "USDM-USDA-MINSWAP-LP-STABLE",
+  "variables": {
+    "marketId": "USDM-USDA-MINSWAP-LP-STABLE",
+    "startDate": "2026-07-10",
+    "endDate": "2026-07-11"
+  },
+  "rows": [
+    {
+      "timestamp": "2026-06-05T15:50:19.000Z",
+      "txHash": "c906b0eca6d3860fd35d995d1167f5bf55ca5327650e280a9911f4c0efb2baee",
+      "baseRate": 0,
+      "utilMultiplier": 1.58351e-7,
+      "utilMultiplierJump": 0.00000172049,
+      "kink": 0.8,
+      "supplyCap": null,
+      "borrowCap": null,
+      "incomeRatioSum": 10,
+      "incomeRatioSuppliers": 8,
+      "incomeRatioDividends": 0,
+      "incomeRatioTreasury": 0,
+      "baseBorrowerAPR": 0,
+      "baseSupplierAPY": 0,
+      "optimalBorrowerAPR": 0.001999499065459951,
+      "optimalSupplierAPY": 0.0012796794018943686,
+      "maxBorrowerAPR": 0.007954080791959584,
+      "maxSupplierAPY": 0.0063632646335676675
+    }
+  ]
+}

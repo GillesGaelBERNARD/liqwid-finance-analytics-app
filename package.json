@@ -1,0 +1,14 @@
+{
+  "name": "liqwid-finance-market-dynamics",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Client-only Liqwid Finance market dynamics HTML app.",
+  "scripts": {
+    "build:app": "python scripts/static_app_generator.py --data-root data/liqwid",
+    "test": "node --test"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

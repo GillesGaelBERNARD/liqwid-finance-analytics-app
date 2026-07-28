@@ -1,0 +1,466 @@
+import assert from "node:assert/strict";
+import test from "node:test";
+
+import { buildAnalysisBundle } from "../src/browser/dataWorkflow.js";
+import { aggregateDailyProtocolFeeAllocations, buildCompleteAnalysis, buildLqTokenAnalysis, buildProtocolRevenueRunRateSeries, deriveLoanPopulations } from "../src/browser/fullAnalysis.js";
+
+function history(date, overrides = {}) {
+  return {
+    marketId: "ADA",
+    marketDisplayName: "ADA",
+    timestamp: `${date}T00:00:00.000Z`,
+    date,
+    supplyInUsd: 100,
+    borrowInUsd: 20,
+    liquidityInUsd: 80,
+    utilizationPercentage: 0.2,
+    debtRepaidInUsd: 1,
+    interestAccruedInUsd: 2,
+    interestRepaidInUsd: 1,
+    loanOriginationFeesInUsd: 0,
+    loanOriginationFeesMinAdaInUsd: 0,
+    borrowApr: 0.05,
+    supplyApy: 0.02,
+    ...overrides
+  };
+}
+
+test("one canonical loan table reconstructs the official filtered populations", () => {
+  const populations = deriveLoanPopulations([
+    { id: "active", amount: 10, adjustedAmount: 10, collateral: 20, healthFactor: 1.2 },
+    { id: "liquidatable", amount: 8, adjustedAmount: 8, collateral: 0, healthFactor: 0 },
+    { id: "repaid", amount: 0.1, adjustedAmount: 0, collateral: 5, healthFactor: 0 },
+    { id: "empty", amount: 0, adjustedAmount: 0, collateral: 0, healthFactor: 0 }
+  ]);
+
+  assert.deepEqual(populations.activeLoans.map((row) => row.id), ["active", "liquidatable"]);
+  assert.deepEqual(populations.liquidatableLoans.map((row) => row.id), ["liquidatable"]);
+  assert.deepEqual(populations.collateralLoans.map((row) => row.id), ["active", "repaid"]);
+  assert.deepEqual(populations.allLoans.map((row) => [row.id, row.hasDebt, row.canBeLiquidated, row.hasCollateral]), [
+    ["active", true, false, true],
+    ["liquidatable", true, true, false],
+    ["repaid", false, false, true],
+    ["empty", false, false, false]
+  ]);
+});
+
+test("protocol and market summaries use native-first current-valued interest coverage", () => {
+  const market = { id: "ASSET-A", displayName: "Asset A", symbol: "A" };
+  const rows = [
+    history("2026-01-01", { marketId: "ASSET-A", marketDisplayName: "Asset A", borrow: 10, borrowInUsd: 100 }),
+    history("2026-01-02", {
+      marketId: "ASSET-A",
+      marketDisplayName: "Asset A",
+      borrow: 20,
+      borrowInUsd: 200,
+      interestAccrued: 2,
+      interestAccruedInUsd: 20,
+      interestRepaid: 0,
+      interestRepaidInUsd: 0
+    }),
+    history("2026-01-03", {
+      marketId: "ASSET-A",
+      marketDisplayName: "Asset A",
+      borrow: 10,
+      borrowInUsd: 50,
+      debtRepaid: 10,
+      debtRepaidInUsd: 50,
+      interestAccrued: 0,
+      interestAccruedInUsd: 0,
+      interestRepaid: 2,
+      interestRepaidInUsd: 10
+    })
+  ];
+  const bundle = buildAnalysisBundle({
+    markets: [market],
+    marketSeriesById: { "ASSET-A": rows },
+    dataRoot: "liqwid",
+    startDate: "2026-01-01",
+    endDate: "2026-01-03"
+  });
+
+  const analysis = buildCompleteAnalysis({
+    bundle,
+    allLoans: [],
+    activeLoans: [],
+    collateralLoans: [],
+    liquidatableLoans: [],
+    monthlyLiquidations: [],
+    dailyLiquidations: [],
+    dailyRevenue: [],
+    dailyAllocatedFees: [],
+    monthlyFees: []
+  });
+
+  assert.equal(bundle.protocolSeries.at(-1).interestCoverage90d, 1);
+  assert.equal(analysis.protocolSummary.interestCoverage90d, 1);
+  assert.equal(analysis.marketSummaries[0].interestCoverage90d, 1);
+});
+
+test("complete analysis is rebuilt exclusively from the current refresh generation", () => {
+  const rows = Array.from({ length: 12 }, (_, index) => history(`2026-01-${String(index + 1).padStart(2, "0")}`, {
+    debtRepaidInUsd: index === 11 ? 100 : index + 1
+  }));
+  const market = { id: "ADA", displayName: "ADA", symbol: "ADA", supply: 100, borrow: 20, liquidity: 80 };
+  const bundle = buildAnalysisBundle({
+    markets: [market],
+    marketSeriesById: { ADA: rows },
+    dataRoot: "liqwid",
+    startDate: "2026-01-01",
+    endDate: "2026-01-12",
+    apiTotals: { supplyInUsd: 100, borrowInUsd: 20, liquidityInUsd: 80 }
+  });
+  const analysis = buildCompleteAnalysis({
+    bundle,
+    allLoans: [
+      { marketId: "ADA", publicKey: "key-ada", amount: 10, collateral: 20, healthFactor: 1.4 },
+      { marketId: "ADA", publicKey: "key-zero-debt", amount: 0, collateral: 5, healthFactor: 0 }
+    ],
+    monthlyLiquidations: [{
+      date: "2026-01-01",
+      periodStartDay: "2026-01-01",
+      periodEndDay: "2026-01-12",
+      fromDate: "2026-01-01T00:00:00Z",
+      toDate: "2026-01-12T23:59:59Z",
+      liquidationProfitInUsd: 12,
+      isComplete: false
+    }],
+    dailyLiquidations: rows.map((row) => ({ date: row.date, liquidationProfitInUsd: 1, provenance: "daily-api" })),
+    activeLoans: [
+      {
+        marketId: "ADA", publicKey: "key-ada", amount: 10, collateral: 20, healthFactor: 1.4, LTV: 0.5, APY: 0.03,
+        collaterals: [{ amountInUsd: 20, market: { id: "ADA", displayName: "ADA" } }]
+      },
+      {
+        marketId: "ADA", publicKey: "key-zero-debt", amount: 0, collateral: 5, healthFactor: 0, LTV: 0, APY: 0,
+        collaterals: [{ amountInUsd: 5, market: { id: "ADA", displayName: "ADA" } }]
+      }
+    ],
+    collateralLoans: [
+      {
+        marketId: "ADA", publicKey: "key-ada", amount: 10, collateral: 20, healthFactor: 1.4,
+        collaterals: [{ amountInUsd: 20, market: { id: "ADA", displayName: "ADA" } }]
+      },
+      {
+        marketId: "ADA", publicKey: "key-zero-debt", amount: 0, collateral: 5, healthFactor: 0,
+        collaterals: [{ amountInUsd: 5, market: { id: "ADA", displayName: "ADA" } }]
+      }
+    ],
+    liquidatableLoans: [],
+    dailyRevenue: [{
+      date: "2026-01-01", fromDate: "2026-01-01T00:00:00Z", toDate: "2026-01-01T23:59:59Z", isComplete: true,
+      revenueFromRepaidInterestInUsd: 6, loanOriginationFeesInUsd: 2
+    }],
+    dailyAllocatedFees: [{
+      date: "2026-01-01", periodStartDay: "2026-01-01", periodEndDay: "2026-01-01", isComplete: true,
+      protocolRevenueInUsd: 5, holdersRevenueInUsd: 3,
+      borrowInterestAccruedForProtocolInUsd: 4, loanOriginationFeesForProtocolInUsd: 1,
+      borrowInterestAccruedForHoldersInUsd: 2, loanOriginationFeesForHoldersInUsd: 1
+    }],
+    monthlyFees: [{
+      date: "2026-01-01", periodStartDay: "2026-01-01", periodEndDay: "2026-01-31", isComplete: true,
+      protocolRevenueInUsd: 5, holdersRevenueInUsd: 3,
+      borrowInterestAccruedForProtocolInUsd: 4, loanOriginationFeesForProtocolInUsd: 1
+    }],
+    loanSnapshotHistory: {
+      participation: [{
+        timestamp: "2026-07-18T08:46:41.233Z", scope: "protocol", marketId: "",
+        totalLoanCount: 2, distinctObservedKeyCount: 2,
+        activeDebtLoanCount: "", distinctActiveDebtObservedKeyCount: ""
+      }],
+      health: [
+        { timestamp: "2026-07-18T08:46:41.233Z", scope: "protocol", marketId: "", activeDebtLoanCount: 1 },
+        { timestamp: "2026-07-18T08:46:41.233Z", scope: "market", marketId: "ADA", activeDebtLoanCount: 1 }
+      ]
+    },
+  });
+
+  assert.equal(analysis.protocolSummary.currentBorrowInUsd, 20);
+  assert.equal(analysis.loanState.summary.activeDebtLoanCount, 1);
+  assert.equal(analysis.liquidation.monthlyProtocolLiquidationProfit[0].liquidationProfitInUsd, 12);
+  assert.equal(analysis.revenue.daily[0].combinedObservedFeeFlowInUsd, 8);
+  assert.equal("realizedProtocolRevenueInUsd" in analysis.revenue.daily[0], false);
+  assert.equal(analysis.revenue.summary.combinedObservedFeeFlowInUsd, 8);
+  assert.equal(analysis.revenue.summary.allocatedProtocolRevenueInUsd, 5);
+  assert.equal(analysis.revenue.summary.allocatedHoldersRevenueInUsd, 3);
+  assert.equal(analysis.revenue.dailyAllocation[0].date, "2026-01-01");
+  assert.equal(analysis.revenue.dailyAllocation[0].allocatedProtocolInterestRevenueInUsd, 4);
+  assert.equal(analysis.revenue.dailyAllocation[0].allocatedHoldersOriginationRevenueInUsd, 1);
+  assert.equal("currentParameterProtocolInterestShare" in analysis.marketSummaries[0], false);
+  assert.equal("estimatedProtocolRevenue90dInUsd" in analysis.marketSummaries[0], false);
+  assert.equal(analysis.marketSummaries[0].activeDebtLoanCount, 1);
+  assert.equal(analysis.liquidation.dailyLiquidationCoverage.complete, true);
+  assert.equal(analysis.liquidation.currentDaysWithoutLiquidations, 0);
+  assert.equal(analysis.dataStatus.loanPopulation.totalPositions, 2);
+  assert.equal(analysis.dataStatus.loanPopulation.activeDebtPositions, 1);
+  assert.equal(analysis.dataStatus.loanPopulation.zeroDebtPositions, 1);
+  assert.equal(analysis.dataStatus.checks.find((row) => row.id === "protocol-borrow").status, "pass");
+  assert.ok(analysis.marketStress.currentMarketStress.length);
+  assert.equal(analysis.currentExposure.collateralRisk.byCollateral[0].collateralMarketId, "ADA");
+  assert.equal(analysis.currentExposure.collateralRisk.byCollateral[0].activeLoanCount, 1);
+  assert.equal(analysis.currentExposure.collateralRisk.byCollateral[0].attributedDebtInUsd, 10);
+  assert.equal(analysis.currentExposure.borrowerConcentration.observedKeyExposure.rows[0].observedKeyLabel, "Observed key 1");
+  assert.equal(analysis.currentExposure.borrowerConcentration.observedKeyExposure.rows[0].totalDebtInUsd, 10);
+  assert.equal(analysis.currentExposure.borrowerConcentration.marketDependence[0].observedKeyCount, 1);
+  assert.equal(analysis.currentExposure.supplySide.byMarket[0].activeDebtCollateralInUsd, 20);
+  assert.equal(analysis.currentExposure.supplySide.byMarket[0].zeroDebtCollateralInUsd, 5);
+  assert.equal(analysis.currentExposure.supplySide.byMarket[0].representedObservedKeyCount, 2);
+  assert.deepEqual(analysis.loanSnapshotHistory.participation, [
+    {
+      timestamp: "2026-07-18T08:46:41.233Z", scope: "protocol", marketId: "",
+      activeDebtLoanCount: 1, distinctActiveDebtObservedKeyCount: 1
+    },
+    {
+      timestamp: "2026-07-18T08:46:41.233Z", scope: "market", marketId: "ADA",
+      activeDebtLoanCount: 1, distinctActiveDebtObservedKeyCount: 1
+    }
+  ]);
+  assert.doesNotMatch(JSON.stringify(analysis.currentExposure), /key-ada/);
+});
+
+test("market loan-health summaries include debt and position counts at both low-HF thresholds", () => {
+  const market = { id: "ADA", displayName: "ADA", symbol: "ADA", supply: 100, borrow: 60, liquidity: 40 };
+  const bundle = buildAnalysisBundle({
+    markets: [market],
+    marketSeriesById: { ADA: [history("2026-01-01", { borrowInUsd: 60, liquidityInUsd: 40 })] },
+    dataRoot: "liqwid",
+    startDate: "2026-01-01",
+    endDate: "2026-01-01",
+    apiTotals: { supplyInUsd: 100, borrowInUsd: 60, liquidityInUsd: 40 }
+  });
+  const activeLoans = [
+    { marketId: "ADA", amount: 5, collateral: 3, healthFactor: 0.85 },
+    { marketId: "ADA", amount: 10, collateral: 20, healthFactor: 1.05 },
+    { marketId: "ADA", amount: 20, collateral: 30, healthFactor: 1.20 },
+    { marketId: "ADA", amount: 30, collateral: 60, healthFactor: 1.40 }
+  ];
+  const analysis = buildCompleteAnalysis({
+    bundle,
+    allLoans: activeLoans,
+    activeLoans,
+    collateralLoans: [],
+    liquidatableLoans: []
+  });
+  const summary = analysis.marketSummaries[0];
+
+  assert.equal(summary.activeLoanDebtBelow100InUsd, 5);
+  assert.equal(summary.activeDebtLoanCountBelow100, 1);
+  assert.equal(summary.activeLoanBadDebtLoanCount, 1);
+  assert.equal(summary.activeLoanBadDebtInUsd, 5);
+  assert.equal(summary.activeLoanDebtAtOrBelow110InUsd, 15);
+  assert.equal(analysis.loanState.byMarket[0].debt100To110InUsd, 10);
+  assert.equal(summary.activeDebtLoanCountAtOrBelow110, 2);
+  assert.equal(summary.activeLoanDebtAtOrBelow125InUsd, 35);
+  assert.equal(summary.activeDebtLoanCountAtOrBelow125, 3);
+  assert.equal(summary.activeLoanHealthPressure, (15 + 0.30 * 20 + 0.05 * 30) / 65);
+});
+
+test("full analysis ensures activeLoanDebtBelow100InUsd is at least activeLoanBadDebtInUsd even when healthFactor is null", () => {
+  const market = { id: "ADA", displayName: "ADA", symbol: "ADA", supply: 100, borrow: 60, liquidity: 40 };
+  const bundle = buildAnalysisBundle({
+    markets: [market],
+    marketSeriesById: { ADA: [history("2026-01-01", { borrowInUsd: 60, liquidityInUsd: 40 })] },
+    dataRoot: "liqwid",
+    startDate: "2026-01-01",
+    endDate: "2026-01-01",
+    apiTotals: { supplyInUsd: 100, borrowInUsd: 60, liquidityInUsd: 40 }
+  });
+  const activeLoans = [
+    { marketId: "ADA", amount: 50, collateral: 20, healthFactor: null },
+    { marketId: "ADA", amount: 10, collateral: 20, healthFactor: 1.05 }
+  ];
+  const analysis = buildCompleteAnalysis({
+    bundle,
+    allLoans: activeLoans,
+    activeLoans,
+    collateralLoans: [],
+    liquidatableLoans: []
+  });
+  const summary = analysis.marketSummaries[0];
+
+  assert.equal(summary.activeLoanBadDebtInUsd, 50);
+  assert.equal(summary.activeLoanDebtBelow100InUsd, 50);
+  assert.equal(summary.activeLoanBadDebtInUsd <= summary.activeLoanDebtBelow100InUsd, true);
+});
+
+
+test("market trailing-90-day fee activity excludes the current UTC day without estimating recipient allocation", () => {
+  const rows = Array.from({ length: 91 }, (_, index) => {
+    const date = new Date(Date.UTC(2026, 0, 1 + index)).toISOString().slice(0, 10);
+    return history(date, {
+      interestAccruedInUsd: 1000,
+      interestRepaidInUsd: index < 90 ? 1 : 1000
+    });
+  });
+  const market = { id: "ADA", displayName: "ADA", symbol: "ADA", supply: 100, borrow: 20, liquidity: 80 };
+  const bundle = buildAnalysisBundle({
+    markets: [market],
+    marketSeriesById: { ADA: rows },
+    dataRoot: "liqwid",
+    startDate: rows[0].date,
+    endDate: rows.at(-1).date,
+    apiTotals: { supplyInUsd: 100, borrowInUsd: 20, liquidityInUsd: 80 }
+  });
+  bundle.generatedAt = "2026-04-01T12:00:00.000Z";
+
+  const analysis = buildCompleteAnalysis({
+    bundle,
+    monthlyLiquidations: [],
+    dailyLiquidations: [],
+    dailyRevenue: [],
+    dailyAllocatedFees: [],
+    allLoans: [],
+    activeLoans: [],
+    liquidatableLoans: [],
+    collateralLoans: []
+  });
+
+  assert.equal(analysis.marketSummaries[0].grossRealizedRevenueProxy90dInUsd, 90);
+  assert.equal(analysis.marketSummaries[0].repaidInterestFeeFlow90dInUsd, 90);
+  assert.equal("estimatedProtocolRevenue90dInUsd" in analysis.marketSummaries[0], false);
+  assert.equal("estimatedProtocolRevenueYield90dAnnualized" in analysis.marketSummaries[0], false);
+});
+
+test("protocol revenue run rate uses 90 consecutive complete UTC days and excludes the incomplete current day", () => {
+  const rows = Array.from({ length: 91 }, (_, index) => {
+    const date = new Date(Date.UTC(2026, 0, 1 + index)).toISOString().slice(0, 10);
+    return {
+      date,
+      periodStartDay: date,
+      periodEndDay: date,
+      protocolRevenueInUsd: index < 90 ? 1 : 1000,
+      isComplete: index < 90
+    };
+  });
+
+  const series = buildProtocolRevenueRunRateSeries(rows);
+
+  assert.deepEqual(series, [{
+    date: "2026-03-31",
+    windowStartDate: "2026-01-01",
+    windowEndDate: "2026-03-31",
+    observedDays: 90,
+    trailing90DaysProtocolRevenueInUsd: 90,
+    annualizedRunRateInUsd: 90 * (365.25 / 90)
+  }]);
+});
+
+test("daily official allocations aggregate by calendar month and preserve completeness", () => {
+  const rows = [];
+  for (let day = 1; day <= 31; day += 1) {
+    const date = `2026-01-${String(day).padStart(2, "0")}`;
+    rows.push({
+      date, fromDate: `${date}T00:00:00Z`, toDate: `${date}T23:59:59Z`, isComplete: true,
+      protocolRevenueInUsd: 5, holdersRevenueInUsd: 3,
+      borrowInterestAccruedForProtocolInUsd: 4, loanOriginationFeesForProtocolInUsd: 1,
+      borrowInterestAccruedForHoldersInUsd: 2, loanOriginationFeesForHoldersInUsd: 1
+    });
+  }
+  rows.push({
+    date: "2026-02-01", fromDate: "2026-02-01T00:00:00Z", toDate: "2026-02-01T23:59:59Z", isComplete: true,
+    protocolRevenueInUsd: 7, holdersRevenueInUsd: 2,
+    borrowInterestAccruedForProtocolInUsd: 7, loanOriginationFeesForProtocolInUsd: 0,
+    borrowInterestAccruedForHoldersInUsd: 2, loanOriginationFeesForHoldersInUsd: 0
+  });
+
+  const months = aggregateDailyProtocolFeeAllocations(rows);
+
+  assert.equal(months[0].protocolRevenueInUsd, 155);
+  assert.equal(months[0].holdersRevenueInUsd, 93);
+  assert.equal(months[0].borrowInterestAccruedForProtocolInUsd, 124);
+  assert.equal(months[0].loanOriginationFeesForProtocolInUsd, 31);
+  assert.equal(months[0].isComplete, true);
+  assert.equal(months[1].protocolRevenueInUsd, 7);
+  assert.equal(months[1].isComplete, false);
+});
+
+test("protocol revenue run rate resumes only after 90 complete days following a coverage gap", () => {
+  const dates = [
+    ...Array.from({ length: 89 }, (_, index) => new Date(Date.UTC(2026, 0, 1 + index)).toISOString().slice(0, 10)),
+    ...Array.from({ length: 90 }, (_, index) => new Date(Date.UTC(2026, 3, 1 + index)).toISOString().slice(0, 10))
+  ];
+  const rows = dates.map((date) => ({
+    date,
+    periodStartDay: date,
+    periodEndDay: date,
+    protocolRevenueInUsd: 2,
+    isComplete: true
+  }));
+
+  const series = buildProtocolRevenueRunRateSeries(rows);
+
+  assert.deepEqual(series.map((row) => row.date), ["2026-06-29"]);
+  assert.equal(series[0].trailing90DaysProtocolRevenueInUsd, 180);
+  assert.equal(series[0].annualizedRunRateInUsd, 180 * (365.25 / 90));
+});
+
+test("buildLqTokenAnalysis computes LQ price, staking ratio, and DAO treasury metrics", () => {
+  const lqMarket = { id: "LQ", displayName: "LQ", symbol: "LQ", price: 0.25, supply: 5000000, supplyInUsd: 1250000 };
+  const bundle = {
+    markets: [lqMarket],
+    lqStats: { price: 0.25, staked: 4200000, totalSupply: 21000000, treasury: 1000000 },
+    lqStatsHistory: [
+      { date: "2026-01-01", lqPriceInUsd: 0.20, stakedLqAmount: 4000000, daoTreasuryLqAmount: 1000000 },
+      { date: "2026-01-02", lqPriceInUsd: 0.25, stakedLqAmount: 4200000, daoTreasuryLqAmount: 1001000 }
+    ],
+    marketSeries: {
+      LQ: [
+        { date: "2026-01-01", supply: 500000, supplyInUsd: 100000 },
+        { date: "2026-01-02", supply: 600000, supplyInUsd: 150000 }
+      ]
+    },
+    protocolSeries: [
+      { date: "2026-01-01" },
+      { date: "2026-01-02" }
+    ]
+  };
+  const revenue = {
+    dailyAllocation: [
+      { date: "2026-01-01", allocatedProtocolRevenueInUsd: 100 },
+      { date: "2026-01-02", allocatedProtocolRevenueInUsd: 250 }
+    ]
+  };
+
+  const analysis = buildLqTokenAnalysis(bundle, revenue);
+
+  assert.equal(analysis.currentPriceInUsd, 0.25);
+  assert.equal(analysis.currentStakedLq, 4200000);
+  assert.equal(analysis.currentStakingRatio, 4200000 / 21000000);
+  assert.equal(analysis.currentTotalStakedValueInUsd, 4200000 * 0.25);
+  assert.equal(analysis.series.length, 2);
+  assert.equal(analysis.series[0].lqPriceInUsd, 0.2);
+  assert.equal(analysis.series[0].stakedLqAmount, 4000000);
+  assert.equal(analysis.series[1].lqPriceInUsd, 0.25);
+  assert.equal(analysis.series[1].stakedLqAmount, 4200000);
+  assert.equal(analysis.currentDaoTreasuryLq, 1000000);
+});
+
+test("buildLqTokenAnalysis returns null lqPriceInUsd and stakedLqAmount for dates prior to authentic API observations", () => {
+  const bundle = {
+    markets: [{ id: "LQ", displayName: "LQ", symbol: "LQ", supply: 5000000, supplyInUsd: 1250000 }],
+    lqStatsHistory: [
+      { date: "2024-07-01", lqPriceInUsd: 0.25, stakedLqAmount: 3000000 }
+    ],
+    marketSeries: {
+      LQ: [
+        { date: "2024-07-01", supply: 5000000, supplyInUsd: 1250000 }
+      ]
+    },
+    protocolSeries: [
+      { date: "2023-05-01" },
+      { date: "2024-07-01" }
+    ]
+  };
+
+  const analysis = buildLqTokenAnalysis(bundle, { dailyAllocation: [] });
+
+  assert.equal(analysis.series.length, 2);
+  assert.equal(analysis.series[0].date, "2023-05-01");
+  assert.equal(analysis.series[0].lqPriceInUsd, null);
+  assert.equal(analysis.series[0].stakedLqAmount, null);
+  assert.equal(analysis.series[1].date, "2024-07-01");
+  assert.equal(analysis.series[1].lqPriceInUsd, 0.25);
+  assert.equal(analysis.series[1].stakedLqAmount, 3000000);
+});
+
+
