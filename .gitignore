@@ -14,6 +14,8 @@ Thumbs.db
 .vscode/
 .idea/
 *.log
+__pycache__/
+*.pyc
 
 # Temp download zips
 data/liqwid/liqwid-data (*).zip
