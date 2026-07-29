@@ -1,15 +1,16 @@
 # Liqwid Finance Analytics App
 
-An open-source, client-side web application and data pipeline for monitoring and analyzing Cardano's [Liqwid Finance](https://liqwid.finance) market dynamics, liquidity, interest gaps, borrow/repayment trends, and bad debt history.
+An open-source, client-side web application and data pipeline for monitoring and analyzing Cardano's [Liqwid Finance](https://liqwid.finance) lending & borrowing DeFi protocol: liquidity, market dynamics, revenue, debt and interest flows, debt history and more.
 
 ![Liqwid Analysis Viewer Overview](screenshots/UI_overview.png)
 
 ## Features
 
-- **Protocol & Market Dynamics Analytics**: Explore TVL, utilization rate, borrow/supply APYs, active debt, interest accrual vs repayment gaps, and risk metrics across all active markets.
+- **Protocol & Market Dynamics Analytics**: Explore TVL, utilization rate, borrow/supply APYs, active debt, debet and interest accrual vs repayment flows, risk metrics across all active markets, and more.
 - **Client-Side & Offline Ready**: Runs directly in any web browser without needing a backend server.
 - **Portable Data Store & Zip Archive**: Bundles raw historical fetches, cleaned daily histories, and computed market datasets in a portable ZIP archive (`liqwid-data.zip`) and CSV manifest (`liqwid-portable-manifest.csv`).
 - **Live GraphQL Sync**: Queries the official Liqwid v2 GraphQL API directly from the browser to refresh data and keep market dynamics up to date.
+- **Data Status** page: A separate page with data coverage and consistency checks.
 
 ## Project Layout
 
@@ -45,6 +46,8 @@ An open-source, client-side web application and data pipeline for monitoring and
    - Inside the app, click the **"Open Archive"** / **"Load Data Archive"** button in the header or data management section.
    - Select the pre-packaged archive at `data/liqwid/liqwid-data.zip` (or select the `data/liqwid` local directory if using the File System Access API).
    - The application will instantaneously unpack and render the entire historical analytics workspace, protocol aggregates, and per-market dynamics offline.
+3. **Fetch new data**:
+   - Inside the app, click the **"Fetch new data** button to fetch the most recent data from the API.
 
 ### Rebuilding the Application Bundle
 
