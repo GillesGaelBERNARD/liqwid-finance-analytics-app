@@ -15,6 +15,12 @@ test("public markets request uses pagination variables", () => {
   assert.equal(request.variables.perPage, 50);
   assert.match(request.query, /markets\(input:/);
   assert.match(request.query, /supply\(input:/);
+  assert.match(request.query, /parameters\s*\{/);
+  assert.match(request.query, /minHealthFactor/);
+  assert.match(request.query, /closeFactor0/);
+  assert.match(request.query, /collateralParameters\s*\{/);
+  assert.match(request.query, /liquidationThreshold/);
+  assert.match(request.query, /incomeParameters\s*\{/);
   assert.doesNotMatch(request.query, /filters: \[PUBLIC\]/);
 });
 

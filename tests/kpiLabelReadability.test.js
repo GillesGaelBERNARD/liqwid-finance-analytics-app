@@ -31,7 +31,7 @@ test("recent DAO run-rate context stays beside its period and explains the annua
       /metricPeriodGroup\("Recent DAO run rate", runRatePeriod, "Latest 90 consecutive complete days",[\s\S]{0,300}?Trailing 90-day revenue:/
     );
     assert.doesNotMatch(source, /3 consecutive complete months|3-month total|prior 3 months/i);
-    assert.doesNotMatch(source, /365\.25\s*\/\s*90/);
+    assert.match(source, /Revenue_90d \* \(365\.25 \/ 90\)/);
   }
 });
 
@@ -46,4 +46,3 @@ test("stat card detail notes render on a separate line below the stat value", as
     assert.match(source, /\.kpi\s*\.kpi-note\s*\{[^}]*display:\s*block;/);
   }
 });
-

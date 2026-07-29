@@ -173,6 +173,37 @@ test("a complete refresh survives portable save and rebuilds analysis from canon
   assert.equal(reopened.listPaths().some((path) => /^(clean|computed)\/.*\.json$/i.test(path)), false);
 });
 
+test("reopened bundles preserve declared archive provenance instead of replacing it with trusted defaults", async () => {
+  const store = new MemoryStore({
+    "clean/markets.csv": rowsToCsv([market("DJED")]),
+    "clean/protocol-totals.csv": rowsToCsv([{ supplyInUsd: 100, borrowInUsd: 20, liquidityInUsd: 80 }]),
+    "clean/market-history/djed.csv": rowsToCsv([{
+      marketId: "DJED",
+      date: "2026-07-13",
+      supplyInUsd: 100,
+      borrowInUsd: 20,
+      liquidityInUsd: 80
+    }]),
+    "metadata/settings.csv": rowsToCsv([{
+      schemaVersion: 99,
+      endpoint: "https://example.invalid/graphql",
+      historyStartDate: "2020-01-01",
+      historyEndDate: "2026-07-13",
+      generatedAt: "2026-07-14T08:00:00Z",
+      latestRawCapture: "raw/api/fetches/untrusted"
+    }])
+  });
+
+  const bundle = await buildAnalysisBundleFromStore(store);
+
+  assert.equal(bundle.source, "https://example.invalid/graphql");
+  assert.deepEqual(bundle.archiveMetadata, {
+    schemaVersion: 99,
+    endpoint: "https://example.invalid/graphql",
+    latestRawCapture: "raw/api/fetches/untrusted"
+  });
+});
+
 test("incremental refresh starts after the latest clean date and skips current markets", async () => {
   const existingA = [{ marketId: "A", marketDisplayName: "A", timestamp: "2026-01-02T00:00:00.000Z", date: "2026-01-02", supplyInUsd: 10, borrowInUsd: 2, liquidityInUsd: 8 }];
   const existingB = [{ marketId: "B", marketDisplayName: "B", timestamp: "2026-01-04T00:00:00.000Z", date: "2026-01-04", supplyInUsd: 20, borrowInUsd: 4, liquidityInUsd: 16 }];

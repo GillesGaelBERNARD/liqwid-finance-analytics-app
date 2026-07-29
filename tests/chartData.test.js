@@ -152,6 +152,8 @@ test("market cumulative gap charts enforce each observation's price", () => {
       assetPriceInUsd: 10,
       cumulativeDebtFlowGap: 3,
       cumulativeDebtFlowGapInUsd: 999,
+      cumulativeUnclassifiedBorrowReduction: 5,
+      cumulativeUnclassifiedBorrowReductionInUsd: 999,
       cumulativeInterestGap: 2,
       cumulativeInterestGapInUsd: 888
     },
@@ -160,6 +162,8 @@ test("market cumulative gap charts enforce each observation's price", () => {
       assetPriceInUsd: 4,
       cumulativeDebtFlowGap: 3,
       cumulativeDebtFlowGapInUsd: 999,
+      cumulativeUnclassifiedBorrowReduction: 5,
+      cumulativeUnclassifiedBorrowReductionInUsd: 999,
       cumulativeInterestGap: 2,
       cumulativeInterestGapInUsd: 888
     }
@@ -167,6 +171,8 @@ test("market cumulative gap charts enforce each observation's price", () => {
 
   assert.equal(enriched[0].cumulativeDebtGap, 30);
   assert.equal(enriched[1].cumulativeDebtGap, 12);
+  assert.equal(enriched[0].cumulativeUnclassifiedBorrowReduction, 50);
+  assert.equal(enriched[1].cumulativeUnclassifiedBorrowReduction, 20);
   assert.equal(enriched[0].cumulativeInterestGap, 20);
   assert.equal(enriched[1].cumulativeInterestGap, 8);
 });
@@ -235,6 +241,7 @@ test("debt-flow reconciliation separates the cumulative flow gap from outstandin
       borrowInUsd: 110,
       debtAccruedInUsd: 50,
       debtRepaidInUsd: 20,
+      cumulativeUnclassifiedBorrowReductionInUsd: 5,
       interestAccruedInUsd: 6,
       interestRepaidInUsd: 3
     }
@@ -247,6 +254,7 @@ test("debt-flow reconciliation separates the cumulative flow gap from outstandin
     currentBorrowInUsd: 110,
     cumulativeDebtAccruedInUsd: 50,
     cumulativeDebtRepaidInUsd: 35,
+    cumulativeUnclassifiedBorrowReductionInUsd: 5,
     cumulativeDebtFlowGapInUsd: 15,
     observedBorrowChangeInUsd: 10,
     flowVsBalanceResidualInUsd: 5,
@@ -256,7 +264,7 @@ test("debt-flow reconciliation separates the cumulative flow gap from outstandin
   });
 });
 
-test("monthly chart rows aggregate only directly reported market fee activity", () => {
+test("monthly chart rows keep collected market origination revenue separate from interest repayment activity", () => {
   const rows = [
     { date: "2026-01-02", interestAccruedInUsd: 10, interestRepaidInUsd: 4, loanOriginationFeesInUsd: 2, loanOriginationFeesMinAdaInUsd: 1 },
     { date: "2026-01-20", interestAccruedInUsd: 20, interestRepaidInUsd: 5, loanOriginationFeesInUsd: 3, loanOriginationFeesMinAdaInUsd: 0 },
@@ -271,20 +279,55 @@ test("monthly chart rows aggregate only directly reported market fee activity", 
     {
       date: "2026-01-01",
       observations: 2,
-      interestRepaidInUsd: 9,
-      observableOriginationFeeFlowInUsd: 6,
-      grossRealizedRevenueProxyInUsd: 15
+      interestRepaidActivityInUsd: 9,
+      interestAccruedInUsd: 30,
+      loanOriginationFeesInUsd: 5,
+      loanOriginationFeesMinAdaInUsd: 1,
+      collectedOriginationRevenueInUsd: 6
     },
     {
       date: "2026-02-01",
       observations: 1,
-      interestRepaidInUsd: 1,
-      observableOriginationFeeFlowInUsd: 2,
-      grossRealizedRevenueProxyInUsd: 3
+      interestRepaidActivityInUsd: 1,
+      interestAccruedInUsd: 5,
+      loanOriginationFeesInUsd: 0,
+      loanOriginationFeesMinAdaInUsd: 2,
+      collectedOriginationRevenueInUsd: 2
     }
   ]);
   assert.equal("estimatedProtocolRevenueInUsd" in monthly[0], false);
   assert.equal("grossAccruedRevenueProxyInUsd" in monthly[0], false);
+  assert.equal("grossRealizedRevenueProxyInUsd" in monthly[0], false);
+});
+
+test("monthly chart rows aggregate attributed collections and parameter-derived accrual allocations", () => {
+  const monthly = aggregateMonthlyChartRows([
+    {
+      date: "2026-07-20",
+      directOriginationRevenueInUsd: 3,
+      attributedCollectedInterestRevenueInUsd: 16,
+      attributedCollectedMarketRevenueInUsd: 19,
+      interestAccruedInUsd: 10,
+      accruedSupplierInterestIncomeInUsd: 8,
+      accruedProtocolInterestRevenueInUsd: 2
+    },
+    {
+      date: "2026-07-21",
+      directOriginationRevenueInUsd: 1,
+      attributedCollectedInterestRevenueInUsd: 4,
+      attributedCollectedMarketRevenueInUsd: 5,
+      interestAccruedInUsd: 20,
+      accruedSupplierInterestIncomeInUsd: 16,
+      accruedProtocolInterestRevenueInUsd: 4
+    }
+  ]);
+
+  assert.equal(monthly[0].directOriginationRevenueInUsd, 4);
+  assert.equal(monthly[0].attributedCollectedInterestRevenueInUsd, 20);
+  assert.equal(monthly[0].attributedCollectedMarketRevenueInUsd, 24);
+  assert.equal(monthly[0].interestAccruedInUsd, 30);
+  assert.equal(monthly[0].accruedSupplierInterestIncomeInUsd, 24);
+  assert.equal(monthly[0].accruedProtocolInterestRevenueInUsd, 6);
 });
 
 test("monthly saved rows preserve missing months as null gaps", () => {

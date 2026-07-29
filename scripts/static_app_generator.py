@@ -38,6 +38,9 @@ def build_browser_runtime():
         project_root / "src" / "browser" / "refreshProgress.js",
         project_root / "src" / "browser" / "currentExposureAnalysis.js",
         project_root / "src" / "browser" / "dataStatus.js",
+        project_root / "src" / "browser" / "marketParameterHistory.js",
+        project_root / "src" / "browser" / "marketRevenueAnalysis.js",
+        project_root / "src" / "browser" / "protocolParameterLandscape.js",
         project_root / "src" / "browser" / "fullAnalysis.js",
         project_root / "src" / "browser" / "completeDataWorkflow.js",
         project_root / "src" / "browser" / "directoryStore.js",
@@ -111,6 +114,7 @@ HTML_TEMPLATE = r"""<!doctype html>
     }
     .data-status-button[hidden] { display: none; }
     .data-status-button::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--mint); box-shadow: 0 0 0 3px rgba(62,220,129,.12); }
+    .data-status-button.limited::before { background: var(--amber); box-shadow: 0 0 0 3px rgba(255,184,77,.14); }
     .data-status-button.attention::before { background: var(--red); box-shadow: 0 0 0 3px rgba(255,90,103,.14); }
     .data-status-button:hover, .data-status-button:focus-visible { border-color: rgba(36,72,102,.86); background: rgba(16,42,68,.58); color: var(--text); }
     .data-status-button span { color: #c8d9e7; }
@@ -155,18 +159,26 @@ HTML_TEMPLATE = r"""<!doctype html>
     .data-status-dialog-heading p { max-width: 760px; margin: 7px 0 0; color: var(--muted); }
     .data-status-dialog-heading button { flex: 0 0 auto; padding: 8px 12px; }
     .data-status-headline { display: flex; align-items: center; justify-content: space-between; gap: 18px; margin-bottom: 24px; padding: 16px 18px; border: 1px solid rgba(62,220,129,.42); border-radius: 10px; background: linear-gradient(90deg, rgba(62,220,129,.10), rgba(25,181,254,.05)); }
+    .data-status-headline.limited { border-color: rgba(255,184,77,.48); background: linear-gradient(90deg, rgba(255,184,77,.10), rgba(25,181,254,.05)); }
     .data-status-headline.attention { border-color: rgba(255,90,103,.55); background: linear-gradient(90deg, rgba(255,90,103,.12), rgba(255,184,77,.05)); }
     .data-status-headline strong { display: block; font-size: 1.08rem; }
     .data-status-headline span { color: var(--muted); font-size: .8rem; }
     .data-status-section { margin-top: 28px; }
     .data-status-section h3 { margin: 0 0 5px; font-size: clamp(1.2rem, 2vw, 1.55rem); }
     .data-status-section > p { margin: 0 0 14px; color: var(--muted); font-size: .86rem; }
-    .data-status-coverage { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
+    .data-status-coverage { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 12px; }
     .data-status-card { min-width: 0; padding: 16px; border: 1px solid var(--line); border-top: 3px solid var(--mint); border-radius: 9px; background: linear-gradient(180deg, rgba(25,181,254,.07), transparent), var(--panel); }
     .data-status-card.pass { border-top-color: var(--mint); }
+    .data-status-card.partial { border-top-color: var(--amber); }
     .data-status-card.fail { border-top-color: var(--red); }
     .data-status-card.unavailable { border-top-color: var(--line); }
-    .data-status-card span { display: block; color: var(--muted); font-size: .75rem; }
+    .data-status-card-heading { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+    .data-status-card-heading > span:first-child { color: var(--muted); font-size: .75rem; }
+    .data-status-badge { display: inline-flex; align-items: center; width: max-content; padding: 2px 7px; border: 1px solid rgba(62,220,129,.38); border-radius: 99px; color: var(--mint); font-size: .66rem; font-weight: 800; letter-spacing: .04em; line-height: 1.35; text-transform: uppercase; }
+    .data-status-badge.pass { color: var(--mint); }
+    .data-status-badge.partial { border-color: rgba(255,184,77,.5); color: var(--amber); }
+    .data-status-badge.fail { border-color: rgba(255,90,103,.55); color: #ff9aa2; }
+    .data-status-badge.unavailable { border-color: rgba(127,166,199,.32); color: var(--muted); }
     .data-status-card strong { display: block; margin: 7px 0; font-size: clamp(1.15rem, 2vw, 1.55rem); line-height: 1.15; overflow-wrap: anywhere; }
     .data-status-card small { display: block; color: #c8d9e7; font-size: .72rem; line-height: 1.45; }
     .loan-population-panel { padding: 18px; border: 1px solid var(--line); border-radius: 10px; background: var(--panel); }
@@ -184,6 +196,10 @@ HTML_TEMPLATE = r"""<!doctype html>
     .loan-population-key.zero span::before { background: #6787a3; }
     .loan-population-key.dust span::before { background: var(--amber); }
     .loan-population-key strong { display: block; margin-top: 4px; font-size: 1.2rem; }
+    .loan-population-facts { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 8px; margin-top: 12px; }
+    .loan-population-facts div { padding: 9px 11px; border: 1px solid rgba(36,72,102,.62); border-radius: 7px; background: rgba(7,21,34,.48); }
+    .loan-population-facts span { display: block; color: var(--muted); font-size: .7rem; }
+    .loan-population-facts strong { display: block; margin-top: 2px; font-size: .92rem; }
     .loan-population-note { margin: 13px 0 0; color: #c8d9e7; font-size: .76rem; }
     .data-status-checks { display: grid; gap: 9px; }
     .data-status-check { display: grid; grid-template-columns: minmax(230px, .8fr) minmax(180px, .55fr) minmax(280px, 1.2fr); align-items: center; gap: 14px; padding: 13px 15px; border: 1px solid rgba(36,72,102,.76); border-radius: 9px; background: rgba(13,31,51,.82); }
@@ -200,25 +216,31 @@ HTML_TEMPLATE = r"""<!doctype html>
     .data-status-limitation strong { display: block; margin-bottom: 6px; font-size: .9rem; }
     .data-status-limitation span { display: block; color: var(--muted); font-size: .75rem; line-height: 1.45; }
     .data-status-technical { margin-top: 28px; border-top: 1px solid rgba(36,72,102,.72); padding-top: 16px; }
-    .data-status-technical summary { cursor: pointer; color: var(--muted); font-size: .8rem; }
+    .data-status-technical summary { cursor: pointer; color: #c8d9e7; font-size: .86rem; }
     .data-status-technical-content { display: grid; gap: 22px; margin-top: 18px; }
     .data-status-audit-group { min-width: 0; }
     .data-status-audit-group h4 { margin: 0 0 4px; font-size: .96rem; }
-    .data-status-audit-group > p { margin: 0 0 11px; color: var(--muted); font-size: .72rem; }
+    .data-status-audit-group > p { margin: 0 0 11px; color: var(--muted); font-size: .78rem; }
     .data-status-technical-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 9px 20px; }
     .data-status-technical-grid div { min-width: 0; }
-    .data-status-technical-grid span { display: block; color: var(--muted); font-size: .7rem; }
-    .data-status-technical-grid code { display: block; margin-top: 3px; overflow-wrap: anywhere; color: #c8d9e7; font-size: .72rem; }
+    .data-status-technical-grid span { display: block; color: var(--muted); font-size: .76rem; }
+    .data-status-technical-grid code { display: block; margin-top: 3px; overflow-wrap: anywhere; color: #c8d9e7; font-size: .78rem; }
     .data-status-audit-list { display: grid; gap: 8px; }
     .data-status-audit-row { display: grid; grid-template-columns: minmax(160px, .65fr) minmax(210px, .8fr) minmax(260px, 1.2fr); gap: 12px; align-items: start; padding: 10px 12px; border: 1px solid rgba(36,72,102,.62); border-radius: 8px; background: rgba(13,31,51,.62); }
-    .data-status-audit-row strong { font-size: .78rem; }
-    .data-status-audit-row code { overflow-wrap: anywhere; color: #d8e9f5; font-size: .72rem; }
-    .data-status-audit-row span { color: var(--muted); font-size: .7rem; line-height: 1.45; }
+    .data-status-audit-row strong { font-size: .82rem; }
+    .data-status-audit-row code { overflow-wrap: anywhere; color: #d8e9f5; font-size: .78rem; }
+    .data-status-audit-row span { color: var(--muted); font-size: .76rem; line-height: 1.45; }
     .data-status-audit-evidence { grid-template-columns: 26px minmax(170px, .65fr) minmax(220px, .85fr) minmax(250px, 1.1fr); }
     .data-status-audit-evidence .data-status-check-mark { width: 22px; height: 22px; font-size: .72rem; }
     .data-status-audit-evidence.fail .data-status-check-mark { background: rgba(255,90,103,.16); color: #ff9aa2; }
     .data-status-audit-evidence.partial .data-status-check-mark { background: rgba(255,184,77,.15); color: var(--amber); }
     .data-status-audit-evidence.unavailable .data-status-check-mark { background: rgba(127,166,199,.12); color: var(--muted); }
+    .data-status-audit-evidence-label { display: grid; gap: 5px; justify-items: start; }
+    .data-status-operands { margin: -2px 0 4px 38px; padding: 8px 10px; overflow-x: auto; border-left: 2px solid rgba(25,181,254,.38); }
+    .data-status-operands summary { cursor: pointer; color: #c8d9e7; font-size: .76rem; }
+    .data-status-operands-table { width: 100%; margin-top: 8px; border-collapse: collapse; font-size: .72rem; }
+    .data-status-operands-table th, .data-status-operands-table td { padding: 7px 8px; border-bottom: 1px solid rgba(36,72,102,.52); text-align: right; white-space: nowrap; }
+    .data-status-operands-table th:first-child, .data-status-operands-table td:first-child { text-align: left; }
     .data-status-audit-rules { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
     .data-status-audit-rule { padding: 11px 12px; border-left: 2px solid rgba(25,181,254,.55); background: rgba(16,42,68,.44); }
     .data-status-audit-rule strong { display: block; margin-bottom: 3px; font-size: .76rem; }
@@ -400,6 +422,30 @@ HTML_TEMPLATE = r"""<!doctype html>
     }
 
     .kpi .kpi-note { display: block; width: 100%; margin-top: 9px; padding-top: 9px; border-top: 1px solid rgba(36,72,102,.62); color: #c7d9e8; font-size: .78rem; line-height: 1.4; word-break: break-word; }
+    .parameter-effective { display: flex; align-items: center; gap: 9px; flex-wrap: wrap; margin: 10px 0 0; color: var(--muted); font-size: .8rem; }
+    .parameter-effective strong { color: var(--mint); }
+    .parameter-groups { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 16px; margin: 20px 0 28px; }
+    .parameter-group { position: relative; overflow: hidden; border: 1px solid var(--line); border-radius: 10px; padding: 20px; background: linear-gradient(145deg, rgba(25,181,254,.08), rgba(62,220,129,.025) 48%, transparent), var(--panel); }
+    .parameter-group::before { content: ""; position: absolute; inset: 0 0 auto; height: 3px; background: linear-gradient(90deg, var(--blue), var(--mint)); opacity: .85; }
+    .parameter-group h3 { margin: 0 0 5px; font-size: 1.03rem; }
+    .parameter-group > p { margin: 0 0 15px; color: var(--muted); font-size: .76rem; line-height: 1.45; }
+    .parameter-list { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 0; margin: 0; }
+    .parameter-list dt, .parameter-list dd { margin: 0; padding: 9px 0; border-top: 1px solid rgba(36,72,102,.52); }
+    .parameter-list dt { padding-right: 18px; color: #bdd1e2; font-size: .79rem; line-height: 1.35; }
+    .parameter-list dd { color: var(--text); font-size: .84rem; font-weight: 800; text-align: right; white-space: nowrap; }
+    .parameter-list dt:first-of-type, .parameter-list dt:first-of-type + dd { border-top: 0; }
+    .parameter-allocation-bar { display: flex; height: 9px; overflow: hidden; margin: 2px 0 14px; border: 1px solid rgba(220,238,255,.14); border-radius: 999px; background: rgba(7,21,34,.72); }
+    .parameter-allocation-bar span:nth-child(1) { background: var(--blue); }
+    .parameter-allocation-bar span:nth-child(2) { background: var(--mint); }
+    .parameter-allocation-bar span:nth-child(3) { background: var(--amber); }
+    .parameter-allocation-bar span:nth-child(4) { background: var(--purple); }
+    .parameter-record { grid-column: 1 / -1; }
+    .parameter-record code { display: block; margin-top: 8px; overflow-wrap: anywhere; color: #b8e7ff; font-size: .78rem; line-height: 1.5; }
+    .parameter-formula { margin: 12px 0 0; padding: 12px 14px; border-left: 3px solid var(--mint); border-radius: 0 8px 8px 0; background: rgba(7,21,34,.62); color: #c7d9e8; font-size: .78rem; line-height: 1.5; }
+    .parameter-formula code { color: var(--text); overflow-wrap: anywhere; }
+    .parameter-empty { padding: 24px; border: 1px dashed var(--line); border-radius: 10px; background: rgba(13,31,51,.66); color: var(--muted); }
+    .parameter-history-table th, .parameter-history-table td { white-space: nowrap; font-size: .8rem; }
+    .parameter-history-table td:nth-child(2) { max-width: 220px; overflow: hidden; text-overflow: ellipsis; font-family: ui-monospace, SFMono-Regular, Consolas, monospace; }
     .loan-coverage-notices { display: grid; gap: 10px; margin: 14px 0 18px; }
     .loan-coverage-notice { display: flex; align-items: flex-start; gap: 13px; padding: 14px 16px; border: 1px solid rgba(255,90,103,.55); border-radius: 9px; background: linear-gradient(90deg, rgba(255,90,103,.12), rgba(255,184,77,.05)); }
     .loan-coverage-notice-badge { flex: 0 0 auto; padding: 3px 8px; border-radius: 999px; background: rgba(255,90,103,.18); color: #ffb5bb; font-size: .7rem; font-weight: 800; letter-spacing: .04em; text-transform: uppercase; }
@@ -555,6 +601,7 @@ HTML_TEMPLATE = r"""<!doctype html>
       .data-status-coverage, .loan-population-legend, .data-status-limitations, .data-status-technical-grid, .data-status-audit-rules { grid-template-columns: 1fr; }
       .data-status-check { grid-template-columns: 1fr; gap: 7px; }
       .data-status-audit-row, .data-status-audit-evidence { grid-template-columns: 1fr; gap: 5px; }
+      .data-status-operands { margin-left: 0; }
       .chart-heading, .chart-live-toolbar { align-items: flex-start; }
       .chart-timeframes { width: 100%; }
       .chart-timeframes button { flex: 1; min-width: 46px; }
@@ -584,7 +631,7 @@ HTML_TEMPLATE = r"""<!doctype html>
           <button id="saveDataButton" type="button" hidden>Save data</button>
           <button id="fetchNewDataButton" type="button" hidden>Fetch new data</button>
         </div>
-        <button id="dataStatusButton" class="data-status-button" type="button" hidden>Data status <span id="dataStatusButtonSummary"></span></button>
+        <button id="dataStatusButton" class="data-status-button" type="button" aria-haspopup="dialog" aria-controls="dataStatusDialog" hidden>Data status <span id="dataStatusButtonSummary"></span></button>
       </div>
     </div>
     <p id="refreshStatus" class="refresh-status" role="status" hidden></p>
@@ -605,12 +652,14 @@ HTML_TEMPLATE = r"""<!doctype html>
     <section id="impact" class="view"></section>
     <section id="protocolParticipation" class="view"></section>
     <section id="protocolLqToken" class="view"></section>
+    <section id="protocolParameters" class="view"></section>
     <section id="marketOverview" class="view"></section>
     <section id="marketRepayments" class="view"></section>
     <section id="marketInterest" class="view"></section>
     <section id="marketRevenue" class="view"></section>
     <section id="marketHealth" class="view"></section>
     <section id="marketParticipation" class="view"></section>
+    <section id="marketParameters" class="view"></section>
   </main>
   <input id="dataArchiveFileInput" class="screen-reader-only" type="file" accept=".zip,application/zip" aria-label="Open an existing Liqwid data archive">
   <dialog id="fullHistoryConfirmDialog" class="fetch-confirm-dialog" aria-labelledby="fullHistoryDialogTitle">
@@ -654,7 +703,8 @@ HTML_TEMPLATE = r"""<!doctype html>
         ["exposure", "Exposure"],
         ["impact", "Market impact"],
         ["protocolParticipation", "Participation and concentration"],
-        ["protocolLqToken", "LQ token & staking"]
+        ["protocolLqToken", "LQ token & staking"],
+        ["protocolParameters", "Risk & Parameters"]
       ]],
       ["markets", "Market analytics", [
         ["marketOverview", "Liquidity & Rates"],
@@ -662,7 +712,8 @@ HTML_TEMPLATE = r"""<!doctype html>
         ["marketInterest", "Interest flows"],
         ["marketRevenue", "Revenue"],
         ["marketHealth", "Health"],
-        ["marketParticipation", "Participation and concentration"]
+        ["marketParticipation", "Participation and concentration"],
+        ["marketParameters", "Parameters History"]
       ]]
     ];
     const views = analyticsScopes.flatMap(([, , scopeViews]) => scopeViews);
@@ -681,10 +732,10 @@ HTML_TEMPLATE = r"""<!doctype html>
         "formulaText": "sum(Loan Debt USD)"
     },
     "Annualized run rate": {
-        "description": "Annualized protocol revenue based on trailing 90-day fee activity.",
-        "explanation": "Projects full-year protocol revenue by annualizing trailing 90-day daily average fee generation across active market pools.",
-        "formulaHtml": '<div class="formula-card"><span class="formula-num">Revenue<sub>90d</sub></span> &times; <div class="formula-frac"><span class="formula-num">365</span><span class="formula-den">90</span></div></div>',
-        "formulaText": "Revenue_90d * (365 / 90)"
+        "description": "Annualized DAO revenue pace based on the latest 90 consecutive complete daily allocations.",
+        "explanation": "Annualizes the sum of official DAO revenue over the latest 90 consecutive complete UTC days. The current UTC day and any incomplete or failed rows are excluded.",
+        "formulaHtml": '<div class="formula-card"><span class="formula-num">DAO Revenue<sub>90d</sub></span> &times; <div class="formula-frac"><span class="formula-num">365.25</span><span class="formula-den">90</span></div></div>',
+        "formulaText": "Revenue_90d * (365.25 / 90)"
     },
     "Bad debt": {
         "description": "Total USD debt where outstanding borrow exceeds total collateral value.",
@@ -812,21 +863,27 @@ HTML_TEMPLATE = r"""<!doctype html>
         "formulaHtml": '<div class="formula-card"><div class="formula-frac"><span class="formula-num">Interest Repaid<sub>90d</sub></span><span class="formula-den">Interest Accrued<sub>90d</sub></span></div></div>',
         "formulaText": "Interest Repaid 90d / Interest Accrued 90d"
     },
-    "Current-valued interest gap": {
-        "description": "Net cumulative unserviced interest accrued since inception.",
-        "explanation": "Cumulative difference between native interest accrued and native interest repaid across all market history, valued at current asset prices.",
+    "Current-valued cumulative reported interest-flow difference": {
+        "description": "Mark-to-market difference between cumulative reported interest accrued and repaid flows.",
+        "explanation": "Native interest accrued minus native interest repaid across observable market history, valued at the current observation's implied asset price. This is a historical flow difference, not a current interest receivable; the official API does not expose a current principal-versus-interest balance split.",
         "formulaHtml": '<div class="formula-card">&sum; <span class="formula-paren">(</span><span class="formula-num">Interest Accrued<sub>native</sub></span> &minus; <span class="formula-num">Interest Repaid<sub>native</sub></span><span class="formula-paren">)</span> &times; <span class="formula-num">Price<sub>current</sub></span></div>',
         "formulaText": "sum(Accrued Native - Repaid Native) * Current Price"
     },
     "Current-valued cumulative interest gap": {
-        "description": "Net cumulative unserviced interest accrued since inception.",
-        "explanation": "Cumulative difference between native interest accrued and native interest repaid across all market history, valued at current asset prices.",
+        "description": "Mark-to-market difference between cumulative reported interest accrued and repaid flows.",
+        "explanation": "Native interest accrued minus native interest repaid across observable market history, valued at the current observation's implied asset price. This is a historical flow difference, not a current interest receivable; the official API does not expose a current principal-versus-interest balance split.",
         "formulaHtml": '<div class="formula-card">&sum; <span class="formula-paren">(</span><span class="formula-num">Interest Accrued<sub>native</sub></span> &minus; <span class="formula-num">Interest Repaid<sub>native</sub></span><span class="formula-paren">)</span> &times; <span class="formula-num">Price<sub>current</sub></span></div>',
         "formulaText": "sum(Accrued Native - Repaid Native) * Current Price"
     },
+    "Current-valued cumulative reported debt-flow difference": {
+        "description": "Mark-to-market difference between cumulative inferred debt formation and reported repayment.",
+        "explanation": "Native inferred debt formation minus native reported debt repayment across observable market history, valued at the current observation's implied asset price. This is not remaining principal; use current outstanding borrow for that balance. Unclassified borrow reductions separately reconcile decreases that reported repayment does not explain.",
+        "formulaHtml": '<div class="formula-card">&sum; <span class="formula-paren">(</span><span class="formula-num">Debt Accrued<sub>native</sub></span> &minus; <span class="formula-num">Debt Repaid<sub>native</sub></span><span class="formula-paren">)</span> &times; <span class="formula-num">Price<sub>current</sub></span></div>',
+        "formulaText": "sum(Debt Accrued Native - Repaid Native) * Current Price"
+    },
     "Current-valued cumulative debt-flow gap": {
-        "description": "Net cumulative unserviced debt creation accrued since inception.",
-        "explanation": "Cumulative difference between native inferred debt accrued and native debt repaid across all market history, valued at current asset prices.",
+        "description": "Mark-to-market difference between cumulative inferred debt formation and reported repayment.",
+        "explanation": "Native inferred debt formation minus native reported debt repayment across observable market history, valued at the current observation's implied asset price. This is not remaining principal; use current outstanding borrow for that balance. Unclassified borrow reductions separately reconcile decreases that reported repayment does not explain.",
         "formulaHtml": '<div class="formula-card">&sum; <span class="formula-paren">(</span><span class="formula-num">Debt Accrued<sub>native</sub></span> &minus; <span class="formula-num">Debt Repaid<sub>native</sub></span><span class="formula-paren">)</span> &times; <span class="formula-num">Price<sub>current</sub></span></div>',
         "formulaText": "sum(Debt Accrued Native - Repaid Native) * Current Price"
     },
@@ -842,11 +899,47 @@ HTML_TEMPLATE = r"""<!doctype html>
         "formulaHtml": '<div class="formula-card">&sum;<sub>30d</sub> <span class="formula-num">Interest Repaid<sub>native</sub></span> &times; <span class="formula-num">Price<sub>current</sub></span></div>',
         "formulaText": "sum_30d(Daily Interest Repaid * Current Price)"
     },
+    "YTD collected revenue": {
+        "description": "Collected retained-interest and origination revenue in the latest observable calendar year.",
+        "explanation": "Sums complete days in the latest collected-revenue calendar year, from January 1 through the latest complete official overview day. It combines repayment-timed retained interest with both origination-fee components.",
+        "formulaHtml": '<div class="formula-card">&sum;<sub>latest calendar-year complete days</sub> <span class="formula-paren">(</span><span class="formula-num">revenueFromRepaidInterestInUsd</span> + <span class="formula-num">loanOriginationFeesInUsd</span> + <span class="formula-num">loanOriginationFeesMinAdaInUsd</span><span class="formula-paren">)</span></div>',
+        "formulaText": "sum(Latest calendar-year complete days: revenueFromRepaidInterestInUsd + loanOriginationFeesInUsd + loanOriginationFeesMinAdaInUsd)"
+    },
+    "Revenue from repaid interest": {
+        "description": "Year-to-date retained revenue collected when borrowers repay interest.",
+        "explanation": "Sums the official revenueFromRepaidInterestInUsd field across complete days in the latest collected-revenue calendar year. This is the retained share going to treasury and stakers, not the borrower's full interest repayment.",
+        "formulaHtml": '<div class="formula-card">&sum;<sub>latest calendar-year complete days</sub> <span class="formula-num">revenueFromRepaidInterestInUsd</span></div>',
+        "formulaText": "sum(Latest calendar-year complete days: revenueFromRepaidInterestInUsd)"
+    },
+    "Loan origination fees": {
+        "description": "Year-to-date upfront origination fees collected from borrowers.",
+        "explanation": "Sums the official base and minimum-ADA origination-fee USD fields across complete days in the latest collected-revenue calendar year.",
+        "formulaHtml": '<div class="formula-card">&sum;<sub>latest calendar-year complete days</sub> <span class="formula-paren">(</span><span class="formula-num">loanOriginationFeesInUsd</span> + <span class="formula-num">loanOriginationFeesMinAdaInUsd</span><span class="formula-paren">)</span></div>',
+        "formulaText": "sum(Latest calendar-year complete days: loanOriginationFeesInUsd + loanOriginationFeesMinAdaInUsd)"
+    },
+    "Collected revenue": {
+        "description": "Cumulative repayment-timed retained-interest revenue and upfront origination fees.",
+        "explanation": "Sums the official overview field for retained revenue collected when borrowers repay interest, plus base and minimum-ADA origination fees. The repayment-time interest field combines treasury and LQ-staker recipients because the API does not expose that split. Liquidation profit, supplier earnings, staking rewards, and POL accrual are excluded.",
+        "formulaHtml": '<div class="formula-card">&sum; <span class="formula-paren">(</span><span class="formula-num">revenueFromRepaidInterestInUsd</span> + <span class="formula-num">loanOriginationFeesInUsd</span> + <span class="formula-num">loanOriginationFeesMinAdaInUsd</span><span class="formula-paren">)</span></div>',
+        "formulaText": "sum(revenueFromRepaidInterestInUsd + loanOriginationFeesInUsd + loanOriginationFeesMinAdaInUsd)"
+    },
+    "Interest revenue collected": {
+        "description": "Cumulative retained revenue collected when borrowers repay interest.",
+        "explanation": "Uses the official revenueFromRepaidInterestInUsd field. This is the retained share of repaid interest going to treasury and stakers, not the borrower's full interest repayment.",
+        "formulaHtml": '<div class="formula-card">&sum; <span class="formula-num">revenueFromRepaidInterestInUsd</span></div>',
+        "formulaText": "sum(revenueFromRepaidInterestInUsd)"
+    },
+    "Origination fees collected": {
+        "description": "Cumulative upfront origination fees, including the minimum-ADA component.",
+        "explanation": "Adds the official base origination-fee USD field and minimum-ADA origination-fee USD field for every complete day.",
+        "formulaHtml": '<div class="formula-card">&sum; <span class="formula-paren">(</span><span class="formula-num">loanOriginationFeesInUsd</span> + <span class="formula-num">loanOriginationFeesMinAdaInUsd</span><span class="formula-paren">)</span></div>',
+        "formulaText": "sum(loanOriginationFeesInUsd + loanOriginationFeesMinAdaInUsd)"
+    },
     "DAO / treasury revenue": {
-        "description": "Cumulative protocol revenue allocated to the DAO Treasury.",
-        "explanation": "Total historical protocol fee allocations directed to the Liqwid DAO Treasury reserve, combining DAO interest share and loan origination fees.",
-        "formulaHtml": '<div class="formula-card"><span class="formula-num">DAO Interest Share</span> + <span class="formula-num">DAO Origination Fees</span></div>',
-        "formulaText": "DAO Interest Share + DAO Origination Fees"
+        "description": "Cumulative accrual-based protocol revenue allocated to the DAO Treasury.",
+        "explanation": "Sums API-reported DAO interest and origination accruals across every complete daily analytics.fees row. This is earned allocation, not repayment-timed collection.",
+        "formulaHtml": '<div class="formula-card">&sum;<sub>complete days</sub> <span class="formula-paren">(</span><span class="formula-num">borrowInterestAccruedForProtocol</span> + <span class="formula-num">loanOriginationFeesForProtocol</span><span class="formula-paren">)</span></div>',
+        "formulaText": "sum(Complete daily DAO interest + DAO origination allocation USD)"
     },
     "DAO Treasury LQ": {
         "description": "Total LQ tokens held in the DAO Treasury reserve.",
@@ -856,15 +949,15 @@ HTML_TEMPLATE = r"""<!doctype html>
     },
     "DAO interest allocation": {
         "description": "Cumulative interest fee revenue allocated to DAO Treasury.",
-        "explanation": "Protocol interest reserve split directed to DAO balance based on protocol reserve factor.",
-        "formulaHtml": '<div class="formula-card">&sum; <span class="formula-paren">(</span><span class="formula-num">Interest Accrued<sub>USD</sub></span> &times; <span class="formula-num">Reserve Factor %</span><span class="formula-paren">)</span></div>',
-        "formulaText": "sum(Interest Accrued USD * Reserve Factor %)"
+        "explanation": "Sums the API-reported DAO interest allocation across complete daily analytics.fees rows through the latest available full day, without applying any secondary allocation formula.",
+        "formulaHtml": '<div class="formula-card">&sum;<sub>complete days</sub> <span class="formula-num">borrowInterestAccruedForProtocol<sub>USD</sub></span></div>',
+        "formulaText": "sum(Complete daily borrowInterestAccruedForProtocol USD)"
     },
     "DAO origination allocation": {
         "description": "Cumulative loan origination fees allocated to DAO Treasury.",
-        "explanation": "Origination fee share directed to DAO balance upon new loan minting.",
-        "formulaHtml": '<div class="formula-card">&sum; <span class="formula-num">Origination Fees<sub>USD</sub></span></div>',
-        "formulaText": "sum(Origination Fees USD)"
+        "explanation": "Sums the API-reported DAO origination allocation across complete daily analytics.fees rows through the latest available full day.",
+        "formulaHtml": '<div class="formula-card">&sum;<sub>complete days</sub> <span class="formula-num">loanOriginationFeesForProtocol<sub>USD</sub></span></div>',
+        "formulaText": "sum(Complete daily loanOriginationFeesForProtocol USD)"
     },
     "Days with a market repayment spike": {
         "description": "Count of days where market repayment exceeded 2x active median.",
@@ -908,17 +1001,95 @@ HTML_TEMPLATE = r"""<!doctype html>
         "formulaHtml": '<div class="formula-card">&sum; <span class="formula-num">Liquidation Profit<sub>USD</sub></span></div>',
         "formulaText": "sum(Liquidation Profit USD)"
     },
-    "Gross realized fee flow - trailing 90d": {
-        "description": "Trailing 90-day total fee revenue generated across pools.",
-        "explanation": "Sum of all interest reserve fees and upfront loan origination fees collected over trailing 90 days.",
-        "formulaHtml": '<div class="formula-card">&sum;<sub>90d</sub> <span class="formula-num">Fees<sub>USD</sub></span></div>',
-        "formulaText": "sum_90d(Fee Flow USD)"
+    "YTD attributed collected revenue": {
+        "description": "Year-to-date collected revenue attributed to this market.",
+        "explanation": "Adds directly reported market origination fees to a reconciled market attribution of the official protocol retained-interest total. Each complete day's actual protocol retained-interest collection is distributed in proportion to every market's parameter-weighted market repayment. The market allocation is modeled, but its daily protocol total is actual and reconciles exactly.",
+        "formulaHtml": '<div class="formula-card">&sum;<sub>YTD eligible days</sub> <span class="formula-paren">(</span><span class="formula-num">official retained interest</span> &times; <span class="formula-frac"><span class="formula-num">market weight</span><span class="formula-den">&sum; all-market weights</span></span> + <span class="formula-num">market origination fees</span><span class="formula-paren">)</span><div>market weight = <span class="formula-num">interestRepaidInUsd &times; protocolInterestShare</span></div></div>',
+        "formulaText": "sum(YTD eligible days: official protocol retained interest * marketWeight / sum(allMarketWeights) + market origination fees); marketWeight = interestRepaidInUsd * protocolInterestShare"
     },
-    "Gross realized fee flow · trailing 90d": {
-        "description": "Trailing 90-day total fee revenue generated across pools.",
-        "explanation": "Sum of all interest reserve fees and upfront loan origination fees collected over trailing 90 days.",
-        "formulaHtml": '<div class="formula-card">&sum;<sub>90d</sub> <span class="formula-num">Fees<sub>USD</sub></span></div>',
-        "formulaText": "sum_90d(Fee Flow USD)"
+    "Attributed interest revenue collected": {
+        "description": "Actual protocol retained-interest collections attributed to this selected market.",
+        "explanation": "For each complete day, the official revenueFromRepaidInterestInUsd protocol total is allocated by the selected market's share of parameter-weighted repayments. A day is unavailable if any repaying market lacks effective parameters or market repayments fail protocol reconciliation.",
+        "formulaHtml": '<div class="formula-card"><span class="formula-num">revenueFromRepaidInterestInUsd</span> &times; <span class="formula-frac"><span class="formula-num">interestRepaidInUsd &times; protocolInterestShare</span><span class="formula-den">&sum;<sub>markets</sub> interestRepaidInUsd &times; protocolInterestShare</span></span></div>',
+        "formulaText": "revenueFromRepaidInterestInUsd * (interestRepaidInUsd * protocolInterestShare) / sum(markets: interestRepaidInUsd * protocolInterestShare)"
+    },
+    "Market origination fees collected": {
+        "description": "Directly observable year-to-date revenue collected from this market's loan originations.",
+        "explanation": "Sums both official analytics.marketHistory origination-fee USD fields across complete days in the selected market's latest calendar year. It excludes the current partial UTC day.",
+        "formulaHtml": '<div class="formula-card">&sum;<sub>YTD complete market days</sub> <span class="formula-paren">(</span><span class="formula-num">loanOriginationFeesInUsd</span> + <span class="formula-num">loanOriginationFeesMinAdaInUsd</span><span class="formula-paren">)</span></div>',
+        "formulaText": "sum(YTD complete market days: loanOriginationFeesInUsd + loanOriginationFeesMinAdaInUsd)"
+    },
+    "Accrued protocol/reserve interest revenue": {
+        "description": "Interest accrued to the market's non-supplier protocol or reserve share.",
+        "explanation": "Applies the latest parameter effective by each UTC day's end to that day's market interest accrual. This matches Liqwid's accrual-based market revenue presentation but is not repayment-timed cash collection.",
+        "formulaHtml": '<div class="formula-card">&sum; <span class="formula-num">interestAccruedInUsd</span> &times; <span class="formula-paren">(</span>1 &minus; <span class="formula-frac"><span class="formula-num">incomeRatioSuppliers</span><span class="formula-den">incomeRatioSum</span></span><span class="formula-paren">)</span></div>',
+        "formulaText": "sum(interestAccruedInUsd * (1 - incomeRatioSuppliers / incomeRatioSum))"
+    },
+    "Accrued supplier interest income": {
+        "description": "Interest accrued to suppliers in the selected market.",
+        "explanation": "Applies the effective supplier income ratio to market interest accrued. Supplier income is lender yield, not protocol revenue and not proof that cash has been repaid.",
+        "formulaHtml": '<div class="formula-card">&sum; <span class="formula-num">interestAccruedInUsd</span> &times; <span class="formula-frac"><span class="formula-num">incomeRatioSuppliers</span><span class="formula-den">incomeRatioSum</span></span></div>',
+        "formulaText": "sum(interestAccruedInUsd * incomeRatioSuppliers / incomeRatioSum)"
+    },
+    "Gross interest accrued": {
+        "description": "Total borrower interest accrued before recipient allocation.",
+        "explanation": "Sums the official market interestAccruedInUsd flow. It is split between supplier income and the non-supplier protocol or reserve allocation.",
+        "formulaHtml": '<div class="formula-card">&sum; <span class="formula-num">interestAccruedInUsd</span></div>',
+        "formulaText": "sum(interestAccruedInUsd)"
+    },
+    "Annualized protocol/reserve interest revenue": {
+        "description": "Current annualized protocol or reserve interest run rate.",
+        "explanation": "Multiplies the latest complete market borrow balance by its current borrower APR and the effective non-supplier share. It is a point-in-time projection, not collected or guaranteed revenue.",
+        "formulaHtml": '<div class="formula-card"><span class="formula-num">borrowInUsd</span> &times; <span class="formula-num">borrowApr</span> &times; <span class="formula-paren">(</span>1 &minus; <span class="formula-frac"><span class="formula-num">incomeRatioSuppliers</span><span class="formula-den">incomeRatioSum</span></span><span class="formula-paren">)</span></div>',
+        "formulaText": "borrowInUsd * borrowApr * (1 - incomeRatioSuppliers / incomeRatioSum)"
+    },
+    "Annualized supplier interest income": {
+        "description": "Current annualized supplier interest run rate.",
+        "explanation": "Multiplies the latest complete market borrow balance by borrower APR and the effective supplier share. This is projected lender income, not protocol revenue.",
+        "formulaHtml": '<div class="formula-card"><span class="formula-num">borrowInUsd</span> &times; <span class="formula-num">borrowApr</span> &times; <span class="formula-frac"><span class="formula-num">incomeRatioSuppliers</span><span class="formula-den">incomeRatioSum</span></span></div>',
+        "formulaText": "borrowInUsd * borrowApr * incomeRatioSuppliers / incomeRatioSum"
+    },
+    "Annualized gross interest income": {
+        "description": "Current annualized gross borrower-interest run rate.",
+        "explanation": "Multiplies the latest complete market borrow balance by borrower APR. Supplier and protocol or reserve projections divide this gross amount using effective income parameters.",
+        "formulaHtml": '<div class="formula-card"><span class="formula-num">borrowInUsd</span> &times; <span class="formula-num">borrowApr</span></div>',
+        "formulaText": "borrowInUsd * borrowApr"
+    },
+    "Trailing 90-day origination revenue": {
+        "description": "Directly observable origination revenue collected during the trailing 90-day calendar window.",
+        "explanation": "Sums the base and minimum-ADA origination-fee USD fields over the calendar window ending on the latest complete day.",
+        "formulaHtml": '<div class="formula-card">&sum;<sub>trailing 90 calendar days</sub> <span class="formula-paren">(</span><span class="formula-num">loanOriginationFeesInUsd</span> + <span class="formula-num">loanOriginationFeesMinAdaInUsd</span><span class="formula-paren">)</span></div>',
+        "formulaText": "sum(Trailing 90 calendar days ending latest complete day: loanOriginationFeesInUsd + loanOriginationFeesMinAdaInUsd)"
+    },
+    "All-time origination revenue": {
+        "description": "Directly observable origination revenue across this market's complete history.",
+        "explanation": "Sums both official market-level origination-fee USD fields from the first observable market day through the latest complete day.",
+        "formulaHtml": '<div class="formula-card">&sum;<sub>all complete market days</sub> <span class="formula-paren">(</span><span class="formula-num">loanOriginationFeesInUsd</span> + <span class="formula-num">loanOriginationFeesMinAdaInUsd</span><span class="formula-paren">)</span></div>',
+        "formulaText": "sum(All complete market days: loanOriginationFeesInUsd + loanOriginationFeesMinAdaInUsd)"
+    },
+    "Latest origination-revenue day": {
+        "description": "Latest complete market day with a positive reported origination fee.",
+        "explanation": "Finds the most recent complete day where the sum of the base and minimum-ADA origination-fee USD fields is greater than zero.",
+        "formulaHtml": '<div class="formula-card"><span class="formula-func">latest date</span><span class="formula-paren">(</span><span class="formula-num">base fee + min-ADA fee &gt; 0</span><span class="formula-paren">)</span></div>',
+        "formulaText": "latest(date where loanOriginationFeesInUsd + loanOriginationFeesMinAdaInUsd > 0)"
+    },
+    "YTD interest repaid activity": {
+        "description": "Borrower interest repayment activity in this market during the latest calendar year.",
+        "explanation": "Sums interestRepaidInUsd across complete year-to-date market days. This is the borrower's full interest payment and is not retained protocol revenue.",
+        "formulaHtml": '<div class="formula-card">&sum;<sub>YTD complete market days</sub> <span class="formula-num">interestRepaidInUsd</span></div>',
+        "formulaText": "sum(YTD complete market days: interestRepaidInUsd)"
+    },
+    "Trailing 90-day interest repaid activity": {
+        "description": "Borrower interest repayment activity during the trailing 90-day calendar window.",
+        "explanation": "Sums the full borrower interestRepaidInUsd flow. It is shown as revenue-generating activity, not as retained market revenue.",
+        "formulaHtml": '<div class="formula-card">&sum;<sub>trailing 90 calendar days</sub> <span class="formula-num">interestRepaidInUsd</span></div>',
+        "formulaText": "sum(Trailing 90 calendar days ending latest complete day: interestRepaidInUsd)"
+    },
+    "All-time interest repaid activity": {
+        "description": "Full borrower interest repayment activity across this market's complete history.",
+        "explanation": "Sums interestRepaidInUsd from the first observable market day through the latest complete day. It is not retained protocol revenue.",
+        "formulaHtml": '<div class="formula-card">&sum;<sub>all complete market days</sub> <span class="formula-num">interestRepaidInUsd</span></div>',
+        "formulaText": "sum(All complete market days: interestRepaidInUsd)"
     },
     "Highest 30d liquidation volume": {
         "description": "Market pool with largest liquidation volume over trailing 30 days.",
@@ -944,18 +1115,6 @@ HTML_TEMPLATE = r"""<!doctype html>
         "formulaHtml": '<div class="formula-card"><span class="formula-func">max</span><sub>i</sub> <div class="formula-frac"><span class="formula-num">Borrow<sub>i</sub></span><span class="formula-den">Supply<sub>i</sub></span></div></div>',
         "formulaText": "max_i(Borrow_i / Supply_i)"
     },
-    "Interest repaid flow - trailing 90d": {
-        "description": "Trailing 90-day interest payments received across pools.",
-        "explanation": "Total interest payments collected from borrowers across all pools over trailing 90 days.",
-        "formulaHtml": '<div class="formula-card">&sum;<sub>90d</sub> <span class="formula-num">Interest Repaid<sub>USD</sub></span></div>',
-        "formulaText": "sum_90d(Interest Repaid USD)"
-    },
-    "Interest repaid flow · trailing 90d": {
-        "description": "Trailing 90-day interest payments received across pools.",
-        "explanation": "Total interest payments collected from borrowers across all pools over trailing 90 days.",
-        "formulaHtml": '<div class="formula-card">&sum;<sub>90d</sub> <span class="formula-num">Interest Repaid<sub>USD</sub></span></div>',
-        "formulaText": "sum_90d(Interest Repaid USD)"
-    },
     "LQ Price": {
         "description": "Current USD market price of the LQ token.",
         "explanation": "Observed market price of the LQ protocol governance token.",
@@ -963,10 +1122,22 @@ HTML_TEMPLATE = r"""<!doctype html>
         "formulaText": "LQ Price USD"
     },
     "LQ-staker allocation": {
-        "description": "Cumulative protocol revenue allocated to LQ stakers.",
-        "explanation": "Share of protocol fees distributed to locked LQ token stakers.",
-        "formulaHtml": '<div class="formula-card">&sum; <span class="formula-num">Staker Fee Share<sub>USD</sub></span></div>',
-        "formulaText": "sum(Staker Fee Share USD)"
+        "description": "Cumulative accrual-based protocol revenue allocated to LQ stakers.",
+        "explanation": "Sums the API-reported holder interest and holder origination accruals across every complete daily analytics.fees row through the latest available full day.",
+        "formulaHtml": '<div class="formula-card">&sum;<sub>complete days</sub> <span class="formula-paren">(</span><span class="formula-num">borrowInterestAccruedForHolders</span> + <span class="formula-num">loanOriginationFeesForHolders</span><span class="formula-paren">)</span></div>',
+        "formulaText": "sum(Complete daily holder interest + holder origination allocation USD)"
+    },
+    "LQ-staker interest allocation": {
+        "description": "Cumulative accrued-interest revenue allocated to LQ stakers.",
+        "explanation": "Sums the API-reported holder interest allocation across complete daily analytics.fees rows.",
+        "formulaHtml": '<div class="formula-card">&sum;<sub>complete days</sub> <span class="formula-num">borrowInterestAccruedForHolders<sub>USD</sub></span></div>',
+        "formulaText": "sum(Complete daily borrowInterestAccruedForHolders USD)"
+    },
+    "LQ-staker origination allocation": {
+        "description": "Cumulative origination-fee revenue allocated to LQ stakers.",
+        "explanation": "Sums the API-reported holder origination allocation across complete daily analytics.fees rows.",
+        "formulaHtml": '<div class="formula-card">&sum;<sub>complete days</sub> <span class="formula-num">loanOriginationFeesForHolders<sub>USD</sub></span></div>',
+        "formulaText": "sum(Complete daily loanOriginationFeesForHolders USD)"
     },
     "Largest critical collateral": {
         "description": "Largest collateral pool backing critical health (HF <= 1.10) loans.",
@@ -1028,30 +1199,6 @@ HTML_TEMPLATE = r"""<!doctype html>
         "formulaHtml": '<div class="formula-card"><span class="formula-func">count</span><span class="formula-paren">(</span><span class="formula-num">Unique Active Keys</span><span class="formula-paren">)</span></div>',
         "formulaText": "count(Unique Active Keys)"
     },
-    "Official DAO revenue - market level": {
-        "description": "Sum of market-level fee allocations to DAO Treasury.",
-        "explanation": "Aggregated DAO fee revenue collected from individual market pools.",
-        "formulaHtml": '<div class="formula-card">&sum; <span class="formula-num">Market DAO Revenue<sub>USD, i</sub></span></div>',
-        "formulaText": "sum(Market DAO Revenue USD)"
-    },
-    "Official DAO revenue · market level": {
-        "description": "Sum of market-level fee allocations to DAO Treasury.",
-        "explanation": "Aggregated DAO fee revenue collected from individual market pools.",
-        "formulaHtml": '<div class="formula-card">&sum; <span class="formula-num">Market DAO Revenue<sub>USD, i</sub></span></div>',
-        "formulaText": "sum(Market DAO Revenue USD)"
-    },
-    "Origination-fee flow - trailing 90d": {
-        "description": "Trailing 90-day loan origination fees collected.",
-        "explanation": "Total upfront fees collected upon new loan creation over trailing 90 days.",
-        "formulaHtml": '<div class="formula-card">&sum;<sub>90d</sub> <span class="formula-num">Origination Fees<sub>USD</sub></span></div>',
-        "formulaText": "sum_90d(Origination Fees USD)"
-    },
-    "Origination-fee flow · trailing 90d": {
-        "description": "Trailing 90-day loan origination fees collected.",
-        "explanation": "Total upfront fees collected upon new loan creation over trailing 90 days.",
-        "formulaHtml": '<div class="formula-card">&sum;<sub>90d</sub> <span class="formula-num">Origination Fees<sub>USD</sub></span></div>',
-        "formulaText": "sum_90d(Origination Fees USD)"
-    },
     "Outstanding borrow": {
         "description": "Total USD value of active outstanding loans in this market.",
         "explanation": "Sum of all active principal loan balances borrowed in this market, valued at current asset price.",
@@ -1106,6 +1253,42 @@ HTML_TEMPLATE = r"""<!doctype html>
         "formulaHtml": '<div class="formula-card"><span class="formula-num">Live Loan Adjusted Debt<sub>USD</sub></span> &minus; <span class="formula-num">Loan Debt<sub>USD</sub></span></div>',
         "formulaText": "Live Loan Adjusted Debt USD - Loan Debt USD"
     },
+    "Parameter history coverage": {
+        "description": "Markets and current borrow represented by an official market-parameter event.",
+        "explanation": "Counts included non-POL markets with at least one analytics.marketParamsHistory event. The secondary percentage divides current USD borrow in those markets by total current USD borrow in all included markets.",
+        "formulaHtml": '<div class="formula-card"><div class="formula-frac"><span class="formula-num">&sum; Borrow<sub>USD, parameterized markets</sub></span><span class="formula-den">&sum; Borrow<sub>USD, included markets</sub></span></div></div>',
+        "formulaText": "parameterizedBorrowInUsd / totalBorrowInUsd"
+    },
+    "Borrow-weighted kink": {
+        "description": "Current optimal-utilization kink averaged by covered market borrow.",
+        "explanation": "Multiplies each covered market's latest effective kink by current USD borrow, sums those products, and divides by covered current USD borrow.",
+        "formulaHtml": '<div class="formula-card"><div class="formula-frac"><span class="formula-num">&sum;<sub>i</sub> Kink<sub>i</sub> &times; Borrow<sub>USD,i</sub></span><span class="formula-den">&sum;<sub>i</sub> Borrow<sub>USD,i</sub></span></div></div>',
+        "formulaText": "sum(kink_i * currentBorrowInUsd_i) / sum(currentBorrowInUsd_i), parameter-covered markets only"
+    },
+    "Borrow above kink thresholds": {
+        "description": "Marginal current borrow above each covered market's optimal-utilization threshold.",
+        "explanation": "For every covered market, subtracts kink multiplied by current supply USD from current borrow USD, floors the result at zero, then sums across markets.",
+        "formulaHtml": '<div class="formula-card">&sum;<sub>i</sub> <span class="formula-func">max</span><span class="formula-paren">(</span>0, Borrow<sub>USD,i</sub> &minus; Kink<sub>i</sub> &times; Supply<sub>USD,i</sub><span class="formula-paren">)</span></div>',
+        "formulaText": "sum_i(max(0, currentBorrowInUsd_i - kink_i * currentSupplyInUsd_i))"
+    },
+    "Capped supply headroom": {
+        "description": "Current USD supply capacity remaining in markets with an explicit native-asset supply cap.",
+        "explanation": "Values each explicit native supply cap at the market's current official asset price, subtracts current supply USD, floors each market at zero, then sums. Markets without a reported cap are excluded.",
+        "formulaHtml": '<div class="formula-card">&sum;<sub>capped i</sub> <span class="formula-func">max</span><span class="formula-paren">(</span>0, SupplyCap<sub>native,i</sub> &times; Price<sub>USD,i</sub> &minus; Supply<sub>USD,i</sub><span class="formula-paren">)</span></div>',
+        "formulaText": "sum_capped(max(0, supplyCapNative_i * currentAssetPriceInUsd_i - currentSupplyInUsd_i))"
+    },
+    "Collateral rule pairs": {
+        "description": "Number of current borrowed-market and eligible-collateral parameter combinations.",
+        "explanation": "Counts every row returned in the current collateralParameters arrays for included non-POL markets. Each row is one borrowed market paired with one eligible collateral configuration.",
+        "formulaHtml": '<div class="formula-card"><span class="formula-func">count</span><span class="formula-paren">(</span>Current MarketCollateralParameters rows<span class="formula-paren">)</span></div>',
+        "formulaText": "count(current non-POL market.parameters.collateralParameters rows)"
+    },
+    "Latest governance update": {
+        "description": "Most recent exact market-parameter governance event across included markets.",
+        "explanation": "Selects the greatest official timestamp from analytics.marketParamsHistory after excluding POL from detailed protocol analytics.",
+        "formulaHtml": '<div class="formula-card"><span class="formula-func">max</span><sub>included markets</sub> ParameterEventTimestamp</div>',
+        "formulaText": "max(non-POL analytics.marketParamsHistory.timestamp)"
+    },
     "Utilization": {
         "description": "Protocol-wide capital utilization percentage.",
         "explanation": "Ratio of total active borrow debt to total supply across all pools.",
@@ -1128,9 +1311,9 @@ HTML_TEMPLATE = r"""<!doctype html>
       protocolInterestRepaymentDistribution: "How are active daily interest repayment amounts distributed across all protocol markets?",
       protocolDebtDaily: "On which days did inferred debt formation exceed reported repayment?",
       protocolDebtRolling: "Are recent debt formation and repayment rates converging or separating?",
-      protocolDebtCumulative: "Across the observable history, how far have total inferred debt formation and reported repayment progressed?",
-      protocolDebtCumulativeGap: "Has the accumulated debt-flow imbalance widened, stabilized, or closed?",
-      protocolDebtGap: "When did daily debt formation create or reduce the debt-flow imbalance?",
+      protocolDebtCumulative: "How do inferred formation, reported repayment, and unclassified borrow reductions reconcile?",
+      protocolDebtCumulativeGap: "How has the mark-to-market reported debt-flow difference changed through native flows and repricing?",
+      protocolDebtGap: "When did daily inferred formation exceed or fall below reported repayment?",
       protocolDebtCoverage: "Over 7-, 30-, and 90-day windows, are repayments keeping pace with inferred debt formation?",
       protocolInterestRolling: "Are recent interest payments catching up with the latest accrual pace?",
       protocolInterestCoverage: "Which trailing windows show interest repayments keeping pace with accrual?",
@@ -1138,19 +1321,33 @@ HTML_TEMPLATE = r"""<!doctype html>
       protocolInterestRepayment: "When did protocol interest repayment activity accelerate, fade, or stop?",
       protocolInterestRepaymentDistribution: "How are protocol-wide interest repayment amounts distributed across observation periods?",
       protocolInterestCumulative: "How have total accrued and repaid interest separated across the observable history?",
-      protocolInterestCumulativeGap: "Is the accumulated interest shortfall widening, flattening, or being repaid?",
+      protocolInterestCumulativeGap: "How has the mark-to-market reported interest-flow difference changed through native flows and repricing?",
       protocolInterestGap: "When did daily interest payments fall behind or overtake new accrual?",
       protocolParticipationLoans: "Is the saved count of active-debt positions broadening or contracting?",
       protocolParticipationKeys: "Is active debt spreading across more observed keys or concentrating among fewer?",
       protocolLqPrice: "How has the LQ token market price evolved over time?",
       protocolLqStaking: "How has total staked LQ and the staking ratio changed over time?",
       protocolLqTreasury: "How have DAO treasury LQ holdings and USD valuation grown over time?",
+      protocolParameterRateAtlas: "How differently do the largest borrowed markets price the same utilization level?",
+      protocolParameterPolicyMap: "Which large markets are already beyond their optimal-utilization kink?",
+      protocolParameterCapacity: "Which explicitly capped markets have the least remaining supply headroom?",
+      protocolParameterGuardrails: "How do liquidation-entry buffers and close factors differ across markets?",
+      protocolParameterCollateral: "Which borrowed markets expose the tightest collateral limits or largest liquidation penalties?",
+      protocolParameterRateHistory: "How has the borrow-weighted protocol rate posture changed as governance updated individual markets?",
+      protocolParameterUtilizationHistory: "How have borrow-weighted optimal utilization and hard utilization caps changed through time?",
+      protocolParameterAllocationHistory: "How has the borrow-weighted current income-allocation policy changed through time?",
+      protocolParameterCoverageHistory: "How much protocol borrow is covered by observable parameter history, and how much sits above kink thresholds?",
+      protocolParameterGovernanceActivity: "When did governance update market parameters, and how broad were those changes?",
       protocolHealthHistoryCounts: "Are more active-debt positions moving into weaker health-factor bands?",
       protocolHealthHistoryDebt: "Is a larger share of active debt shifting toward lower health factors?",
       impactBorrowConcentrationComparison: "In which markets do the largest observed keys account for mapped borrowing most quickly?",
       impactCollateralizedSupplyConcentrationComparison: "In which markets do the largest observed keys account for represented collateralized supply most quickly?",
-      protocolRevenueAllocationDaily: "Which daily interest and origination components drive DAO and LQ-staker allocations?",
-      protocolRevenueAllocationMonthly: "How is allocated protocol revenue changing in level and composition month to month?",
+      protocolCollectedRevenueDaily: "When was retained interest or origination revenue actually collected?",
+      protocolCollectedRevenueMonthly: "How is collected retained-interest and origination revenue changing month to month?",
+      protocolDaoRevenueAllocationDaily: "Which daily interest and origination components drive DAO revenue?",
+      protocolDaoRevenueAllocationMonthly: "How is DAO revenue changing in level and composition month to month?",
+      protocolStakerRevenueAllocationDaily: "Which daily interest and origination components drive LQ-staker revenue?",
+      protocolStakerRevenueAllocationMonthly: "How is LQ-staker revenue changing in level and composition month to month?",
       protocolRevenueRunRate: "Is the annualized pace from consecutive 90-day windows rising or falling?",
       liquidationMonthly: "Which months generated the largest liquidation profit, and how persistent was it?",
       liquidationDaily: "On which days did liquidation profit occur, cluster, or disappear?",
@@ -1180,8 +1377,8 @@ HTML_TEMPLATE = r"""<!doctype html>
       marketDebtCoverage: "Which trailing windows show this market's debt repayments keeping pace with inferred formation?",
       marketDebtGapAsset: "When did native debt formation exceed or fall behind native repayment?",
       marketDebtGap: "What was the contemporaneous USD value of this market's native debt-flow gap?",
-      marketDebtCumulativeGapAsset: "Has this market's cumulative native debt-flow gap widened, stabilized, or closed?",
-      marketDebtCumulativeGap: "Has this market's accumulated debt-flow imbalance widened, stabilized, or closed?",
+      marketDebtCumulativeGapAsset: "How has this market's cumulative native reported debt-flow difference changed?",
+      marketDebtCumulativeGap: "How have native debt flows and asset repricing changed this market's current-valued difference?",
       protocolRepaymentDrySpells: "How long has the protocol gone without debt repayments?",
       protocolInterestDrySpells: "How long has the protocol gone without interest repayments?",
       marketRepaymentEvents: "Are recent repayment bursts strengthening or fading relative to the 30-day baseline?",
@@ -1192,12 +1389,17 @@ HTML_TEMPLATE = r"""<!doctype html>
       marketInterestCoverageOperandsAsset: "How much native interest accrued and was repaid in the trailing 30-day coverage window?",
       marketInterestCoverageOperandsUsd: "What are those same native interest-coverage operands worth at each observation's current asset price?",
       marketInterestCumulative: "How have this market's total accrued and repaid interest separated over time?",
-      marketInterestCumulativeGapAsset: "Has this market's cumulative native interest gap widened, stabilized, or closed?",
-      marketInterestCumulativeGap: "Is this market's accumulated interest shortfall widening, flattening, or being repaid?",
+      marketInterestCumulativeGapAsset: "How has this market's cumulative native reported interest-flow difference changed?",
+      marketInterestCumulativeGap: "How have native interest flows and asset repricing changed this market's current-valued difference?",
       marketInterestGapAsset: "When did native interest accrual exceed or fall behind native repayment?",
       marketInterestGap: "When did this market's daily interest payment lag or overtake new accrual?",
       marketInterestCoverage: "Which trailing windows show this market's interest repayments keeping pace?",
-      marketRevenueMonthly: "Which months produced the most directly reported fee-paying activity, and is the recent pace changing?",
+      marketAttributedCollectedRevenueDaily: "When was protocol retained-interest revenue attributed to this market, and when did it collect origination fees?",
+      marketAttributedCollectedRevenueMonthly: "Which months generated the most reconciled attributed collections for this market?",
+      marketAccruedInterestAllocationDaily: "How did each day's accrued borrower interest divide between suppliers and the protocol or reserve?",
+      marketAccruedInterestAllocationMonthly: "How did monthly accrued borrower interest divide between suppliers and the protocol or reserve?",
+      marketProjectedAnnualizedInterestIncome: "How has the annualized interest-income pace implied by borrow, APR, and allocation parameters changed?",
+      marketInterestRepaymentActivityMonthly: "When did borrowers repay the most interest, without treating the full payment as retained revenue?",
       marketHealthBuckets: "How much current debt sits in each health-factor tranche?",
       marketHealthHistoryDebt: "Is this market's active debt shifting toward stronger or weaker health-factor bands?",
       marketHealthHistoryCounts: "Are this market's active-debt positions moving into safer or riskier bands?",
@@ -1206,11 +1408,18 @@ HTML_TEMPLATE = r"""<!doctype html>
       marketKeyDependence: "How much of this market's official borrow maps to its largest keys versus unmapped debt?",
       marketBorrowConcentration: "How quickly do the largest observed keys account for this market's official borrow?",
       marketCollateralizedSupplyConcentration: "How quickly do the largest observed keys account for represented collateralized supply?",
+      marketParameterRateCurve: "How do the current governance parameters translate utilization into borrower cost and supplier yield?",
+      marketParameterBorrowRates: "When did governance move this market's base, optimal, or maximum borrower rate?",
+      marketParameterSupplyRates: "When did governance move this market's base, optimal, or maximum supplier yield?",
+      marketParameterUtilizationLimits: "How have the optimal-utilization kink and hard utilization cap changed?",
+      marketParameterSupplyCap: "When has governance expanded, reduced, removed, or introduced this market's supply cap?",
+      marketParameterIncomeAllocation: "How has each unit of borrower interest been divided among suppliers, dividends, treasury, and reserve?",
+      marketParameterModelCoefficients: "When did the raw per-batch rate coefficients underlying the borrower curve change?",
       impactRiskRanking: "Which current stress component indicators affect each market?",
       impactMarketMap: "Which large markets combine high utilization with weak recent interest coverage?",
       impactInterestContributions: "Which markets generated the largest shares of recent interest accrual?",
       impactInterestRepaymentContributions: "Which markets supplied the largest shares of recent interest repayment?",
-      impactGapContributions: "Which markets contributed most to recent positive interest shortfalls?",
+      impactGapContributions: "Which markets contributed most to recent positive reported interest-flow differences?",
       impactDebtContributions: "Which markets held the largest shares of outstanding protocol debt through time?",
       impactRepaymentContributions: "Which markets contributed the largest shares of recent debt repayment?",
       impactDebtGapContributions: "Which markets contributed most to recent positive debt-flow gaps?",
@@ -1331,12 +1540,14 @@ HTML_TEMPLATE = r"""<!doctype html>
         impact: renderImpact,
         protocolParticipation: renderProtocolParticipation,
         protocolLqToken: renderProtocolLqToken,
+        protocolParameters: renderProtocolParameters,
         marketOverview: renderMarketOverview,
         marketRepayments: renderMarketRepayments,
         marketInterest: renderMarketInterest,
         marketRevenue: renderMarketRevenue,
         marketHealth: renderMarketHealth,
-        marketParticipation: renderMarketParticipation
+        marketParticipation: renderMarketParticipation,
+        marketParameters: renderMarketParameters
       };
       renderers[activeView]?.();
       renderedViews.add(activeView);
@@ -1365,9 +1576,10 @@ HTML_TEMPLATE = r"""<!doctype html>
       ];
       const segmentWidth = (value) => totalPositions > 0 ? Math.max(0, 100 * value / totalPositions) : 0;
       const summaryParts = [
-        `${integer(headline.passedChecks)} checks passed`,
-        headline.partialChecks ? `${integer(headline.partialChecks)} known ${headline.partialChecks === 1 ? "boundary" : "boundaries"}` : "",
-        headline.failedChecks ? `${integer(headline.failedChecks)} failed` : ""
+        `${integer(headline.passedChecks)} passed`,
+        headline.partialChecks ? `${integer(headline.partialChecks)} partial` : "",
+        headline.failedChecks ? `${integer(headline.failedChecks)} failed` : "",
+        headline.unavailableChecks ? `${integer(headline.unavailableChecks)} unavailable` : ""
       ].filter(Boolean);
       const technical = status.technical || {};
       const technicalProvenance = [
@@ -1383,7 +1595,7 @@ HTML_TEMPLATE = r"""<!doctype html>
       const technicalEvidence = Array.isArray(technical.evidence) ? technical.evidence : [];
       const technicalRules = Array.isArray(technical.rules) ? technical.rules : [];
       document.querySelector("#dataStatusContent").innerHTML = `
-        <div class="data-status-headline ${headline.state === "attention" ? "attention" : ""}">
+        <div class="data-status-headline ${esc(headline.state || "healthy")}">
           <div>
             <strong>${esc(headline.label || "Data status available")}</strong>
             <span>${esc(summaryParts.join(" · "))}</span>
@@ -1397,7 +1609,10 @@ HTML_TEMPLATE = r"""<!doctype html>
           <div class="data-status-coverage">
             ${deep.dataStatus.coverageCards.map((card) => `
               <article class="data-status-card ${esc(card.status)}">
-                <span>${esc(card.label)}</span>
+                <div class="data-status-card-heading">
+                  <span>${esc(card.label)}</span>
+                  <span class="data-status-badge ${esc(card.status)}">${esc(dataStatusLabel(card.status))}</span>
+                </div>
                 <strong>${esc(card.value)}</strong>
                 <small>${esc(card.detail)}</small>
               </article>
@@ -1418,6 +1633,13 @@ HTML_TEMPLATE = r"""<!doctype html>
                 <div class="loan-population-key ${tone}"><span>${esc(label)}</span><strong>${integer(value)}</strong></div>
               `).join("")}
             </div>
+            <div class="loan-population-facts">
+              <div><span>Liquidatable now</span><strong>${integer(population.liquidatablePositions)}</strong></div>
+              <div><span>Collateral-bearing</span><strong>${integer(population.collateralPositions)}</strong></div>
+              <div><span>Active rows missing observed key</span><strong>${integer(population.missingObservedKeyPositions)}</strong></div>
+              <div><span>Active rows missing health factor</span><strong>${integer(population.missingHealthFactorPositions)}</strong></div>
+              <div><span>Market borrow represented</span><strong>${pct(population.representedBorrowShare)}</strong></div>
+            </div>
             <p class="loan-population-note">Active-debt positions drive debt, health, participation, and observed-key borrowing analysis. Zero-debt collateral positions remain valid only for the collateralized-supply view.${population.hasUnfilteredSnapshot ? "" : " The unfiltered position snapshot is unavailable in this archive."}</p>
           </div>
         </section>
@@ -1428,7 +1650,7 @@ HTML_TEMPLATE = r"""<!doctype html>
           <div class="data-status-checks">
             ${status.checks.map((check) => `
               <div class="data-status-check ${esc(check.status)}">
-                <div class="data-status-check-label"><span class="data-status-check-mark" aria-hidden="true">${dataStatusMark(check.status)}</span>${esc(check.label)}</div>
+                <div class="data-status-check-label"><span class="data-status-check-mark" aria-hidden="true">${dataStatusMark(check.status)}</span><span>${esc(check.label)}</span><span class="data-status-badge ${esc(check.status)}">${esc(dataStatusLabel(check.status))}</span></div>
                 <div class="data-status-check-value">${esc(check.value)}</div>
                 <div class="data-status-check-detail">${esc(check.detail)}</div>
               </div>
@@ -1476,10 +1698,11 @@ HTML_TEMPLATE = r"""<!doctype html>
                 ${technicalEvidence.map((item) => `
                   <div class="data-status-audit-row data-status-audit-evidence ${esc(item.status)}">
                     <span class="data-status-check-mark" aria-hidden="true">${dataStatusMark(item.status)}</span>
-                    <strong>${esc(item.label)}</strong>
+                    <div class="data-status-audit-evidence-label"><strong>${esc(item.label)}</strong><span class="data-status-badge ${esc(item.status)}">${esc(dataStatusLabel(item.status))}</span></div>
                     <code>${esc(item.value)}</code>
                     <span>${esc(item.detail)}</span>
                   </div>
+                  ${dataStatusOperands(item.operands)}
                 `).join("")}
               </div>
             </section>
@@ -1506,6 +1729,40 @@ HTML_TEMPLATE = r"""<!doctype html>
       if (status === "fail") return "!";
       if (status === "partial") return "~";
       return "-";
+    }
+
+    function dataStatusLabel(status) {
+      if (status === "pass") return "Pass";
+      if (status === "fail") return "Fail";
+      if (status === "partial") return "Partial";
+      return "Unavailable";
+    }
+
+    function dataStatusOperands(operands) {
+      if (!Array.isArray(operands) || !operands.length) return "";
+      return `<details class="data-status-operands">
+        <summary>Show ${integer(operands.length)} per-market operands</summary>
+        <table class="data-status-operands-table">
+          <thead><tr>
+            <th>Market</th>
+            <th>Market borrow (USD) · expected</th>
+            <th>Raw loan amount (USD)</th>
+            <th>Adjusted loan debt (USD) · actual</th>
+            <th>Difference (USD)</th>
+            <th>Tolerance (USD)</th>
+            <th>Classification</th>
+          </tr></thead>
+          <tbody>${operands.map((row) => `<tr>
+            <td>${esc(row.marketDisplayName || row.marketId || "Unknown")}</td>
+            <td>${esc(usd(row.marketBorrowInUsd))}</td>
+            <td>${esc(usd(row.loanDebtInUsd))}</td>
+            <td>${esc(usd(row.loanAdjustedDebtInUsd))}</td>
+            <td>${esc(usd(row.adjustedDifferenceInUsd))}</td>
+            <td>${esc(usd(row.toleranceUsd))}</td>
+            <td>${esc(row.classification || "unavailable")}</td>
+          </tr>`).join("")}</tbody>
+        </table>
+      </details>`;
     }
 
     function dataStatusTimestamp(value) {
@@ -1601,9 +1858,9 @@ HTML_TEMPLATE = r"""<!doctype html>
         ${interactiveChartPanel("Debt accrued and repaid by day", "protocolDebtDaily", { help: "Debt accrued is inferred in native units before USD conversion, so price movement is not counted as new debt. The first day needs a prior observation and is unavailable." })}
         ${interactiveChartPanel("Debt repayment flow", "protocolDebtRepayment")}
         ${interactiveChartPanel("Ongoing days without debt repayments", "protocolRepaymentDrySpells", { defaultPeriod: "all", help: "Each line counts consecutive observed days without debt repayment; a payment resets it to zero and missing dates break the line." })}
-        ${interactiveChartPanel("Cumulative debt accrued and repaid", "protocolDebtCumulative", { help: debtFlowReconciliationHelp(debtFlowReconciliation) })}
-        ${interactiveChartPanel("Current-valued cumulative debt-flow gap", "protocolDebtCumulativeGap", { help: debtFlowReconciliationHelp(debtFlowReconciliation) })}
-        ${interactiveChartPanel("Current-valued debt-flow gap", "protocolDebtGap", { help: gapValuationHelp("protocol") })}
+        ${interactiveChartPanel("Current-valued debt-flow reconciliation", "protocolDebtCumulative", { help: debtFlowReconciliationHelp(debtFlowReconciliation) })}
+        ${interactiveChartPanel("Current-valued cumulative reported debt-flow difference", "protocolDebtCumulativeGap", { help: debtFlowReconciliationHelp(debtFlowReconciliation) })}
+        ${interactiveChartPanel("Current-valued reported debt-flow difference", "protocolDebtGap", { help: gapValuationHelp("protocol") })}
         ${interactiveChartPanel("Protocol debt repayment distribution", "protocolDebtRepaymentDistribution")}
       `);
       drawProtocolDebtCharts();
@@ -1615,10 +1872,10 @@ HTML_TEMPLATE = r"""<!doctype html>
       setHtml("protocolInterestFlows", `
         <div class="hero">
           <h2>Protocol interest flows</h2>
-          <p>Is interest being repaid as it accrues?</p>
+          <p>Are reported interest repayments keeping pace with accrual?</p>
         </div>
         <div class="kpis">
-          ${kpi("Current-valued interest gap", usd(p.cumulativeInterestGapInUsd), "Sum of each market's cumulative native interest gap valued at its latest observed price.")}
+          ${kpi("Current-valued cumulative reported interest-flow difference", usd(p.cumulativeInterestGapInUsd), "Historical reported flow difference valued at the latest observed market prices; not a current interest receivable.")}
           ${kpi("Current-valued interest accrued · trailing 30d", usd(latest.interestAccrued30d))}
           ${kpi("Current-valued interest repaid · trailing 30d", usd(latest.interestRepaid30d))}
           ${kpi("Current-valued interest coverage · trailing 90d", ratio(latest.interestCoverage90d), "Interest repaid divided by interest accrued")}
@@ -1630,8 +1887,8 @@ HTML_TEMPLATE = r"""<!doctype html>
         ${interactiveChartPanel("Interest repayment flow", "protocolInterestRepayment")}
         ${interactiveChartPanel("Ongoing days without interest repayments", "protocolInterestDrySpells", { defaultPeriod: "all", help: "Each line counts consecutive observed days without interest repayment; a payment resets it to zero and missing dates break the line." })}
         ${interactiveChartPanel("Cumulative interest accrued and repaid", "protocolInterestCumulative")}
-        ${interactiveChartPanel("Current-valued cumulative interest-flow gap", "protocolInterestCumulativeGap", { help: interestFlowHelp("protocol") })}
-        ${interactiveChartPanel("Current-valued interest-flow gap", "protocolInterestGap", { help: gapValuationHelp("protocol") })}
+        ${interactiveChartPanel("Current-valued cumulative reported interest-flow difference", "protocolInterestCumulativeGap", { help: interestFlowHelp("protocol") })}
+        ${interactiveChartPanel("Current-valued reported interest-flow difference", "protocolInterestGap", { help: gapValuationHelp("protocol") })}
         ${interactiveChartPanel("Protocol interest repayment distribution", "protocolInterestRepaymentDistribution")}
       `);
       drawProtocolInterestCharts();
@@ -1689,36 +1946,139 @@ HTML_TEMPLATE = r"""<!doctype html>
       drawProtocolCharts();
     }
 
+    function renderProtocolParameters() {
+      const state = deep?.protocolParameters || {};
+      const current = state.current || {};
+      const latestEvent = current.latestGovernanceEvent || null;
+      const latestEventLabel = latestEvent
+        ? `${latestEvent.marketName || latestEvent.marketId} · ${formatParameterTimestamp(latestEvent.timestamp)}`
+        : "No observable event";
+      const currentOnlyAvailable = (state.marketRows || []).some((row) =>
+        row.minHealthFactor != null || row.closeFactor != null || row.maxCollateralCount != null
+      );
+
+      setHtml("protocolParameters", `
+        <div class="hero">
+          <h2>Protocol parameter landscape</h2>
+          <p>How do market-level rate, capacity, liquidation, collateral, and income-allocation settings combine into the protocol's current policy posture?</p>
+          <div class="parameter-effective"><strong>Market-level configuration, rolled up transparently</strong><span aria-hidden="true">&middot;</span><span>No single protocol-wide interest-rate model is implied</span></div>
+        </div>
+        <div class="kpis">
+          ${kpi(
+            "Parameter history coverage",
+            `${integer(current.parameterizedMarketCount)} / ${integer(current.totalMarketCount)} markets`,
+            `${pct(current.parameterCoverage)} of current borrow`,
+            "Markets and current borrow for which an official analytics.marketParamsHistory row is available. POL is excluded from detailed protocol analytics."
+          )}
+          ${kpi(
+            "Borrow-weighted kink",
+            pct(current.borrowWeightedKink),
+            "Weighted by each covered market's current USD borrow",
+            "Sum of each covered market's optimal-utilization kink multiplied by its current USD borrow, divided by covered current USD borrow."
+          )}
+          ${kpi(
+            "Borrow above kink thresholds",
+            usd(current.borrowAboveKinkInUsd),
+            `${pct(current.borrowAboveKinkShare)} of protocol borrow`,
+            "For each covered market, max(0, current borrow USD - kink × current supply USD), then summed. This counts only borrow beyond the kink threshold, not all borrow in an above-kink market."
+          )}
+          ${kpi(
+            "Capped supply headroom",
+            usd(current.supplyCapHeadroomInUsd),
+            `${integer(current.cappedMarketCount)} markets report an explicit supply cap`,
+            "For every explicitly capped market, max(0, native supply cap × current asset price - current supply USD), then summed. Uncapped markets are excluded."
+          )}
+          ${kpi(
+            "Collateral rule pairs",
+            integer(current.collateralPairCount),
+            "Borrowed market × eligible collateral configurations",
+            "Count of current collateral-parameter rows exposed by liqwid.data.markets.parameters.collateralParameters."
+          )}
+          ${kpi(
+            "Latest governance update",
+            latestEvent?.marketName || latestEvent?.marketId || "n/a",
+            latestEventLabel,
+            "Latest exact market-parameter event returned by analytics.marketParamsHistory across the included markets."
+          )}
+        </div>
+        <aside class="parameter-empty">
+          <strong>Availability boundary.</strong>
+          ${esc(state.availability?.historical || "Rate, cap, and allocation history uses exact official market governance events.")}
+          ${esc(state.availability?.currentOnly || "Liquidation and collateral guardrails are current snapshot values only.")}
+          ${currentOnlyAvailable ? "" : " This opened archive predates current guardrail capture; refresh it to populate those fields."}
+        </aside>
+        ${chartSection("Current rate policy", "Compare today's market curves and identify borrowed markets operating beyond their governance-defined optimal utilization.")}
+        ${interactiveBreakdownPanel("Borrow APR curve atlas", "protocolParameterRateAtlas", { help: "Borrower APR curves for the eight markets with the largest current USD borrow and an official parameter row. Each curve uses that market's latest official base, optimal, maximum, kink, and utilization-cap values." })}
+        ${interactiveBreakdownPanel("Current utilization versus optimal kink", "protocolParameterPolicyMap", { help: "Each point is a market. X is current utilization, Y is its optimal-utilization kink, bubble size is current borrow, and color is maximum borrower APR. Points to the right of their kink value are operating above the optimal threshold." })}
+        ${chartSection("Current capacity and risk guardrails", "Inspect explicit supply headroom, liquidation-entry settings, and the most conservative collateral limits in each borrowed market.")}
+        ${interactiveBreakdownPanel("Current capacity headroom", "protocolParameterCapacity", { help: "Only markets with an explicit supply cap are included. Current supply and remaining headroom stack to the current USD value of the native-asset cap." })}
+        ${interactiveBreakdownPanel("Current market guardrails", "protocolParameterGuardrails", { help: "Minimum health buffer is max(0, minimum health factor - 1). Close factor is the maximum share of debt the current parameter allows to be closed in the relevant liquidation step." })}
+        ${interactiveBreakdownPanel("Current collateral risk matrix", "protocolParameterCollateral", { help: "One row per borrowed market. Maximum LTV and liquidation threshold use the lowest configured value across eligible collaterals; liquidation penalty uses the highest. Exact market-collateral pairs remain in the table below." })}
+        ${chartSection("Historical protocol posture", "Track daily end-of-day borrow-weighted policy values without pretending that governance parameters drifted between exact updates.")}
+        ${interactiveChartPanel("Borrow-weighted rate policy", "protocolParameterRateHistory", { defaultPeriod: "all", help: "For each UTC day, each market uses the latest exact governance event effective by day-end. Values are weighted by that day's official market borrow in USD." })}
+        ${interactiveChartPanel("Borrow-weighted kink and utilization cap", "protocolParameterUtilizationHistory", { defaultPeriod: "all", help: "Daily end-of-day optimal-utilization kinks and effective utilization caps, weighted by official market borrow in USD. A missing market parameter row is excluded and remains visible through the coverage chart." })}
+        ${interactiveChartPanel("Borrow-weighted income allocation", "protocolParameterAllocationHistory", { defaultPeriod: "all", help: "Daily end-of-day supplier, dividend/LQ-staker, treasury, and reserve-remainder shares weighted by official market borrow in USD. These describe policy posture, not realized revenue recipients." })}
+        ${interactiveChartPanel("Parameter coverage and above-kink borrow", "protocolParameterCoverageHistory", { defaultPeriod: "all", help: "Coverage is parameter-covered borrow divided by total borrow. Above-kink share sums only the marginal borrow exceeding kink × supply in each covered market." })}
+        ${interactiveChartPanel("Governance update activity", "protocolParameterGovernanceActivity", { defaultPeriod: "all", help: "Bars occur only on exact UTC dates containing official governance events. The first observable event for a market is not assigned an invented changed-field count." })}
+        ${dataTablesSection([
+          { title: "Current market parameter posture", content: protocolParameterCurrentTable(state.marketRows || []) },
+          { title: "Current market-collateral guardrails", content: protocolCollateralTable(state.collateralRows || []) },
+          { title: "Exact governance updates across markets", content: protocolGovernanceTable(state.governanceEvents || []) }
+        ])}
+      `);
+      drawProtocolParameterCharts();
+    }
+
     function renderRevenue() {
       const revenue = deep.revenue || {};
       const summary = revenue.summary || {};
-      const completeMonths = (revenue.monthlyAllocation || []).filter((row) => row.isComplete !== false && !row.fetchError);
       const latestRunRate = (revenue.annualizedRunRateSeries || []).at(-1) || {};
+      const ytdCollectionPeriod = periodLabel(summary.ytdCollectedCoverageFromDate, summary.ytdCollectedCoverageToDate);
+      const collectionPeriod = periodLabel(summary.collectedCoverageFromDate, summary.collectedCoverageToDate);
       const allocationPeriod = periodLabel(
-        completeMonths[0]?.periodStartDay || summary.allocationCoverageFromDate,
-        completeMonths.at(-1)?.periodEndDay || summary.allocationCoverageToDate
+        summary.cumulativeAllocationFromDate,
+        summary.cumulativeAllocationToDate
       );
       const runRatePeriod = periodLabel(latestRunRate.windowStartDate, latestRunRate.windowEndDate);
       setHtml("revenue", `
         <div class="hero">
           <h2>Protocol revenue</h2>
-          <p>How much revenue is allocated to the DAO and LQ stakers, and is the run rate changing?</p>
+          <p>How much retained interest and origination revenue has been collected this year and over the full history, and what has accrued to the DAO and LQ stakers?</p>
         </div>
-        ${metricPeriodGroup("Cumulative allocation", allocationPeriod, `${integer(summary.completeAllocationMonths)} complete months`, `
+        ${metricPeriodGroup("Year-to-date collected revenue", ytdCollectionPeriod, `${integer(summary.ytdCollectedCompleteDays)} complete days`, `
+          ${kpi("YTD collected revenue", usd(summary.ytdCollectedRevenueInUsd), "Revenue from repaid interest + loan origination fees")}
+          ${kpi("Revenue from repaid interest", usd(summary.ytdCollectedInterestRevenueInUsd), "Retained share of borrowers' repaid interest")}
+          ${kpi("Loan origination fees", usd(summary.ytdCollectedOriginationRevenueInUsd), "Base fee + minimum-ADA fee")}
+        `)}
+        ${metricPeriodGroup("All-time collected revenue", collectionPeriod, `${integer(summary.completeDays)} complete days`, `
+          ${kpi("Collected revenue", usd(summary.collectedRevenueInUsd), "Treasury + LQ stakers; repayment-time recipient split unavailable")}
+          ${kpi("Interest revenue collected", usd(summary.collectedInterestRevenueInUsd), "Retained share of borrowers' repaid interest")}
+          ${kpi("Origination fees collected", usd(summary.collectedOriginationRevenueInUsd), "Base fee + minimum-ADA fee")}
+        `)}
+        ${chartSection("Collected revenue", "When did retained interest and origination revenue reach the protocol and its stakers?")}
+        ${interactiveChartPanel("Daily collected revenue", "protocolCollectedRevenueDaily", { defaultPeriod: "all", help: "Repayment-timed retained-interest revenue plus both origination-fee components. Liquidation profit is shown only in the Liquidations tab." })}
+        ${interactiveChartPanel("Monthly collected revenue", "protocolCollectedRevenueMonthly", { defaultPeriod: "all", help: "Daily collected revenue grouped by UTC calendar month. The current partial month remains visible." })}
+        ${metricPeriodGroup("Cumulative accrued DAO allocation", allocationPeriod, `${integer(summary.completeAllocationDays)} complete days`, `
           ${kpi("DAO / treasury revenue", usd(summary.allocatedProtocolRevenueInUsd))}
           ${kpi("DAO interest allocation", usd(summary.allocatedProtocolInterestRevenueInUsd))}
           ${kpi("DAO origination allocation", usd(summary.allocatedProtocolOriginationRevenueInUsd))}
-          ${kpi("LQ-staker allocation", usd(summary.allocatedHoldersRevenueInUsd), "Interest plus origination allocation")}
         `)}
         ${metricPeriodGroup("Recent DAO run rate", runRatePeriod, "Latest 90 consecutive complete days", `
-          ${kpi("Annualized run rate", usd(summary.allocatedProtocolRevenueAnnualizedRunRateInUsd), `Trailing 90-day revenue: \${usd(summary.allocatedProtocolRevenueTrailing90DaysInUsd)}`)}
+          ${kpi("Annualized run rate", usd(summary.allocatedProtocolRevenueAnnualizedRunRateInUsd), "Trailing 90-day revenue: " + usd(summary.allocatedProtocolRevenueTrailing90DaysInUsd))}
           ${kpi("Change vs prior 90 days", pct(summary.allocatedProtocolRevenueChangeVsPrior90Days))}
         `)}
-        ${chartSection("Monthly allocation and 90-day run rate", "Is DAO revenue growing, slowing, or changing composition through the latest complete day?")}
+        ${chartSection("Accrued DAO revenue", "How much revenue has accrued to the DAO, and how are its level and composition changing?")}
         ${interactiveChartPanel("Historical annualized DAO revenue run rate", "protocolRevenueRunRate", { defaultPeriod: "all", help: "Each point annualizes the latest 90 consecutive complete UTC days. The current UTC day is excluded until closed." })}
-        ${interactiveChartPanel("Monthly allocated protocol revenue", "protocolRevenueAllocationMonthly", { defaultPeriod: "all", help: "The current partial month remains visible. The run rate uses completed daily allocations instead of waiting for month end." })}
-        ${chartSection("Daily allocation", "Which revenue components are driving daily allocation to the DAO and LQ stakers?")}
-        ${interactiveChartPanel("Daily DAO and LQ-staker revenue allocation", "protocolRevenueAllocationDaily", { defaultPeriod: "all" })}
+        ${interactiveChartPanel("Monthly DAO revenue allocation", "protocolDaoRevenueAllocationMonthly", { defaultPeriod: "all", help: "DAO interest and origination allocations are summed from official daily rows. The current partial month remains visible." })}
+        ${interactiveChartPanel("Daily DAO revenue allocation", "protocolDaoRevenueAllocationDaily", { defaultPeriod: "all" })}
+        ${metricPeriodGroup("Cumulative accrued LQ-staker allocation", allocationPeriod, `${integer(summary.completeAllocationDays)} complete days`, `
+          ${kpi("LQ-staker allocation", usd(summary.allocatedHoldersRevenueInUsd))}
+          ${kpi("LQ-staker interest allocation", usd(summary.allocatedHoldersInterestRevenueInUsd))}
+          ${kpi("LQ-staker origination allocation", usd(summary.allocatedHoldersOriginationRevenueInUsd))}
+        `)}
+        ${chartSection("LQ-staker revenue", "How much revenue has accrued to LQ stakers, and which source drives it?")}
+        ${interactiveChartPanel("Monthly LQ-staker revenue allocation", "protocolStakerRevenueAllocationMonthly", { defaultPeriod: "all", help: "LQ-staker interest and origination allocations are summed from official daily rows. The current partial month remains visible." })}
+        ${interactiveChartPanel("Daily LQ-staker revenue allocation", "protocolStakerRevenueAllocationDaily", { defaultPeriod: "all" })}
       `);
       drawRevenueCharts();
     }
@@ -1953,8 +2313,8 @@ HTML_TEMPLATE = r"""<!doctype html>
         ${interactiveChartPanel("Debt repayment flow", "marketDebtRepayment")}
         ${interactiveChartPanel("Repayment intensity", "marketRepaymentEvents", { help: "The 1.5-day EWMA reacts to bursts; the 30-day average shows the slower baseline." })}
         ${interactiveChartPanel("Ongoing days without debt repayments", "marketRepaymentDrySpells", { defaultPeriod: "all", help: "Each line counts consecutive observed days without payment; a payment resets it to zero and missing dates break the line." })}
-        ${interactiveChartPanel("Cumulative debt-flow gap – asset units", "marketDebtCumulativeGapAsset", { help: debtFlowReconciliationHelp(debtFlowReconciliation) })}
-        ${interactiveChartPanel("Cumulative debt-flow gap – current USD value", "marketDebtCumulativeGap", { help: debtFlowReconciliationHelp(debtFlowReconciliation) })}
+        ${interactiveChartPanel("Cumulative debt-flow gap – asset units", "marketDebtCumulativeGapAsset", { help: debtFlowReconciliationHelp(debtFlowReconciliation, "market") })}
+        ${interactiveChartPanel("Cumulative debt-flow gap – current USD value", "marketDebtCumulativeGap", { help: debtFlowReconciliationHelp(debtFlowReconciliation, "market") })}
         ${interactiveChartPanel("Debt-flow gap – asset units", "marketDebtGapAsset", { help: gapValuationHelp("market") })}
         ${interactiveChartPanel("Debt-flow gap – current USD value", "marketDebtGap", { help: gapValuationHelp("market") })}
         ${interactiveChartPanel("Debt repayment size distribution", "marketDebtRepaymentDistribution", { help: "Distribution of active daily debt repayment amounts (box plot statistics and individual observation points)." })}
@@ -2013,16 +2373,56 @@ HTML_TEMPLATE = r"""<!doctype html>
 
     function renderMarketRevenue() {
       const market = currentMarketSummary();
+      const revenue = currentMarketRevenue();
+      const summary = revenue?.summary || market.marketRevenue || {};
+      const ytdPeriod = periodLabel(summary.ytdCoverageFromDate || market.marketRevenueYtdCoverageFromDate, summary.ytdCoverageToDate || market.marketRevenueYtdCoverageToDate);
+      const allTimePeriod = periodLabel(market.marketRevenueCoverageFromDate, market.marketRevenueCoverageToDate);
+      const trailing90Period = periodLabel(market.marketRevenue90dCoverageFromDate, market.marketRevenue90dCoverageToDate);
+      const allocationPeriod = periodLabel(summary.allocationCoverageFromDate, summary.allocationCoverageToDate);
+      const attributionAvailable = summary.ytdAttributionComplete === true;
+      const attributionDetail = attributionAvailable
+        ? `${integer(summary.ytdAttributedCompleteDays)} reconciled complete days; market interest split is attributed`
+        : `${integer(summary.ytdAttributedCompleteDays)} of ${integer(summary.ytdCompleteDays)} days attributable; total unavailable until coverage reconciles`;
+      const projectedPeriod = summary.projectedAnnualizedAsOfDate
+        ? `As of ${summary.projectedAnnualizedAsOfDate}`
+        : "Period unavailable";
       setHtml("marketRevenue", `
-        <div class="hero"><h2>${esc(market.displayName || market.marketId)} fee activity</h2><p>How much directly reported fee-paying activity is this market producing, and how is it changing month to month?</p></div>
-        <div class="kpis">
-          ${kpi("Gross realized fee flow · trailing 90d", usd(market.grossRealizedRevenueProxy90dInUsd))}
-          ${kpi("Interest repaid flow · trailing 90d", usd(market.repaidInterestFeeFlow90dInUsd))}
-          ${kpi("Origination-fee flow · trailing 90d", usd(market.originationFeeFlow90dInUsd))}
-          ${kpi("Official DAO revenue · market level", "Unavailable", "The official API does not expose recipient allocation by market.")}
-        </div>
-        ${chartSection("Market fee activity", "How much directly reported fee-paying activity is the market producing, and how is it changing month to month?")}
-        ${interactiveChartPanel("Monthly market fee flow", "marketRevenueMonthly", { defaultPeriod: "all", help: "Reported interest repayment plus origination fees is fee-paying activity, not official DAO revenue. The official API does not expose recipient allocation by market." })}
+        <div class="hero"><h2>${esc(market.displayName || market.marketId)} revenue</h2><p>What was collected, what accrued, and what current borrowing implies if today's rate and allocation persist?</p></div>
+        ${metricPeriodGroup("Year-to-date collected market revenue", ytdPeriod, attributionDetail, `
+          ${kpi("YTD attributed collected revenue", attributionAvailable ? usd(summary.ytdAttributedCollectedMarketRevenueInUsd) : "Unavailable", "Official interest collections reconciled at protocol level; market split is modeled")}
+          ${kpi("Attributed interest revenue collected", attributionAvailable ? usd(summary.ytdAttributedCollectedInterestRevenueInUsd) : "Unavailable", "Attributed from the official daily protocol retained-interest total")}
+          ${kpi("Market origination fees collected", usd(summary.ytdDirectOriginationRevenueInUsd ?? market.ytdCollectedOriginationRevenueInUsd), "Directly reported by this market")}
+        `)}
+        ${chartSection("Collected revenue attribution", "When did this market receive attributed retained-interest collections and directly report origination fees?")}
+        ${interactiveChartPanel("Daily attributed collected revenue", "marketAttributedCollectedRevenueDaily", { defaultPeriod: "year", help: "Retained-interest bars allocate each official daily protocol collection by parameter-weighted market repayments. Origination-fee bars are directly reported by the market. The two components are stacked only on fully reconciled days." })}
+        ${interactiveChartPanel("Monthly attributed collected revenue", "marketAttributedCollectedRevenueMonthly", { defaultPeriod: "all", help: "Monthly sums include only days where the market attribution reconciles exactly to the official protocol retained-interest total." })}
+        ${metricPeriodGroup("Directly observed origination revenue", allTimePeriod, `${integer(market.marketRevenueCompleteDays)} complete days`, `
+          ${kpi("Trailing 90-day origination revenue", usd(market.collectedOriginationRevenue90dInUsd), `${trailing90Period}; ${integer(market.marketRevenue90dObservedDays)} observed days`)}
+          ${kpi("All-time origination revenue", usd(market.collectedOriginationRevenueInUsd))}
+          ${kpi("Latest origination-revenue day", market.latestPositiveOriginationRevenueDate || "None observed")}
+        `)}
+        ${metricPeriodGroup("Year-to-date accrued interest allocation", ytdPeriod, "Accrual basis; not repayment-timed collection", `
+          ${kpi("Accrued protocol/reserve interest revenue", usd(summary.ytdAccruedProtocolInterestRevenueInUsd), `Effective non-supplier share; ${allocationPeriod}`)}
+          ${kpi("Accrued supplier interest income", usd(summary.ytdAccruedSupplierInterestIncomeInUsd), "Lender income, not protocol revenue")}
+          ${kpi("Gross interest accrued", usd(summary.ytdAccruedInterestInUsd), "Supplier plus protocol/reserve allocation")}
+        `)}
+        ${chartSection("Accrued interest allocation", "How did accrued borrower interest divide between suppliers and the non-supplier protocol or reserve share?")}
+        ${interactiveChartPanel("Daily accrued interest allocation", "marketAccruedInterestAllocationDaily", { defaultPeriod: "year", help: "Each complete day's interestAccruedInUsd is split using the latest parameter effective by that UTC day's end. Accrual is not proof of repayment." })}
+        ${interactiveChartPanel("Monthly accrued interest allocation", "marketAccruedInterestAllocationMonthly", { defaultPeriod: "all", help: "Monthly sums of parameter-derived supplier income and protocol or reserve revenue accrual." })}
+        ${metricPeriodGroup("Current annualized interest run rate", projectedPeriod, "Point-in-time projection; no origination fees", `
+          ${kpi("Annualized gross interest income", usd(summary.projectedAnnualizedInterestIncomeInUsd))}
+          ${kpi("Annualized supplier interest income", usd(summary.projectedAnnualizedSupplierInterestIncomeInUsd), pct(summary.currentSupplierInterestShare))}
+          ${kpi("Annualized protocol/reserve interest revenue", usd(summary.projectedAnnualizedProtocolInterestRevenueInUsd), pct(summary.currentProtocolInterestShare))}
+        `)}
+        ${chartSection("Projected annualized interest income", "What annualized income pace was implied by each day's borrow balance, borrower APR, and effective allocation?")}
+        ${interactiveChartPanel("Projected annualized interest income", "marketProjectedAnnualizedInterestIncome", { defaultPeriod: "year", help: "Gross run rate equals borrowInUsd times borrowApr. Supplier and protocol or reserve lines apply that day's effective income shares. This is a run rate, not a forecast or collected revenue." })}
+        ${metricPeriodGroup("Interest repayments - not revenue", allTimePeriod, "Full borrower payment activity; used only as an attribution weight", `
+          ${kpi("YTD interest repaid activity", usd(market.ytdInterestRepaidActivityInUsd))}
+          ${kpi("Trailing 90-day interest repaid activity", usd(market.interestRepaidActivity90dInUsd), `${trailing90Period}; ${integer(market.marketRevenue90dObservedDays)} observed days`)}
+          ${kpi("All-time interest repaid activity", usd(market.interestRepaidActivityInUsd))}
+        `)}
+        ${chartSection("Revenue-generating repayment activity", "When did borrowers repay interest, while keeping the full payment visibly separate from retained revenue?")}
+        ${interactiveChartPanel("Monthly interest repayments (not revenue)", "marketInterestRepaymentActivityMonthly", { defaultPeriod: "all", help: "This is the full interestRepaidInUsd borrower flow. It is an attribution weight and payment-activity measure, not retained revenue by itself." })}
       `);
       drawMarketCharts();
     }
@@ -2080,6 +2480,81 @@ HTML_TEMPLATE = r"""<!doctype html>
         ${interactiveBreakdownPanel("Cumulative observed-key collateralized-supply concentration", "marketCollateralizedSupplyConcentration", { help: "The denominator is represented collateralized supply, not total market supply or pool liquidity." })}
       `);
       drawMarketCharts();
+    }
+
+    function renderMarketParameters() {
+      const market = currentMarketSummary();
+      const state = currentMarketParameters();
+      const marketName = market.displayName || market.marketId;
+      if (!state?.current) {
+        setHtml("marketParameters", `
+          <div class="hero"><h2>${esc(marketName)} Parameters History</h2><p>Current interest-model settings and every exact governance update exposed by the official Liqwid v2 API.</p></div>
+          <div class="parameter-empty"><strong>Parameters unavailable.</strong><br>No official parameter-history row is present for this market in the opened archive. No curve or historical value is inferred.</div>
+        `);
+        return;
+      }
+
+      const current = state.current;
+      const rates = current.rateLandmarks || {};
+      const capacity = current.capacity || {};
+      const allocation = current.incomeAllocation || {};
+      const coefficients = current.modelCoefficients || {};
+      const utilizationCap = capacity.utilizationCap == null ? 1 : capacity.utilizationCap;
+      const supplyCap = capacity.supplyCap == null ? "No protocol cap reported" : assetAmount(capacity.supplyCap, market.symbol || market.marketId);
+      const eventCount = state.events?.length || 0;
+      const firstEvent = state.events?.[0]?.timestamp;
+
+      setHtml("marketParameters", `
+        <div class="hero">
+          <h2>${esc(marketName)} Parameters History</h2>
+          <p>Current governance-controlled market parameters, the rate curves they produce, and their exact on-chain evolution.</p>
+          <div class="parameter-effective"><strong>Effective ${esc(formatParameterTimestamp(current.effectiveAt))}</strong><span aria-hidden="true">&middot;</span><span>${integer(eventCount)} recorded governance update${eventCount === 1 ? "" : "s"}${firstEvent ? ` since ${esc(formatParameterTimestamp(firstEvent))}` : ""}</span></div>
+        </div>
+        <div class="parameter-groups">
+          ${parameterGroup("Rate curve landmarks", "Annualized rates at the three governance-defined utilization landmarks.", [
+            ["Base borrower APR", pct(rates.baseBorrowerAPR)],
+            ["Optimal borrower APR", pct(rates.optimalBorrowerAPR)],
+            ["Maximum borrower APR at cap", pct(rates.maxBorrowerAPR)],
+            ["Base supplier APY", pct(rates.baseSupplierAPY)],
+            ["Optimal supplier APY", pct(rates.optimalSupplierAPY)],
+            ["Maximum supplier APY at cap", pct(rates.maxSupplierAPY)],
+            ["Optimal utilization (kink)", pct(rates.kink)]
+          ])}
+          ${parameterGroup("Capacity limits", "The supply ceiling is denominated in the market asset. The utilization cap is the point where new borrowing stops.", [
+            ["Supply cap", supplyCap],
+            ["Utilization cap", `${pct(utilizationCap)}${capacity.utilizationCap == null ? " (default)" : ""}`],
+            ["Current utilization", pct(state.rateCurve?.currentUtilization)]
+          ])}
+          ${parameterAllocationGroup(allocation)}
+          ${parameterGroup("Raw model coefficients", "Official per-batch coefficients retained for auditability; the annualized landmarks above are easier to interpret.", [
+            ["Base rate coefficient", parameterScalar(coefficients.baseRate)],
+            ["Utilization multiplier", parameterScalar(coefficients.utilMultiplier)],
+            ["Post-kink multiplier", parameterScalar(coefficients.utilMultiplierJump)]
+          ])}
+          <article class="parameter-group parameter-record">
+            <h3>Governance record</h3>
+            <p>The latest exact API event identifies when these values became effective and the transaction that changed them.</p>
+            <dl class="parameter-list">
+              <dt>Effective timestamp (UTC)</dt><dd>${esc(formatParameterTimestamp(current.effectiveAt))}</dd>
+            </dl>
+            <code title="${esc(current.txHash)}">${esc(current.txHash || "Transaction hash unavailable")}</code>
+          </article>
+        </div>
+        ${chartSection("Current rate curve", "How do today's parameters translate utilization into borrowing cost and supplier yield?")}
+        ${interactiveBreakdownPanel("Borrow APR and Supply APY by utilization", "marketParameterRateCurve", { help: "Borrow APR is linearly interpolated from base to optimal at the kink, then from optimal to maximum at the utilization cap. Supply APY = (1 - utilization) * baseSupplierAPY + utilization * borrowerAPR * supplierSplit. Curves stop at the utilization cap; the axis remains fixed at 0-100%." })}
+        <p class="parameter-formula"><strong>Implemented supplier formula:</strong> <code>(1 - utilization) * baseSupplierAPY + utilization * borrowerAPR * supplierSplit</code>. The supplier split is the supplier income ratio divided by the total income ratio.</p>
+        ${chartSection("Historical evolution", "Which exact governance updates changed the market's rates, limits, allocation, or model coefficients?")}
+        ${interactiveChartPanel("Borrower rate landmarks", "marketParameterBorrowRates", { defaultPeriod: "all", help: "Step lines change only at exact governance event timestamps; no daily updates are invented." })}
+        ${interactiveChartPanel("Supplier rate landmarks", "marketParameterSupplyRates", { defaultPeriod: "all", help: "Step lines change only at exact governance event timestamps; no daily updates are invented." })}
+        ${interactiveChartPanel("Optimal utilization and utilization cap", "marketParameterUtilizationLimits", { defaultPeriod: "all", help: "The kink is the optimal-utilization point where the borrower-rate slope changes. The utilization cap blocks additional borrowing." })}
+        ${interactiveChartPanel("Supply cap", "marketParameterSupplyCap", { defaultPeriod: "all", help: `Supply cap values use native ${esc(market.symbol || market.marketId)} units. Missing values mean the API reports no cap.` })}
+        ${interactiveChartPanel("Income allocation", "marketParameterIncomeAllocation", { defaultPeriod: "all", help: "Each share is its official component ratio divided by incomeRatioSum. Reserve is the unassigned remainder." })}
+        ${interactiveChartPanel("Raw rate-model coefficients", "marketParameterModelCoefficients", { defaultPeriod: "all", help: "These are the exact official per-batch coefficients; annualized borrower and supplier landmark rates are charted separately." })}
+        ${dataTablesSection([
+          { title: "Exact governance updates", content: parameterHistoryTable(state.events || [], market.symbol || market.marketId) }
+        ])}
+      `);
+      drawMarketParameterCharts();
     }
 
     function renderImpact() {
@@ -2211,6 +2686,7 @@ HTML_TEMPLATE = r"""<!doctype html>
 
     function drawTimeChartById(chartId, resetRange = false) {
       if (chartId.startsWith("protocol")) drawProtocolTimeChart(chartId, resetRange);
+      else if (chartId.startsWith("marketParameter")) drawMarketParameterTimeChart(chartId, resetRange);
       else if (chartId.startsWith("market")) drawMarketTimeChart(chartId, resetRange);
       else if (chartId.startsWith("liquidation")) drawLiquidationTimeChart(chartId, resetRange);
       else if (chartId.startsWith("impact")) drawImpactTimeChart(chartId, resetRange);
@@ -2245,6 +2721,24 @@ HTML_TEMPLATE = r"""<!doctype html>
 
     function currentMarketSummary() {
       return deep.marketSummaries.find((row) => row.marketId === selectedMarket) || deep.marketSummaries[0];
+    }
+
+    function currentMarketParameters() {
+      const byMarket = deep.marketParameters?.byMarket || {};
+      const marketId = selectedMarket || currentMarketSummary()?.marketId;
+      const direct = byMarket[marketId];
+      if (direct) return direct;
+      const key = Object.keys(byMarket).find((candidate) => candidate.toUpperCase() === String(marketId).toUpperCase());
+      return key ? byMarket[key] : null;
+    }
+
+    function currentMarketRevenue() {
+      const byMarket = deep.marketRevenue?.byMarket || {};
+      const marketId = selectedMarket || currentMarketSummary()?.marketId;
+      const direct = byMarket[marketId];
+      if (direct) return direct;
+      const key = Object.keys(byMarket).find((candidate) => candidate.toUpperCase() === String(marketId).toUpperCase());
+      return key ? byMarket[key] : null;
     }
 
     function loanSnapshotRows(kind, scope, marketId = "") {
@@ -2282,6 +2776,125 @@ HTML_TEMPLATE = r"""<!doctype html>
       for (const id of chartId ? [chartId] : protocolChartIds()) drawProtocolTimeChart(id, resetRange);
     }
 
+    function drawProtocolParameterCharts(chartId = null, resetRange = false) {
+      const state = deep?.protocolParameters || {};
+      if (!chartId || chartId === "protocolParameterRateAtlas") {
+        const container = document.querySelector("#protocolParameterRateAtlas");
+        if (container) {
+          renderInteractiveScatterChart(container, {
+            chartId: "protocolParameterRateAtlas",
+            rows: state.rateCurveAtlas?.rows || [],
+            seriesKey: "curve",
+            seriesLabelKey: "curveLabel",
+            labelKey: "pointLabel",
+            xKey: "utilization",
+            yKey: "rate",
+            xLabel: "Utilization",
+            yLabel: "Borrow APR",
+            xFormatter: pct,
+            yFormatter: pct,
+            connectPoints: true,
+            minimumPointRadius: 1.5,
+            maximumPointRadius: 1.5,
+            fixedXDomain: { min: 0, max: 1 },
+            seriesLegendLabel: "Borrow APR curves",
+            seriesLegendHelp: "The atlas includes up to eight markets, ranked by current USD borrow."
+          });
+        }
+      }
+      if (!chartId || chartId === "protocolParameterPolicyMap") {
+        const container = document.querySelector("#protocolParameterPolicyMap");
+        if (container) {
+          renderInteractiveScatterChart(container, {
+            chartId: "protocolParameterPolicyMap",
+            rows: (state.marketRows || []).filter((row) => row.currentUtilization != null && row.kink != null),
+            labelKey: "marketName",
+            xKey: "currentUtilization",
+            yKey: "kink",
+            sizeKey: "borrowInUsd",
+            colorKey: "maxBorrowerAPR",
+            xLabel: "Current utilization",
+            yLabel: "Optimal utilization (kink)",
+            sizeLabel: "Current borrow",
+            colorLabel: "Maximum borrower APR",
+            colorPalette: riskPalette,
+            fixedXDomain: { min: 0, max: 1 },
+            fixedYDomain: { min: 0, max: 1 },
+            xFormatter: pct,
+            yFormatter: pct,
+            sizeFormatter: usdCompact,
+            colorFormatter: pct
+          });
+        }
+      }
+      if (!chartId || chartId === "protocolParameterCapacity") {
+        const container = document.querySelector("#protocolParameterCapacity");
+        if (container) {
+          renderInteractiveCategoryChart(container, {
+            chartId: "protocolParameterCapacity",
+            rows: (state.marketRows || []).filter((row) => row.supplyCapInUsd != null),
+            categoryKey: "marketName",
+            series: [
+              { key: "supplyInUsd", label: "Current supply", color: colors.blue },
+              { key: "supplyCapHeadroomInUsd", label: "Remaining cap headroom", color: colors.mint }
+            ],
+            mode: "stacked",
+            sortKey: "supplyCapInUsd",
+            allowXScaleToggle: true,
+            valueFormatter: usdCompact
+          });
+        }
+      }
+      if (!chartId || chartId === "protocolParameterGuardrails") {
+        const container = document.querySelector("#protocolParameterGuardrails");
+        if (container) {
+          renderInteractiveCategoryChart(container, {
+            chartId: "protocolParameterGuardrails",
+            rows: (state.marketRows || []).filter((row) => row.minimumHealthBuffer != null || row.closeFactor != null),
+            categoryKey: "marketName",
+            series: [
+              { key: "minimumHealthBuffer", label: "Minimum health buffer above 1.00", color: colors.blue },
+              { key: "closeFactor", label: "Close factor", color: colors.amber }
+            ],
+            mode: "grouped",
+            fixedXDomain: { min: 0, max: 1 },
+            valueFormatter: pct
+          });
+        }
+      }
+      if (!chartId || chartId === "protocolParameterCollateral") {
+        const container = document.querySelector("#protocolParameterCollateral");
+        if (container) {
+          renderInteractiveMatrixChart(container, {
+            chartId: "protocolParameterCollateral",
+            rows: state.collateralSummaryRows || [],
+            rowKey: "marketName",
+            columns: [
+              { key: "minimumMaxLoanToValue", label: "Lowest max LTV" },
+              { key: "minimumLiquidationThreshold", label: "Lowest liquidation threshold" },
+              { key: "maximumLiquidationPenalty", label: "Highest liquidation penalty" },
+              { key: "maximumCollateralWeight", label: "Highest collateral weight" }
+            ],
+            palette: riskPalette,
+            paletteDirection: "reverse",
+            valueFormatter: pct,
+            legendAlign: "left",
+            legendPosition: "top"
+          });
+        }
+      }
+      const timeIds = [
+        "protocolParameterRateHistory",
+        "protocolParameterUtilizationHistory",
+        "protocolParameterAllocationHistory",
+        "protocolParameterCoverageHistory",
+        "protocolParameterGovernanceActivity"
+      ];
+      for (const id of chartId ? timeIds.filter((candidate) => candidate === chartId) : timeIds) {
+        drawProtocolTimeChart(id, resetRange);
+      }
+    }
+
     function drawProtocolTimeChart(chartId, resetRange = false) {
       const container = document.querySelector(`#${chartId}`);
       if (!container) return;
@@ -2294,6 +2907,29 @@ HTML_TEMPLATE = r"""<!doctype html>
       if (chartId === "protocolLqTreasury") lineChart(container, deep?.lqToken?.series || [], [{ key: "daoTreasuryLqAmount", label: "DAO Treasury LQ", color: colors.amber, type: "line", points: true, yAxis: "left" }, { key: "daoTreasuryUsdValue", label: "DAO Treasury USD Value", color: colors.mint, type: "line", points: true, yAxis: "right" }], (v, k) => k === "daoTreasuryUsdValue" ? usdCompact(v) : assetAmount(v, "LQ"), { ...options, valueMode: "stock", hideYScaleToggle: true });
       if (chartId === "protocolHealthHistoryCounts") lineChart(container, loanSnapshotRows("health", "protocol"), historicalHealthSeries("LoanCount"), integer, { ...options, valueMode: "stock" });
       if (chartId === "protocolHealthHistoryDebt") lineChart(container, loanSnapshotRows("health", "protocol"), historicalHealthSeries("DebtInUsd"), usdCompact, { ...options, valueMode: "stock" });
+      if (chartId === "protocolParameterRateHistory") lineChart(container, deep?.protocolParameters?.history || [], [
+        { key: "borrowWeightedBaseBorrowerAPR", label: "Borrow-weighted base APR", color: colors.blue },
+        { key: "borrowWeightedOptimalBorrowerAPR", label: "Borrow-weighted optimal APR", color: colors.mint },
+        { key: "borrowWeightedMaxBorrowerAPR", label: "Borrow-weighted maximum APR", color: colors.amber }
+      ], pct, { ...options, valueMode: "ratio" });
+      if (chartId === "protocolParameterUtilizationHistory") lineChart(container, deep?.protocolParameters?.history || [], [
+        { key: "borrowWeightedKink", label: "Borrow-weighted kink", color: colors.mint },
+        { key: "borrowWeightedUtilizationCap", label: "Borrow-weighted utilization cap", color: colors.amber }
+      ], pct, { ...options, valueMode: "ratio", fixedYDomain: { min: 0, max: 1 } });
+      if (chartId === "protocolParameterAllocationHistory") lineChart(container, deep?.protocolParameters?.history || [], [
+        { key: "borrowWeightedSupplierSplit", label: "Suppliers", color: colors.blue },
+        { key: "borrowWeightedDividendSplit", label: "Dividends / LQ stakers", color: colors.mint },
+        { key: "borrowWeightedTreasurySplit", label: "Treasury", color: colors.amber },
+        { key: "borrowWeightedReserveSplit", label: "Reserve remainder", color: colors.purple }
+      ], pct, { ...options, valueMode: "ratio", fixedYDomain: { min: 0, max: 1 } });
+      if (chartId === "protocolParameterCoverageHistory") lineChart(container, deep?.protocolParameters?.history || [], [
+        { key: "parameterCoverage", label: "Borrow covered by observable parameters", color: colors.blue },
+        { key: "borrowAboveKinkShare", label: "Borrow above kink thresholds", color: colors.amber }
+      ], pct, { ...options, valueMode: "ratio", fixedYDomain: { min: 0, max: 1 } });
+      if (chartId === "protocolParameterGovernanceActivity") lineChart(container, deep?.protocolParameters?.governanceActivity || [], [
+        { key: "updateCount", label: "Market governance updates", color: colors.blue, type: "bar" },
+        { key: "changedParameterCount", label: "Identifiable changed fields", color: colors.mint, type: "bar" }
+      ], integer, { ...options, valueMode: "flow" });
       if (chartId === "protocolCapital") lineChart(container, rows, [["supplyInUsd", "Supply", colors.blue], ["borrowInUsd", "Borrow", colors.amber], ["liquidityInUsd", "Liquidity", colors.mint]], usdCompact, { ...options, valueMode: "stock" });
       if (chartId === "protocolUtilization") lineChart(container, rows, [["utilizationPercentage", "Utilization", colors.blue]], pct, { ...options, valueMode: "ratio", fixedYDomain: { min: 0, max: 1 }, referenceLines: [{ value: 0.85, label: "85% high utilization", color: colors.amber }] });
       if (chartId === "protocolDebtRepayment") {
@@ -2333,12 +2969,16 @@ HTML_TEMPLATE = r"""<!doctype html>
       }
       if (chartId === "protocolDebtDaily") lineChart(container, rows, [["debtAccruedInUsd", "Daily debt accrued", colors.purple], ["debtRepaidInUsd", "Daily debt repaid", colors.mint]], usdCompact, { ...options, valueMode: "flow" });
       if (chartId === "protocolDebtRolling") lineChart(container, rows, [["debtAccrued30d", "Accrued · current-valued rolling 30d", colors.purple], ["debtRepaid30d", "Repaid · current-valued rolling 30d", colors.mint]], usdCompact, { ...options, valueMode: "flow" });
-      if (chartId === "protocolDebtCumulative") lineChart(container, rows, [["cumulativeDebtAccrued", "Cumulative accrued", colors.purple], ["cumulativeDebtRepaid", "Cumulative repaid", colors.mint]], usdCompact, { ...options, valueMode: "stock" });
-      if (chartId === "protocolDebtCumulativeGap") lineChart(container, rows, [{ key: "cumulativeDebtGap", label: "Sum of current-valued market gaps", color: colors.purple }], usdCompact, { ...options, valueMode: "stock", referenceLines: [{ value: 0, label: "Debt-flow parity" }] });
+      if (chartId === "protocolDebtCumulative") lineChart(container, rows, [
+        ["cumulativeDebtAccrued", "Cumulative inferred formation", colors.purple],
+        ["cumulativeDebtRepaid", "Cumulative reported repayment", colors.mint],
+        ["cumulativeUnclassifiedBorrowReduction", "Cumulative unclassified reductions", colors.amber]
+      ], usdCompact, { ...options, valueMode: "stock" });
+      if (chartId === "protocolDebtCumulativeGap") lineChart(container, rows, [{ key: "cumulativeDebtGap", label: "Sum of current-valued market differences", color: colors.purple }], usdCompact, { ...options, valueMode: "stock", referenceLines: [{ value: 0, label: "Zero reported flow difference" }] });
       if (chartId === "protocolDebtGap") lineChart(container, rows, [
         { key: "dailyDebtGap", label: "Daily market gaps · USD sum", color: colors.amber, negativeColor: colors.mint, type: "bar" },
         { key: "debtGap30d", label: "Rolling 30d market gaps · USD sum", color: colors.purple, type: "line", summary: false }
-      ], usdCompact, { ...options, valueMode: "flow", referenceLines: [{ value: 0, label: "Debt-flow parity" }] });
+      ], usdCompact, { ...options, valueMode: "flow", referenceLines: [{ value: 0, label: "Zero reported flow difference" }] });
       if (chartId === "protocolDebtCoverage") lineChart(container, rows, [["debtCoverage7d", "Coverage - 7d", colors.blue], ["debtCoverage30d", "Coverage - 30d", colors.purple], ["debtCoverage90d", "Coverage - 90d", colors.mint]], ratio, { ...options, valueMode: "ratio", referenceLines: [{ value: 1, label: "1.00x parity", color: colors.amber }] });
       if (chartId === "protocolInterestDaily") lineChart(container, rows, [["interestAccruedInUsd", "Daily accrued", colors.purple], ["interestRepaidInUsd", "Daily repaid", colors.mint]], usdCompact, { ...options, valueMode: "flow" });
       if (chartId === "protocolInterestRepayment") {
@@ -2378,33 +3018,47 @@ HTML_TEMPLATE = r"""<!doctype html>
       }
       if (chartId === "protocolInterestRolling") lineChart(container, rows, [["interestAccrued30d", "Accrued · current-valued rolling 30d", colors.purple], ["interestRepaid30d", "Repaid · current-valued rolling 30d", colors.mint]], usdCompact, { ...options, valueMode: "flow" });
       if (chartId === "protocolInterestCumulative") lineChart(container, rows, [["cumulativeInterestAccrued", "Cumulative accrued", colors.purple], ["cumulativeInterestRepaid", "Cumulative repaid", colors.mint]], usdCompact, { ...options, valueMode: "stock" });
-      if (chartId === "protocolInterestCumulativeGap") lineChart(container, rows, [{ key: "cumulativeInterestGap", label: "Sum of current-valued market gaps", color: colors.purple }], usdCompact, { ...options, valueMode: "stock", referenceLines: [{ value: 0, label: "Historical parity" }] });
+      if (chartId === "protocolInterestCumulativeGap") lineChart(container, rows, [{ key: "cumulativeInterestGap", label: "Sum of current-valued market differences", color: colors.purple }], usdCompact, { ...options, valueMode: "stock", referenceLines: [{ value: 0, label: "Zero reported flow difference" }] });
       if (chartId === "protocolInterestGap") lineChart(container, rows, [
         { key: "dailyInterestGap", label: "Daily market gaps · USD sum", color: colors.amber, negativeColor: colors.mint, type: "bar" },
         { key: "interestGap30d", label: "Rolling 30d market gaps · USD sum", color: colors.purple, type: "line", summary: false }
-      ], usdCompact, { ...options, valueMode: "flow", referenceLines: [{ value: 0, label: "Repayment parity" }] });
+      ], usdCompact, { ...options, valueMode: "flow", referenceLines: [{ value: 0, label: "Zero reported flow difference" }] });
       if (chartId === "protocolInterestCoverage") lineChart(container, rows, [["interestCoverage7d", "Coverage - 7d", colors.blue], ["interestCoverage30d", "Coverage - 30d", colors.purple], ["interestCoverage90d", "Coverage - 90d", colors.mint]], ratio, { ...options, valueMode: "ratio", referenceLines: [{ value: 1, label: "1.00x parity", color: colors.amber }] });
-      const allocationSeries = [
+      const daoAllocationSeries = [
         { key: "allocatedProtocolInterestRevenueInUsd", label: "DAO interest", color: colors.blue, type: "bar" },
-        { key: "allocatedProtocolOriginationRevenueInUsd", label: "DAO origination", color: colors.mint, type: "bar" },
+        { key: "allocatedProtocolOriginationRevenueInUsd", label: "DAO origination", color: colors.mint, type: "bar" }
+      ];
+      const stakerAllocationSeries = [
         { key: "allocatedHoldersInterestRevenueInUsd", label: "LQ stakers interest", color: colors.purple, type: "bar" },
         { key: "allocatedHoldersOriginationRevenueInUsd", label: "LQ stakers origination", color: colors.amber, type: "bar" }
       ];
-      if (chartId === "protocolRevenueAllocationDaily") lineChart(container, deep.revenue?.dailyAllocation || [], allocationSeries, usdCompact, { ...options, valueMode: "flow", stackMode: "value" });
-      if (chartId === "protocolRevenueAllocationMonthly") lineChart(container, deep.revenue?.monthlyAllocation || [], allocationSeries, usdCompact, { ...options, valueMode: "flow", stackMode: "value", calendarPeriod: "month" });
+      const collectedRevenueSeries = [
+        { key: "collectedInterestRevenueInUsd", label: "Retained interest collected", color: colors.blue, type: "bar" },
+        { key: "collectedOriginationRevenueInUsd", label: "Origination fees collected", color: colors.mint, type: "bar" }
+      ];
+      if (chartId === "protocolCollectedRevenueDaily") lineChart(container, deep.revenue?.daily || [], collectedRevenueSeries, usdCompact, { ...options, valueMode: "flow", stackMode: "value" });
+      if (chartId === "protocolCollectedRevenueMonthly") lineChart(container, deep.revenue?.monthlyCollectedRevenue || [], collectedRevenueSeries, usdCompact, { ...options, valueMode: "flow", stackMode: "value", calendarPeriod: "month" });
+      if (chartId === "protocolDaoRevenueAllocationDaily") lineChart(container, deep.revenue?.dailyAllocation || [], daoAllocationSeries, usdCompact, { ...options, valueMode: "flow", stackMode: "value" });
+      if (chartId === "protocolDaoRevenueAllocationMonthly") lineChart(container, deep.revenue?.monthlyAllocation || [], daoAllocationSeries, usdCompact, { ...options, valueMode: "flow", stackMode: "value", calendarPeriod: "month" });
+      if (chartId === "protocolStakerRevenueAllocationDaily") lineChart(container, deep.revenue?.dailyAllocation || [], stakerAllocationSeries, usdCompact, { ...options, valueMode: "flow", stackMode: "value" });
+      if (chartId === "protocolStakerRevenueAllocationMonthly") lineChart(container, deep.revenue?.monthlyAllocation || [], stakerAllocationSeries, usdCompact, { ...options, valueMode: "flow", stackMode: "value", calendarPeriod: "month" });
       if (chartId === "protocolRevenueRunRate") lineChart(container, deep.revenue?.annualizedRunRateSeries || [], [
         { key: "annualizedRunRateInUsd", label: "Annualized DAO run rate", color: colors.mint, type: "line", points: true }
       ], usdCompact, { ...options, valueMode: "stock" });
     }
 
     function drawRevenueCharts() {
+      drawProtocolTimeChart("protocolCollectedRevenueDaily");
+      drawProtocolTimeChart("protocolCollectedRevenueMonthly");
       drawProtocolTimeChart("protocolRevenueRunRate");
-      drawProtocolTimeChart("protocolRevenueAllocationMonthly");
-      drawProtocolTimeChart("protocolRevenueAllocationDaily");
+      drawProtocolTimeChart("protocolDaoRevenueAllocationMonthly");
+      drawProtocolTimeChart("protocolDaoRevenueAllocationDaily");
+      drawProtocolTimeChart("protocolStakerRevenueAllocationMonthly");
+      drawProtocolTimeChart("protocolStakerRevenueAllocationDaily");
     }
 
     function marketChartIds() {
-      return ["marketParticipationLoans", "marketParticipationKeys", "marketHealthHistoryCounts", "marketHealthHistoryDebt", "marketCapital", "marketUtilization", "marketDebtRepayment", "marketDebtCoverageOperandsAsset", "marketDebtCoverageOperandsUsd", "marketDebtCoverage", "marketDebtGapAsset", "marketDebtGap", "marketDebtCumulativeGapAsset", "marketDebtCumulativeGap", "marketRepaymentEvents", "marketRepaymentDrySpells", "marketDebtRepaymentDistribution", "marketInterestDaily", "marketInterestCoverageOperandsAsset", "marketInterestCoverageOperandsUsd", "marketInterestCumulative", "marketInterestCumulativeGapAsset", "marketInterestCumulativeGap", "marketInterestGapAsset", "marketInterestGap", "marketInterestCoverage", "marketInterestDrySpells", "marketInterestRepaymentDistribution", "marketRates", "marketLiquidityPressure", "marketRevenueMonthly"];
+      return ["marketParticipationLoans", "marketParticipationKeys", "marketHealthHistoryCounts", "marketHealthHistoryDebt", "marketCapital", "marketUtilization", "marketDebtRepayment", "marketDebtCoverageOperandsAsset", "marketDebtCoverageOperandsUsd", "marketDebtCoverage", "marketDebtGapAsset", "marketDebtGap", "marketDebtCumulativeGapAsset", "marketDebtCumulativeGap", "marketRepaymentEvents", "marketRepaymentDrySpells", "marketDebtRepaymentDistribution", "marketInterestDaily", "marketInterestCoverageOperandsAsset", "marketInterestCoverageOperandsUsd", "marketInterestCumulative", "marketInterestCumulativeGapAsset", "marketInterestCumulativeGap", "marketInterestGapAsset", "marketInterestGap", "marketInterestCoverage", "marketInterestDrySpells", "marketInterestRepaymentDistribution", "marketRates", "marketLiquidityPressure", "marketAttributedCollectedRevenueDaily", "marketAttributedCollectedRevenueMonthly", "marketAccruedInterestAllocationDaily", "marketAccruedInterestAllocationMonthly", "marketProjectedAnnualizedInterestIncome", "marketInterestRepaymentActivityMonthly"];
     }
 
     function drawMarketCharts(chartId = null, resetRange = false) {
@@ -2415,11 +3069,140 @@ HTML_TEMPLATE = r"""<!doctype html>
       if (!chartId) drawMarketHealthChart();
     }
 
+    function drawMarketParameterCharts(chartId = null, resetRange = false) {
+      const ids = [
+        "marketParameterBorrowRates",
+        "marketParameterSupplyRates",
+        "marketParameterUtilizationLimits",
+        "marketParameterSupplyCap",
+        "marketParameterIncomeAllocation",
+        "marketParameterModelCoefficients"
+      ];
+      if (!chartId || chartId === "marketParameterRateCurve") drawMarketParameterRateCurve();
+      for (const id of chartId ? ids.filter((candidate) => candidate === chartId) : ids) {
+        drawMarketParameterTimeChart(id, resetRange);
+      }
+    }
+
+    function drawMarketParameterRateCurve() {
+      const container = document.querySelector("#marketParameterRateCurve");
+      const state = currentMarketParameters();
+      if (!container || !state?.rateCurve) return;
+      const references = [];
+      const currentUtilization = displayNumber(state.rateCurve.currentUtilization);
+      const kink = displayNumber(state.rateCurve.kink);
+      const utilizationCap = displayNumber(state.rateCurve.utilizationCap);
+      if (currentUtilization != null && currentUtilization >= 0 && currentUtilization <= 1) {
+        references.push({ value: currentUtilization, label: `Current ${pct(currentUtilization)}`, color: "#e8f7ff" });
+      }
+      if (kink != null && kink >= 0 && kink <= 1) {
+        references.push({ value: kink, label: `Kink ${pct(kink)}`, color: colors.mint, dash: "5 4" });
+      }
+      if (utilizationCap != null && utilizationCap >= 0 && utilizationCap < 1) {
+        references.push({ value: utilizationCap, label: `Cap ${pct(utilizationCap)}`, color: "#ff5a67", dash: "2 4" });
+      }
+      renderInteractiveScatterChart(container, {
+        chartId: "marketParameterRateCurve",
+        rows: state.rateCurve.rows || [],
+        seriesKey: "curve",
+        seriesLabelKey: "curveLabel",
+        series: [
+          { key: "borrower", label: "Borrow APR", color: colors.amber },
+          { key: "supplier", label: "Supply APY", color: colors.blue }
+        ],
+        labelKey: "pointLabel",
+        xKey: "utilization",
+        yKey: "rate",
+        xLabel: "Utilization",
+        yLabel: "Annualized rate",
+        xFormatter: pct,
+        yFormatter: pct,
+        connectPoints: true,
+        minimumPointRadius: 1.5,
+        maximumPointRadius: 1.5,
+        fixedXDomain: { min: 0, max: 1 },
+        xReferenceLines: references,
+        seriesLegendLabel: "Rate curves",
+        seriesLegendHelp: "Select a curve to emphasize or mute it. Both remain visible for comparison."
+      });
+    }
+
+    function drawMarketParameterTimeChart(chartId, resetRange = false) {
+      const container = document.querySelector(`#${chartId}`);
+      const state = currentMarketParameters();
+      if (!container || !state) return;
+      const market = currentMarketSummary();
+      const rows = marketParameterHistoryRows(state.history || []);
+      const options = { chartId, period: chartPeriods[chartId], resetRange, valueMode: "stock" };
+      if (chartId === "marketParameterBorrowRates") {
+        lineChart(container, rows, [
+          { key: "baseBorrowerAPR", label: "Base borrower APR", color: colors.blue },
+          { key: "optimalBorrowerAPR", label: "Optimal borrower APR", color: colors.mint },
+          { key: "maxBorrowerAPR", label: "Maximum borrower APR at cap", color: colors.amber }
+        ], pct, options);
+      }
+      if (chartId === "marketParameterSupplyRates") {
+        lineChart(container, rows, [
+          { key: "baseSupplierAPY", label: "Base supplier APY", color: colors.blue },
+          { key: "optimalSupplierAPY", label: "Optimal supplier APY", color: colors.mint },
+          { key: "maxSupplierAPY", label: "Maximum supplier APY at cap", color: colors.amber }
+        ], pct, options);
+      }
+      if (chartId === "marketParameterUtilizationLimits") {
+        lineChart(container, rows, [
+          { key: "kink", label: "Optimal utilization (kink)", color: colors.mint },
+          { key: "effectiveUtilizationCap", label: "Effective utilization cap", color: colors.amber }
+        ], pct, { ...options, valueMode: "ratio", fixedYDomain: { min: 0, max: 1 } });
+      }
+      if (chartId === "marketParameterSupplyCap") {
+        lineChart(container, rows, [
+          { key: "supplyCap", label: `Supply cap (${market.symbol || market.marketId})`, color: colors.blue }
+        ], (value) => assetAmount(value, market.symbol || market.marketId), options);
+      }
+      if (chartId === "marketParameterIncomeAllocation") {
+        lineChart(container, rows, [
+          { key: "supplierSplit", label: "Suppliers", color: colors.blue },
+          { key: "dividendSplit", label: "Dividends", color: colors.mint },
+          { key: "treasurySplit", label: "Treasury", color: colors.amber },
+          { key: "reserveSplit", label: "Reserve remainder", color: colors.purple }
+        ], pct, { ...options, valueMode: "ratio", fixedYDomain: { min: 0, max: 1 } });
+      }
+      if (chartId === "marketParameterModelCoefficients") {
+        lineChart(container, rows, [
+          { key: "baseRate", label: "Base rate coefficient", color: colors.blue },
+          { key: "utilMultiplier", label: "Utilization multiplier", color: colors.mint },
+          { key: "utilMultiplierJump", label: "Post-kink multiplier", color: colors.amber }
+        ], parameterScalar, options);
+      }
+    }
+
+    function marketParameterHistoryRows(rows) {
+      return rows.map((row) => {
+        const sum = displayNumber(row.incomeRatioSum);
+        const suppliers = displayNumber(row.incomeRatioSuppliers);
+        const dividends = displayNumber(row.incomeRatioDividends);
+        const treasury = displayNumber(row.incomeRatioTreasury);
+        const hasAllocation = sum != null && sum !== 0;
+        const supplierSplit = hasAllocation ? (suppliers || 0) / sum : null;
+        const dividendSplit = hasAllocation ? (dividends || 0) / sum : null;
+        const treasurySplit = hasAllocation ? (treasury || 0) / sum : null;
+        return {
+          ...row,
+          effectiveUtilizationCap: row.borrowCap == null ? 1 : row.borrowCap,
+          supplierSplit,
+          dividendSplit,
+          treasurySplit,
+          reserveSplit: hasAllocation ? 1 - supplierSplit - dividendSplit - treasurySplit : null
+        };
+      });
+    }
+
     function drawMarketTimeChart(chartId, resetRange = false) {
       const container = document.querySelector(`#${chartId}`);
       if (!container) return;
       const market = currentMarketSummary();
       let rows = enrichedMarketRows(market.marketId);
+      const revenueRows = currentMarketRevenue()?.daily || [];
       const options = { chartId, period: chartPeriods[chartId], resetRange };
       const nativeAmount = (value) => assetAmount(value, market.symbol || market.marketId);
       if (chartId === "marketParticipationLoans") lineChart(container, loanSnapshotRows("health", "market", market.marketId), [{ key: "activeDebtLoanCount", label: "Active-debt positions", color: colors.blue, type: "line", points: true, dash: "5 4" }], integer, { ...options, valueMode: "stock" });
@@ -2444,17 +3227,17 @@ HTML_TEMPLATE = r"""<!doctype html>
       if (chartId === "marketDebtGapAsset") lineChart(container, rows, [
         { key: "dailyDebtGapAsset", label: "Daily native debt gap", color: colors.amber, negativeColor: colors.mint, type: "bar" },
         { key: "debtGapAsset30d", label: "Rolling 30d native gap", color: colors.purple, type: "line", summary: false }
-      ], nativeAmount, { ...options, valueMode: "flow", referenceLines: [{ value: 0, label: "Debt-flow parity" }] });
+      ], nativeAmount, { ...options, valueMode: "flow", referenceLines: [{ value: 0, label: "Zero reported flow difference" }] });
       if (chartId === "marketDebtGap") lineChart(container, rows, [
         { key: "dailyDebtGap", label: "Daily gap · current USD", color: colors.amber, negativeColor: colors.mint, type: "bar" },
         { key: "debtGap30d", label: "Rolling 30d gap · current USD", color: colors.purple, type: "line", summary: false }
-      ], usdCompact, { ...options, valueMode: "flow", referenceLines: [{ value: 0, label: "Debt-flow parity" }] });
+      ], usdCompact, { ...options, valueMode: "flow", referenceLines: [{ value: 0, label: "Zero reported flow difference" }] });
       if (chartId === "marketDebtCumulativeGapAsset") lineChart(container, rows, [
         { key: "cumulativeDebtGapAsset", label: "Cumulative native debt gap", color: colors.purple }
-      ], nativeAmount, { ...options, valueMode: "stock", referenceLines: [{ value: 0, label: "Debt-flow parity" }] });
+      ], nativeAmount, { ...options, valueMode: "stock", referenceLines: [{ value: 0, label: "Zero reported flow difference" }] });
       if (chartId === "marketDebtCumulativeGap") lineChart(container, rows, [
         { key: "cumulativeDebtGap", label: "Cumulative gap · current USD", color: colors.purple }
-      ], usdCompact, { ...options, valueMode: "stock", referenceLines: [{ value: 0, label: "Debt-flow parity" }] });
+      ], usdCompact, { ...options, valueMode: "stock", referenceLines: [{ value: 0, label: "Zero reported flow difference" }] });
       if (chartId === "marketRepaymentEvents") {
         rows = buildFlowIntensityChartData(rows, "debtRepaidInUsd");
         lineChart(container, rows, [
@@ -2501,16 +3284,16 @@ HTML_TEMPLATE = r"""<!doctype html>
         { key: "interestRepaid30d", label: "Repaid · rolling 30d at current price", color: colors.mint }
       ], usdCompact, { ...options, valueMode: "flow" });
       if (chartId === "marketInterestCumulative") lineChart(container, rows, [["cumulativeInterestAccrued", "Cumulative accrued", colors.purple], ["cumulativeInterestRepaid", "Cumulative repaid", colors.mint]], usdCompact, { ...options, valueMode: "stock" });
-      if (chartId === "marketInterestCumulativeGapAsset") lineChart(container, rows, [{ key: "cumulativeInterestGapAsset", label: "Cumulative native interest gap", color: colors.purple }], nativeAmount, { ...options, valueMode: "stock", referenceLines: [{ value: 0, label: "Historical parity" }] });
-      if (chartId === "marketInterestCumulativeGap") lineChart(container, rows, [{ key: "cumulativeInterestGap", label: "Cumulative gap · current USD", color: colors.purple }], usdCompact, { ...options, valueMode: "stock", referenceLines: [{ value: 0, label: "Historical parity" }] });
+      if (chartId === "marketInterestCumulativeGapAsset") lineChart(container, rows, [{ key: "cumulativeInterestGapAsset", label: "Cumulative native reported flow difference", color: colors.purple }], nativeAmount, { ...options, valueMode: "stock", referenceLines: [{ value: 0, label: "Zero reported flow difference" }] });
+      if (chartId === "marketInterestCumulativeGap") lineChart(container, rows, [{ key: "cumulativeInterestGap", label: "Cumulative reported flow difference · current USD", color: colors.purple }], usdCompact, { ...options, valueMode: "stock", referenceLines: [{ value: 0, label: "Zero reported flow difference" }] });
       if (chartId === "marketInterestGapAsset") lineChart(container, rows, [
         { key: "dailyInterestGapAsset", label: "Daily native interest gap", color: colors.amber, negativeColor: colors.mint, type: "bar" },
         { key: "interestGapAsset30d", label: "Rolling 30d native gap", color: colors.purple, type: "line", summary: false }
-      ], nativeAmount, { ...options, valueMode: "flow", referenceLines: [{ value: 0, label: "Repayment parity" }] });
+      ], nativeAmount, { ...options, valueMode: "flow", referenceLines: [{ value: 0, label: "Zero reported flow difference" }] });
       if (chartId === "marketInterestGap") lineChart(container, rows, [
         { key: "dailyInterestGap", label: "Daily gap · current USD", color: colors.amber, negativeColor: colors.mint, type: "bar" },
         { key: "interestGap30d", label: "Rolling 30d gap · current USD", color: colors.purple, type: "line", summary: false }
-      ], usdCompact, { ...options, valueMode: "flow", referenceLines: [{ value: 0, label: "Repayment parity" }] });
+      ], usdCompact, { ...options, valueMode: "flow", referenceLines: [{ value: 0, label: "Zero reported flow difference" }] });
       if (chartId === "marketInterestCoverage") lineChart(container, rows, [["interestCoverage30d", "Coverage - 30d", colors.purple], ["interestCoverage90d", "Coverage - 90d", colors.mint]], ratio, { ...options, valueMode: "ratio", referenceLines: [{ value: 1, label: "1.00x parity", color: colors.amber }] });
       if (chartId === "marketInterestRepaymentDistribution") {
         renderInteractiveBoxplotChart(container, {
@@ -2526,13 +3309,48 @@ HTML_TEMPLATE = r"""<!doctype html>
       }
       if (chartId === "marketRates") lineChart(container, rows, [["borrowApr", "Borrow APR", colors.amber], ["supplyApy", "Supply APY", colors.mint]], pct, { ...options, valueMode: "ratio" });
       if (chartId === "marketLiquidityPressure") lineChart(container, rows, [["borrowToLiquidity", "Borrow / available liquidity", colors.mint]], ratio, { ...options, valueMode: "ratio", referenceLines: [{ value: 1, label: "1.00x borrow / liquidity", color: colors.amber }] });
-      if (chartId === "marketRevenueMonthly") {
-        const monthly = aggregateMonthlyChartRows(rows);
+      if (chartId === "marketAttributedCollectedRevenueDaily") {
+        const attributableRows = revenueRows.filter((row) => row.collectedInterestAttributionAvailable);
+        lineChart(container, attributableRows, [
+          { key: "attributedCollectedInterestRevenueInUsd", label: "Attributed retained interest collected", color: colors.blue, type: "bar" },
+          { key: "directOriginationRevenueInUsd", label: "Direct origination fees", color: colors.mint, type: "bar" }
+        ], usdCompact, { ...options, valueMode: "flow", stackMode: "value" });
+      }
+      if (chartId === "marketAttributedCollectedRevenueMonthly") {
+        const monthly = aggregateMonthlyChartRows(revenueRows.filter((row) => row.collectedInterestAttributionAvailable));
         lineChart(container, monthly, [
-          { key: "grossRealizedRevenueProxyInUsd", label: "Gross realized fee flow", color: colors.blue, type: "bar" },
-          { key: "interestRepaidInUsd", label: "Interest repaid flow", color: colors.mint, type: "line" },
-          { key: "observableOriginationFeeFlowInUsd", label: "Origination-fee flow", color: colors.amber, type: "line", dash: "5 4" }
-        ], usdCompact, { ...options, valueMode: "flow" });
+          { key: "attributedCollectedInterestRevenueInUsd", label: "Attributed retained interest collected", color: colors.blue, type: "bar" },
+          { key: "directOriginationRevenueInUsd", label: "Direct origination fees", color: colors.mint, type: "bar" }
+        ], usdCompact, { ...options, valueMode: "flow", stackMode: "value", calendarPeriod: "month" });
+      }
+      if (chartId === "marketAccruedInterestAllocationDaily") {
+        const allocatedRows = revenueRows.filter((row) => displayNumber(row.supplierInterestShare) !== null);
+        lineChart(container, allocatedRows, [
+          { key: "accruedSupplierInterestIncomeInUsd", label: "Supplier interest income accrued", color: colors.blue, type: "bar" },
+          { key: "accruedProtocolInterestRevenueInUsd", label: "Protocol / reserve interest revenue accrued", color: colors.mint, type: "bar" }
+        ], usdCompact, { ...options, valueMode: "flow", stackMode: "value" });
+      }
+      if (chartId === "marketAccruedInterestAllocationMonthly") {
+        const monthly = aggregateMonthlyChartRows(revenueRows.filter((row) => displayNumber(row.supplierInterestShare) !== null));
+        lineChart(container, monthly, [
+          { key: "accruedSupplierInterestIncomeInUsd", label: "Supplier interest income accrued", color: colors.blue, type: "bar" },
+          { key: "accruedProtocolInterestRevenueInUsd", label: "Protocol / reserve interest revenue accrued", color: colors.mint, type: "bar" }
+        ], usdCompact, { ...options, valueMode: "flow", stackMode: "value", calendarPeriod: "month" });
+      }
+      if (chartId === "marketProjectedAnnualizedInterestIncome") {
+        const projectedRows = revenueRows.filter((row) => displayNumber(row.projectedAnnualizedInterestIncomeInUsd) !== null);
+        lineChart(container, projectedRows, [
+          { key: "projectedAnnualizedInterestIncomeInUsd", label: "Gross annualized interest income", color: colors.amber, type: "line" },
+          { key: "projectedAnnualizedSupplierInterestIncomeInUsd", label: "Suppliers", color: colors.blue, type: "line" },
+          { key: "projectedAnnualizedProtocolInterestRevenueInUsd", label: "Protocol / reserve", color: colors.mint, type: "line" }
+        ], usdCompact, { ...options, valueMode: "stock" });
+      }
+      if (chartId === "marketInterestRepaymentActivityMonthly") {
+        const completeRevenueRows = rows.filter((row) => !market.marketRevenueCoverageToDate || row.date <= market.marketRevenueCoverageToDate);
+        const monthly = aggregateMonthlyChartRows(completeRevenueRows);
+        lineChart(container, monthly, [
+          { key: "interestRepaidActivityInUsd", label: "Borrower interest repaid (not retained revenue)", color: colors.purple, type: "bar" }
+        ], usdCompact, { ...options, valueMode: "flow", calendarPeriod: "month" });
       }
     }
 
@@ -3395,14 +4213,17 @@ HTML_TEMPLATE = r"""<!doctype html>
       if (dataLoaded && deep?.dataStatus?.headline) {
         const headline = deep.dataStatus.headline;
         dataStatusButton.classList.toggle("attention", headline.state === "attention");
+        dataStatusButton.classList.toggle("limited", headline.state === "limited");
         dataStatusSummary.textContent = headline.failedChecks
           ? `${integer(headline.failedChecks)} failed`
           : headline.partialChecks
-            ? `${integer(headline.partialChecks)} known ${headline.partialChecks === 1 ? "boundary" : "boundaries"}`
-            : `${integer(headline.passedChecks)} checks passed`;
+            ? `${integer(headline.partialChecks)} partial`
+            : headline.unavailableChecks
+              ? `${integer(headline.unavailableChecks)} unavailable`
+              : `${integer(headline.passedChecks)} passed`;
         dataStatusButton.setAttribute("aria-label", `Data status. ${headline.label}. ${dataStatusSummary.textContent}.`);
       } else {
-        dataStatusButton.classList.remove("attention");
+        dataStatusButton.classList.remove("attention", "limited");
         dataStatusSummary.textContent = "";
         dataStatusButton.removeAttribute("aria-label");
       }
@@ -3513,16 +4334,16 @@ HTML_TEMPLATE = r"""<!doctype html>
         loanRowReconciliation: loanCoverageShortLabel(row)
       }));
     }
-    function debtFlowReconciliationHelp(reconciliation) {
-      return `The official API exposes reported debt repayment but no direct debt-accrued flow. Debt formation is inferred per market in native units as current borrow minus prior borrow plus reported debt repaid, floored at zero; repayment is added back before the inferred flow is compared with reported repayment. ${gapValuationHelp("protocol")} Historical USD accrued and repaid totals remain visible as gross flow context, but their difference does not define the gap. The first observation is unavailable. Liquidation profit is protocol revenue, not liquidated principal.`;
+    function debtFlowReconciliationHelp(reconciliation, scope = "protocol") {
+      return `The official API exposes reported debt repayment but no direct debt-accrued flow. For each market-day after the first, Inferred Formation = max(0, Borrow Change + Reported Repayment) and Unclassified Reduction = max(0, -(Borrow Change + Reported Repayment)); therefore Borrow Change = Inferred Formation - Reported Repayment - Unclassified Reduction. The official API does not identify the cause of an unclassified reduction, so the app does not label it as liquidation, repayment, migration, or settlement. ${gapValuationHelp(scope)} Current borrow is the remaining principal measure. The first observation is unavailable because it has no prior balance. Liquidation profit is protocol revenue, not liquidated principal.`;
     }
     function interestFlowHelp(scope = "market") {
-      return `Interest accrued and repaid are direct official flows. Their gap is calculated in native asset units before valuation. ${gapValuationHelp(scope)} It is a repayment-timing measure, not an extra balance to add to outstanding borrow.`;
+      return `Interest accrued and repaid are direct official flows. Their reported flow difference is calculated in native asset units before valuation. ${gapValuationHelp(scope)} The official API does not expose a current interest receivable or a current principal-versus-interest balance split, so the cumulative difference must not be read as interest still owed.`;
     }
     function gapValuationHelp(scope = "market") {
       return scope === "protocol"
-        ? "Gap quantities are calculated in each market's asset units before USD valuation. Each market's daily, rolling, or cumulative native gap is valued at that observation's implied price, then the USD market values are summed; unlike asset units are never added."
-        : "Accrued and repaid quantities are netted in this market's asset units first. The USD view values the resulting daily, rolling, or cumulative native gap at each observation's implied asset price, so equal native accrual and repayment close the gap despite price movement.";
+        ? "Reported flow differences are calculated in each market's asset units before USD valuation. Each market's daily, rolling, or cumulative native difference is valued at that observation's implied price, then the USD market values are summed; unlike asset units are never added. A current-valued USD line can move solely because the asset price changes, even when the native cumulative difference is unchanged."
+        : "Accrued and repaid quantities are netted in this market's asset units first. The USD view values the resulting daily, rolling, or cumulative native difference at each observation's implied asset price. A current-valued USD line can move solely because the asset price changes, even when the native cumulative difference is unchanged.";
     }
     function currentValuedGapKpi(label, valueInUsd, nativeValue, priceInUsd, symbol) {
       const asset = symbol || "asset";
@@ -3654,6 +4475,132 @@ HTML_TEMPLATE = r"""<!doctype html>
         const selected = (row.thresholdRows || []).find((item) => Number(item.threshold) === Number(threshold)) || {};
         return { ...row, lowHfDebtInUsd: selected.lowHfDebtInUsd, lowHfShareOfKeyDebt: selected.lowHfShareOfKeyDebt };
       });
+    }
+    function parameterGroup(title, description, entries) {
+      return `<article class="parameter-group">
+        <h3>${esc(title)}</h3>
+        <p>${esc(description)}</p>
+        <dl class="parameter-list">${entries.map(([entryLabel, value]) => `<dt>${esc(entryLabel)}</dt><dd>${esc(value)}</dd>`).join("")}</dl>
+      </article>`;
+    }
+    function parameterAllocationGroup(allocation) {
+      const entries = [
+        ["Suppliers", allocation.suppliers],
+        ["Dividends", allocation.dividends],
+        ["Treasury", allocation.treasury],
+        ["Reserve remainder", allocation.reserve]
+      ];
+      return `<article class="parameter-group">
+        <h3>Borrower-interest allocation</h3>
+        <p>Each share is its official component ratio divided by the total income ratio.</p>
+        <div class="parameter-allocation-bar" role="img" aria-label="${esc(entries.map(([entryLabel, value]) => `${entryLabel} ${pct(value)}`).join(", "))}">${entries.map(([, value]) => `<span style="width:${parameterAllocationWidth(value)}%"></span>`).join("")}</div>
+        <dl class="parameter-list">${entries.map(([entryLabel, value]) => `<dt>${esc(entryLabel)}</dt><dd>${esc(pct(value))}</dd>`).join("")}</dl>
+      </article>`;
+    }
+    function parameterAllocationWidth(value) {
+      const numeric = displayNumber(value);
+      return numeric == null ? 0 : Math.max(0, Math.min(100, numeric * 100));
+    }
+    function parameterScalar(value) {
+      const numeric = displayNumber(value);
+      if (numeric === null) return "n/a";
+      const absolute = Math.abs(numeric);
+      if (absolute > 0 && absolute < 0.0001) return numeric.toExponential(6);
+      return new Intl.NumberFormat("en-US", { maximumSignificantDigits: 9, useGrouping: false }).format(numeric);
+    }
+    function formatParameterTimestamp(value) {
+      const milliseconds = Date.parse(String(value || ""));
+      if (!Number.isFinite(milliseconds)) return "Timestamp unavailable";
+      return new Date(milliseconds).toISOString().replace("T", " ").replace(".000Z", " UTC");
+    }
+    function protocolParameterCurrentTable(rows) {
+      return protocolFormattedTable(rows, [
+        { key: "marketName", label: "Market" },
+        { key: "borrowInUsd", label: "Current borrow", format: usd },
+        { key: "currentUtilization", label: "Utilization", format: pct },
+        { key: "kink", label: "Optimal kink", format: pct },
+        { key: "utilizationCap", label: "Utilization cap", format: pct },
+        { key: "baseBorrowerAPR", label: "Base borrower APR", format: pct },
+        { key: "optimalBorrowerAPR", label: "Optimal borrower APR", format: pct },
+        { key: "maxBorrowerAPR", label: "Maximum borrower APR", format: pct },
+        { key: "supplyCap", label: "Supply cap", format: (value, row) => value == null ? "No cap reported" : assetAmount(value, row.symbol) },
+        { key: "supplyCapHeadroomInUsd", label: "Supply-cap headroom", format: usd },
+        { key: "supplierSplit", label: "Supplier split", format: pct },
+        { key: "dividendSplit", label: "Dividend / staker split", format: pct },
+        { key: "treasurySplit", label: "Treasury split", format: pct },
+        { key: "reserveSplit", label: "Reserve remainder", format: pct },
+        { key: "minHealthFactor", label: "Minimum health factor", format: ratio },
+        { key: "closeFactor", label: "Close factor", format: pct },
+        { key: "maxCollateralCount", label: "Maximum collateral count", format: integer },
+        { key: "loanOriginationFee", label: "Loan origination fee", format: pct }
+      ]);
+    }
+    function protocolCollateralTable(rows) {
+      return protocolFormattedTable(rows, [
+        { key: "borrowMarketName", label: "Borrowed market" },
+        { key: "collateralName", label: "Eligible collateral" },
+        { key: "maxLoanToValue", label: "Maximum LTV", format: pct },
+        { key: "weightedMaxLoanToValue", label: "Weighted maximum LTV", format: pct },
+        { key: "liquidationThreshold", label: "Liquidation threshold", format: pct },
+        { key: "weightedLiquidationThreshold", label: "Weighted liquidation threshold", format: pct },
+        { key: "liquidationPenalty", label: "Liquidation penalty", format: pct },
+        { key: "liquidationProfitability", label: "Liquidation profitability", format: pct },
+        { key: "collateralWeight", label: "Collateral weight", format: pct }
+      ]);
+    }
+    function protocolGovernanceTable(rows) {
+      return protocolFormattedTable(rows, [
+        { key: "timestamp", label: "Effective at (UTC)", format: (value) => esc(String(value || "n/a")) },
+        { key: "marketName", label: "Market" },
+        {
+          key: "changedFields",
+          label: "Identifiable changed fields",
+          format: (value, row) => row.initialObservableEvent
+            ? "Initial observable event"
+            : esc((Array.isArray(value) && value.length ? value.map(parameterHistoryLabel).join(", ") : "No value difference identified"))
+        },
+        { key: "changedFieldCount", label: "Changed-field count", format: (value) => value == null ? "n/a" : integer(value) },
+        { key: "txHash", label: "Transaction hash", format: (value) => `<code title="${esc(value || "")}">${esc(value || "n/a")}</code>` }
+      ]);
+    }
+    function protocolFormattedTable(rows, columns) {
+      if (!rows.length) return "<p>No rows.</p>";
+      return `<div class="table-scroll"><table class="parameter-history-table"><thead><tr>${columns.map((column) => `<th>${esc(column.label)}</th>`).join("")}</tr></thead><tbody>${rows.map((row) => `<tr>${columns.map((column) => {
+        const value = row?.[column.key];
+        const formatted = column.format ? column.format(value, row) : esc(value ?? "n/a");
+        return `<td>${formatted}</td>`;
+      }).join("")}</tr>`).join("")}</tbody></table></div>`;
+    }
+    function parameterHistoryTable(rows, symbol) {
+      if (!rows.length) return "<p>No rows.</p>";
+      const keys = [
+        "timestamp", "txHash",
+        "baseBorrowerAPR", "optimalBorrowerAPR", "maxBorrowerAPR",
+        "baseSupplierAPY", "optimalSupplierAPY", "maxSupplierAPY",
+        "kink", "borrowCap", "supplyCap",
+        "incomeRatioSum", "incomeRatioSuppliers", "incomeRatioDividends", "incomeRatioTreasury",
+        "baseRate", "utilMultiplier", "utilMultiplierJump"
+      ];
+      return `<div class="table-scroll"><table class="parameter-history-table"><thead><tr>${keys.map((key) => `<th>${esc(parameterHistoryLabel(key))}</th>`).join("")}</tr></thead><tbody>${rows.map((row) => `<tr>${keys.map((key) => `<td>${parameterHistoryValue(key, row[key], symbol)}</td>`).join("")}</tr>`).join("")}</tbody></table></div>`;
+    }
+    function parameterHistoryLabel(key) {
+      const labels = {
+        timestamp: "Effective at (UTC)",
+        txHash: "Transaction hash",
+        borrowCap: "Utilization cap",
+        kink: "Optimal utilization (kink)",
+        utilMultiplier: "Utilization multiplier",
+        utilMultiplierJump: "Post-kink multiplier"
+      };
+      return labels[key] || label(key);
+    }
+    function parameterHistoryValue(key, value, symbol) {
+      if (key === "timestamp") return esc(String(value || ""));
+      if (key === "txHash") return `<code title="${esc(value || "")}">${esc(value || "n/a")}</code>`;
+      if (key === "supplyCap") return value == null ? "No cap reported" : `<span title="${esc(String(value))}">${esc(assetAmount(value, symbol))}</span>`;
+      if (key === "borrowCap") return value == null ? "No cap reported (100% effective)" : `<span title="${esc(String(value))}">${esc(pct(value))}</span>`;
+      if (/APR$|APY$/.test(key) || key === "kink") return `<span title="${esc(String(value))}">${esc(pct(value))}</span>`;
+      return `<span title="${esc(String(value ?? ""))}">${esc(parameterScalar(value))}</span>`;
     }
     function table(rows, keys) {
       if (!rows.length) return "<p>No rows.</p>";

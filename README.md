@@ -50,6 +50,20 @@ To rebuild the single-file HTML application (`data/liqwid/liqwid-analysis-app.ht
 npm run build:app
 ```
 
+### Refreshing All Official Data
+
+To fetch every market from the earliest configured date, preserve the new raw API
+captures, and fully regenerate clean and computed outputs:
+```bash
+npm run refresh:data
+node scripts/recompute_computed_datasets.js data/liqwid
+```
+If a full replay is interrupted by endpoint rate limiting, preserve the last
+successful local baseline and complete only its missing/current observations with:
+```bash
+node scripts/refresh_official_data.js data/liqwid --resume
+```
+
 ### Running Tests
 
 Run the full automated test suite:
@@ -61,7 +75,7 @@ npm test
 
 To re-generate the portable `.zip` data archive (`liqwid-data.zip`) and its CSV manifest (`liqwid-portable-manifest.csv`) from local data:
 ```bash
-python scripts/rebuild_data_archive.py --data-root data/liqwid
+npm run rebuild:data-archive
 ```
 
 ## Data Source

@@ -7,7 +7,7 @@ import { fileURLToPath } from "node:url";
 const projectRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 
 test("standalone app is one zero-data, folder-backed, client-only HTML workflow", async () => {
-  const [html, generator, workflow, directoryStore, completeWorkflow, fullAnalysis, dataStatus, currentExposure, interactiveChart, chartData, breakdownChart, recentDataLocation, packageText] = await Promise.all([
+  const [html, generator, workflow, directoryStore, completeWorkflow, fullAnalysis, dataStatus, currentExposure, marketParameterHistory, interactiveChart, chartData, breakdownChart, recentDataLocation, packageText] = await Promise.all([
     fs.readFile(path.join(projectRoot, "data", "liqwid", "liqwid-analysis-app.html"), "utf8"),
     fs.readFile(path.join(projectRoot, "scripts", "static_app_generator.py"), "utf8"),
     fs.readFile(path.join(projectRoot, "src", "browser", "dataWorkflow.js"), "utf8"),
@@ -16,6 +16,7 @@ test("standalone app is one zero-data, folder-backed, client-only HTML workflow"
     fs.readFile(path.join(projectRoot, "src", "browser", "fullAnalysis.js"), "utf8"),
     fs.readFile(path.join(projectRoot, "src", "browser", "dataStatus.js"), "utf8"),
     fs.readFile(path.join(projectRoot, "src", "browser", "currentExposureAnalysis.js"), "utf8"),
+    fs.readFile(path.join(projectRoot, "src", "browser", "marketParameterHistory.js"), "utf8"),
     fs.readFile(path.join(projectRoot, "src", "browser", "interactiveChart.js"), "utf8"),
     fs.readFile(path.join(projectRoot, "src", "browser", "chartData.js"), "utf8"),
     fs.readFile(path.join(projectRoot, "src", "browser", "interactiveBreakdownChart.js"), "utf8"),
@@ -23,7 +24,7 @@ test("standalone app is one zero-data, folder-backed, client-only HTML workflow"
     fs.readFile(path.join(projectRoot, "package.json"), "utf8")
   ]);
   const packageJson = JSON.parse(packageText);
-  const productionSource = `${html}\n${generator}\n${workflow}\n${directoryStore}\n${completeWorkflow}\n${fullAnalysis}\n${dataStatus}\n${currentExposure}\n${interactiveChart}\n${chartData}\n${breakdownChart}\n${recentDataLocation}\n${packageText}`;
+  const productionSource = `${html}\n${generator}\n${workflow}\n${directoryStore}\n${completeWorkflow}\n${fullAnalysis}\n${dataStatus}\n${currentExposure}\n${marketParameterHistory}\n${interactiveChart}\n${chartData}\n${breakdownChart}\n${recentDataLocation}\n${packageText}`;
   const payloadMatch = html.match(/<script id="payload" type="application\/json">([\s\S]*?)<\/script>/);
   const embedded = JSON.parse(payloadMatch[1]);
 
@@ -139,23 +140,39 @@ test("standalone app is one zero-data, folder-backed, client-only HTML workflow"
   assert.match(html, /position:\s*sticky[\s\S]{0,160}?top:\s*0/);
   for (const section of [
     "Liquidity", "Liquidity & Rates", "Debt flows", "Interest flows", "Revenue", "Liquidations", "Exposure", "Market impact", "Participation and concentration",
-    "Health"
+    "Health", "Parameters History", "Risk & Parameters"
   ]) {
     assert.ok(html.includes(section), `standalone app is missing section tab ${section}`);
   }
   for (const viewId of [
     "overview", "protocolDebtFlows", "protocolInterestFlows", "revenue", "liquidations", "exposure", "impact", "protocolParticipation",
-    "marketOverview", "marketRepayments", "marketInterest", "marketRevenue", "marketHealth", "marketParticipation"
+    "protocolParameters", "marketOverview", "marketRepayments", "marketInterest", "marketRevenue", "marketHealth", "marketParticipation", "marketParameters"
   ]) {
     assert.match(html, new RegExp(`<section id="${viewId}" class="view`), `standalone app is missing ${viewId}`);
   }
   assert.match(html, /What is the protocol's current scale and how fully is its capital being used\?/);
   assert.match(html, /Is new debt forming faster than borrowers are repaying it\?/);
-  assert.match(html, /Is interest being repaid as it accrues\?/);
+  assert.match(html, /Are reported interest repayments keeping pace with accrual\?/);
   assert.match(html, /Where is current debt most vulnerable to market or collateral stress\?/);
   assert.match(html, /Which markets contribute most to protocol-wide debt, interest, repayments, positive gaps, and stress\?/);
   assert.match(html, /Where is this market's capital, and how expensive or constrained is borrowing\?/);
   assert.match(html, /When does debt repayment activity accelerate, fade, or stop\?/);
+  assert.match(html, /\["marketParticipation", "Participation and concentration"\],\s*\["marketParameters", "Parameters History"\]\s*\]/);
+  assert.match(html, /\["protocolLqToken", "LQ token & staking"\],\s*\["protocolParameters", "Risk & Parameters"\]\s*\]/);
+  assert.match(html, /function renderProtocolParameters\(\)/);
+  assert.match(html, /Protocol parameter landscape/);
+  assert.match(html, /Borrow APR curve atlas/);
+  assert.match(html, /Current capacity headroom/);
+  assert.match(html, /Current market guardrails/);
+  assert.match(html, /Current collateral risk matrix/);
+  assert.match(html, /Borrow-weighted rate policy/);
+  assert.match(html, /Borrow-weighted income allocation/);
+  assert.match(html, /Exact governance updates across markets/);
+  assert.match(html, /function renderMarketParameters\(\)/);
+  assert.match(html, /Current rate curve/);
+  assert.match(html, /\(1 - utilization\) \* baseSupplierAPY \+ utilization \* borrowerAPR \* supplierSplit/);
+  assert.match(html, /Exact governance updates/);
+  assert.match(html, /syntheticStepBoundary/);
   const liquidationRenderSource = generator.match(/function renderLiquidations\(\)[\s\S]*?function renderCurrentExposure\(\)/)?.[0] || "";
   assert.doesNotMatch(liquidationRenderSource, /apiScope|analytics\.overview exposes liquidationProfitInUsd|Per-market repayment intensity remains|never presented as confirmed liquidation activity/);
   assert.doesNotMatch(generator, /freshnessNotice\(|chartSourceNote\(|analysisStrip\(/);
@@ -166,7 +183,7 @@ test("standalone app is one zero-data, folder-backed, client-only HTML workflow"
   assert.match(html, /function renderRevenue\(\)/);
   assert.match(html, /<h2>Protocol revenue<\/h2>/);
   assert.match(html, /metric-period/);
-  assert.match(html, /Current-valued interest gap/);
+  assert.match(html, /Current-valued cumulative reported interest-flow difference/);
   assert.match(html, /cumulativeInterestGapInUsd/);
   assert.match(html, /Cumulative observed-key borrow concentration/);
   assert.match(html, /marketBorrowConcentration/);
@@ -241,7 +258,7 @@ test("standalone app is one zero-data, folder-backed, client-only HTML workflow"
   const marketViewSource = generator.match(/function renderMarketOverview\(\)\s*\{[\s\S]*?function renderImpact\(\)/)?.[0] || "";
   assert.ok(marketViewSource.indexOf('"marketCapital"') < marketViewSource.indexOf('"marketRates"'));
   assert.ok(marketViewSource.indexOf('"marketRates"') < marketViewSource.indexOf('"marketDebtRepayment"'));
-  assert.ok(marketViewSource.indexOf('"marketRevenueMonthly"') < marketViewSource.indexOf('"marketHealthBuckets"'));
+  assert.ok(marketViewSource.indexOf('"marketAttributedCollectedRevenueDaily"') < marketViewSource.indexOf('"marketHealthBuckets"'));
   assert.ok(marketViewSource.indexOf('"marketHealthBuckets"') < marketViewSource.indexOf('"marketHealthHistoryDebt"'));
   assert.ok(marketViewSource.indexOf('"marketHealthHistoryDebt"') < marketViewSource.indexOf('"marketBorrowConcentration"'));
   assert.ok(marketViewSource.indexOf('"marketBorrowConcentration"') < marketViewSource.indexOf('"marketCollateralizedSupplyConcentration"'));
@@ -258,7 +275,7 @@ test("standalone app is one zero-data, folder-backed, client-only HTML workflow"
   assert.ok(protocolDebtView.indexOf('"protocolDebtGap"') < protocolDebtView.indexOf('"protocolDebtRepaymentDistribution"'));
   assert.match(generator, /chartId === "protocolDebtCoverage"[\s\S]{0,300}?debtCoverage7d[\s\S]{0,100}?debtCoverage30d[\s\S]{0,100}?debtCoverage90d/);
   assert.match(protocolInterestView, /class="kpis"/);
-  assert.match(protocolInterestView, /Current-valued interest gap/);
+  assert.match(protocolInterestView, /Current-valued cumulative reported interest-flow difference/);
   assert.match(protocolInterestView, /Current-valued interest coverage · trailing 90d/);
   assert.match(protocolInterestView, /Ongoing days without interest repayments/);
   assert.ok(protocolInterestView.indexOf('"protocolInterestRolling"') < protocolInterestView.indexOf('"protocolInterestCoverage"'));
@@ -316,9 +333,34 @@ test("standalone app is one zero-data, folder-backed, client-only HTML workflow"
     assert.ok(marketInterestView.indexOf('"marketInterestRepaymentDistribution"') < marketInterestView.indexOf('"marketInterestCumulative"'));
     assert.ok(marketInterestView.indexOf('"marketInterestCumulative"') < marketInterestView.indexOf('"marketInterestCumulativeGapAsset"'));
     assert.ok(marketInterestView.indexOf('"marketInterestCumulativeGapAsset"') < marketInterestView.indexOf('"marketInterestCumulativeGap"'));
-    assert.ok(marketInterestView.indexOf('"marketInterestCumulativeGap"') < marketInterestView.indexOf('"marketInterestGapAsset"'));
-    assert.ok(marketInterestView.indexOf('"marketInterestGapAsset"') < marketInterestView.indexOf('"marketInterestGap"'));
+  assert.ok(marketInterestView.indexOf('"marketInterestCumulativeGap"') < marketInterestView.indexOf('"marketInterestGapAsset"'));
+  assert.ok(marketInterestView.indexOf('"marketInterestGapAsset"') < marketInterestView.indexOf('"marketInterestGap"'));
   }
+
+  const marketRevenueView = generator.match(/function renderMarketRevenue\(\)[\s\S]*?function renderMarketHealth\(\)/)?.[0] || "";
+  assert.match(marketRevenueView, /collected, what accrued, and what current borrowing implies/i);
+  assert.match(marketRevenueView, /metricPeriodGroup\("Year-to-date collected market revenue"/);
+  assert.match(marketRevenueView, /kpi\("YTD attributed collected revenue"/);
+  assert.match(marketRevenueView, /kpi\("Attributed interest revenue collected"/);
+  assert.match(marketRevenueView, /kpi\("Market origination fees collected"/);
+  assert.match(marketRevenueView, /metricPeriodGroup\("Directly observed origination revenue"/);
+  assert.match(marketRevenueView, /kpi\("Trailing 90-day origination revenue", usd\(market\.collectedOriginationRevenue90dInUsd\)/);
+  assert.match(marketRevenueView, /kpi\("All-time origination revenue", usd\(market\.collectedOriginationRevenueInUsd\)/);
+  assert.match(marketRevenueView, /"Daily attributed collected revenue", "marketAttributedCollectedRevenueDaily"/);
+  assert.match(marketRevenueView, /"Monthly attributed collected revenue", "marketAttributedCollectedRevenueMonthly"/);
+  assert.match(marketRevenueView, /metricPeriodGroup\("Year-to-date accrued interest allocation"/);
+  assert.match(marketRevenueView, /kpi\("Accrued protocol\/reserve interest revenue"/);
+  assert.match(marketRevenueView, /kpi\("Accrued supplier interest income"/);
+  assert.match(marketRevenueView, /"Daily accrued interest allocation", "marketAccruedInterestAllocationDaily"/);
+  assert.match(marketRevenueView, /"Monthly accrued interest allocation", "marketAccruedInterestAllocationMonthly"/);
+  assert.match(marketRevenueView, /metricPeriodGroup\("Current annualized interest run rate"/);
+  assert.match(marketRevenueView, /kpi\("Annualized protocol\/reserve interest revenue"/);
+  assert.match(marketRevenueView, /"Projected annualized interest income", "marketProjectedAnnualizedInterestIncome"/);
+  assert.match(marketRevenueView, /metricPeriodGroup\("Interest repayments - not revenue"/);
+  assert.match(marketRevenueView, /kpi\("YTD interest repaid activity", usd\(market\.ytdInterestRepaidActivityInUsd\)/);
+  assert.match(marketRevenueView, /"Monthly interest repayments \(not revenue\)", "marketInterestRepaymentActivityMonthly"/);
+  assert.doesNotMatch(marketRevenueView, /retained-interest amount remains unavailable/);
+  assert.doesNotMatch(marketRevenueView, /Gross realized fee flow|liquidation/i);
 
   for (const boxplotId of [
     "protocolDebtRepaymentDistribution",
@@ -330,17 +372,57 @@ test("standalone app is one zero-data, folder-backed, client-only HTML workflow"
   }
 
   const revenueView = generator.match(/function renderRevenue\(\)[\s\S]*?function renderLiquidations\(\)/)?.[0] || "";
-  assert.match(revenueView, /metricPeriodGroup\("Cumulative allocation"/);
+  assert.match(revenueView, /metricPeriodGroup\("Year-to-date collected revenue", ytdCollectionPeriod/);
+  assert.match(revenueView, /kpi\("YTD collected revenue", usd\(summary\.ytdCollectedRevenueInUsd\)/);
+  assert.match(revenueView, /kpi\("Revenue from repaid interest", usd\(summary\.ytdCollectedInterestRevenueInUsd\)/);
+  assert.match(revenueView, /kpi\("Loan origination fees", usd\(summary\.ytdCollectedOriginationRevenueInUsd\)/);
+  assert.match(revenueView, /chartSection\("Collected revenue"/);
+  assert.match(revenueView, /kpi\("Collected revenue"/);
+  assert.match(revenueView, /kpi\("Interest revenue collected"/);
+  assert.match(revenueView, /kpi\("Origination fees collected"/);
+  assert.match(revenueView, /periodLabel\(summary\.collectedCoverageFromDate, summary\.collectedCoverageToDate\)/);
+  assert.match(revenueView, /"Daily collected revenue"/);
+  assert.match(revenueView, /"Monthly collected revenue"/);
+  assert.doesNotMatch(revenueView, /liquidationProfit/i);
+  assert.match(revenueView, /metricPeriodGroup\("All-time collected revenue"/);
+  assert.match(revenueView, /metricPeriodGroup\("Cumulative accrued DAO allocation"/);
+  assert.match(revenueView, /metricPeriodGroup\("Cumulative accrued LQ-staker allocation"/);
   assert.match(revenueView, /metricPeriodGroup\("Recent DAO run rate"/);
   assert.doesNotMatch(revenueView, /kpi\("Revenue · trailing 90d"/);
   assert.match(revenueView, /kpi\("Annualized run rate", usd\(summary\.allocatedProtocolRevenueAnnualizedRunRateInUsd\)/);
-  assert.match(revenueView, /Trailing 90-day revenue: \\?\$\{usd\(summary\.allocatedProtocolRevenueTrailing90DaysInUsd\)\}/);
+  assert.match(revenueView, /"Trailing 90-day revenue: " \+ usd\(summary\.allocatedProtocolRevenueTrailing90DaysInUsd\)/);
+  assert.doesNotMatch(revenueView, /Trailing 90-day revenue: \\?\$\{/);
   assert.doesNotMatch(revenueView, /365\.25\s*\/\s*90/);
   assert.doesNotMatch(revenueView, /kpi\("Daily allocation coverage"/);
+  assert.match(revenueView, /periodLabel\(\s*summary\.cumulativeAllocationFromDate,\s*summary\.cumulativeAllocationToDate\s*\)/);
+  assert.match(revenueView, /integer\(summary\.completeAllocationDays\).*complete days/);
   const runRateIdx = revenueView.indexOf('"Historical annualized DAO revenue run rate"');
-  const monthlyIdx = revenueView.indexOf('"Monthly allocated protocol revenue"');
-  const dailyIdx = revenueView.indexOf('"Daily DAO and LQ-staker revenue allocation"');
-  assert.ok(runRateIdx >= 0 && monthlyIdx > runRateIdx && dailyIdx > monthlyIdx, "Revenue charts must be ordered: run rate, monthly allocation, daily allocation");
+  const ytdCollectedGroupIdx = revenueView.indexOf('metricPeriodGroup("Year-to-date collected revenue"');
+  const allTimeCollectedGroupIdx = revenueView.indexOf('metricPeriodGroup("All-time collected revenue"');
+  const collectedSectionIdx = revenueView.indexOf('chartSection("Collected revenue"');
+  const collectedDailyIdx = revenueView.indexOf('"Daily collected revenue"');
+  const collectedMonthlyIdx = revenueView.indexOf('"Monthly collected revenue"');
+  const daoSectionIdx = revenueView.indexOf('chartSection("Accrued DAO revenue"');
+  const daoMonthlyIdx = revenueView.indexOf('"Monthly DAO revenue allocation"');
+  const daoDailyIdx = revenueView.indexOf('"Daily DAO revenue allocation"');
+  const stakerSectionIdx = revenueView.indexOf('chartSection("LQ-staker revenue"');
+  const stakerMonthlyIdx = revenueView.indexOf('"Monthly LQ-staker revenue allocation"');
+  const stakerDailyIdx = revenueView.indexOf('"Daily LQ-staker revenue allocation"');
+  assert.ok(
+    ytdCollectedGroupIdx >= 0
+      && allTimeCollectedGroupIdx > ytdCollectedGroupIdx
+      && collectedSectionIdx > allTimeCollectedGroupIdx
+      && collectedDailyIdx > collectedSectionIdx
+      && collectedMonthlyIdx > collectedDailyIdx
+      && daoSectionIdx > collectedMonthlyIdx
+      && runRateIdx > daoSectionIdx
+      && daoMonthlyIdx > runRateIdx
+      && daoDailyIdx > daoMonthlyIdx
+      && stakerSectionIdx > daoDailyIdx
+      && stakerMonthlyIdx > stakerSectionIdx
+      && stakerDailyIdx > stakerMonthlyIdx,
+    "Revenue charts must place collected revenue first, then DAO accruals, then the separate LQ-staker section"
+  );
 
   const liquidationViewWithPeriod = generator.match(/function renderLiquidations\(\)[\s\S]*?function renderCurrentExposure\(\)/)?.[0] || "";
   assert.match(liquidationViewWithPeriod, /periodLabel\(fullPeriod\.fromDate, fullPeriod\.toDate\)/);
@@ -445,9 +527,12 @@ test("standalone app is one zero-data, folder-backed, client-only HTML workflow"
   assert.match(html, /30-day average/);
   assert.match(html, /Ongoing days without debt repayments/);
   assert.match(html, /Debt accrued and repaid/);
-  assert.match(html, /Daily DAO and LQ-staker revenue allocation/);
-  assert.match(html, /Monthly allocated protocol revenue/);
-  assert.match(html, /chartId === "protocolRevenueAllocationMonthly"[\s\S]{0,300}?calendarPeriod: "month"/);
+  assert.match(html, /Daily DAO revenue allocation/);
+  assert.match(html, /Monthly DAO revenue allocation/);
+  assert.match(html, /Daily LQ-staker revenue allocation/);
+  assert.match(html, /Monthly LQ-staker revenue allocation/);
+  assert.match(html, /chartId === "protocolDaoRevenueAllocationMonthly"[\s\S]{0,300}?calendarPeriod: "month"/);
+  assert.match(html, /chartId === "protocolStakerRevenueAllocationMonthly"[\s\S]{0,300}?calendarPeriod: "month"/);
   assert.match(html, /chartObservationLabel\(row, state\.calendarPeriod\)/);
   assert.match(html, /Historical annualized DAO revenue run rate/);
   assert.match(html, /latest 90 consecutive complete UTC days/i);
@@ -456,9 +541,11 @@ test("standalone app is one zero-data, folder-backed, client-only HTML workflow"
   for (const source of [html, generator]) {
     assert.doesNotMatch(source, /Protocol-revenue equivalent|Annualized protocol-revenue yield/);
     assert.doesNotMatch(source, /estimatedProtocolRevenue|currentParameterProtocolInterestShare|grossAccruedRevenueProxy/);
-    assert.match(source, /Official DAO revenue · market level/);
-    assert.match(source, /does not expose recipient allocation by market/i);
-    assert.match(source, /fee-paying activity, not official DAO revenue/i);
+    assert.doesNotMatch(source, /Official DAO revenue · market level|Gross realized fee flow/);
+    assert.match(source, /Attributed interest revenue collected/);
+    assert.match(source, /parameter-weighted market repayment/i);
+    assert.match(source, /Accrued protocol\/reserve interest revenue/);
+    assert.match(source, /interest repayments \(not revenue\)/i);
   }
   assert.match(html, /Protocol participation/);
   assert.match(html, /Active-debt positions over saved observations/);
@@ -580,7 +667,7 @@ test("standalone app is one zero-data, folder-backed, client-only HTML workflow"
   for (const chartId of [
     "protocolParticipationLoans", "protocolParticipationKeys", "protocolHealthHistoryCounts", "protocolHealthHistoryDebt",
     "protocolCapital", "protocolUtilization", "protocolDebtRepayment", "protocolRepaymentDrySpells", "protocolDebtDaily", "protocolDebtRolling", "protocolDebtCumulative", "protocolDebtCumulativeGap", "protocolDebtGap", "protocolDebtCoverage", "protocolInterestDaily",
-    "protocolInterestRolling", "protocolInterestCoverage", "protocolInterestDaily", "protocolInterestRepayment", "protocolInterestDrySpells", "protocolInterestCumulative", "protocolInterestCumulativeGap", "protocolInterestGap", "protocolRevenueAllocationDaily", "protocolRevenueAllocationMonthly", "protocolRevenueRunRate",
+    "protocolInterestRolling", "protocolInterestCoverage", "protocolInterestDaily", "protocolInterestRepayment", "protocolInterestDrySpells", "protocolInterestCumulative", "protocolInterestCumulativeGap", "protocolInterestGap", "protocolCollectedRevenueDaily", "protocolCollectedRevenueMonthly", "protocolDaoRevenueAllocationDaily", "protocolDaoRevenueAllocationMonthly", "protocolStakerRevenueAllocationDaily", "protocolStakerRevenueAllocationMonthly", "protocolRevenueRunRate",
     "protocolLqPrice", "protocolLqStaking", "protocolLqTreasury",
     "liquidationMonthly", "liquidationDaily", "liquidationDrySpell",
     "exposureMarketPressure", "exposureFlowComparison", "exposureBorrowedMarkets", "exposureCollateralBands",
@@ -589,7 +676,9 @@ test("standalone app is one zero-data, folder-backed, client-only HTML workflow"
     "marketParticipationLoans", "marketParticipationKeys", "marketHealthHistoryCounts", "marketHealthHistoryDebt",
     "marketCapital", "marketUtilization", "marketDebtRepayment", "marketDebtCoverageOperandsAsset", "marketDebtCoverageOperandsUsd", "marketDebtCoverage", "marketDebtGapAsset", "marketDebtGap", "marketDebtCumulativeGapAsset", "marketDebtCumulativeGap", "marketRepaymentEvents", "marketRepaymentDrySpells", "marketDebtRepaymentDistribution", "marketInterestDaily",
     "marketInterestCoverageOperandsAsset", "marketInterestCoverageOperandsUsd", "marketInterestCumulative", "marketInterestCumulativeGapAsset", "marketInterestCumulativeGap", "marketInterestGapAsset", "marketInterestGap", "marketInterestCoverage", "marketInterestDrySpells", "marketInterestRepaymentDistribution", "marketRates", "marketLiquidityPressure",
-    "marketRevenueMonthly", "marketHealthBuckets", "marketBorrowConcentration", "marketCollateralizedSupplyConcentration", "impactRiskRanking", "impactMarketMap", "impactBorrowConcentrationComparison", "impactCollateralizedSupplyConcentrationComparison",
+    "marketAttributedCollectedRevenueDaily", "marketAttributedCollectedRevenueMonthly", "marketAccruedInterestAllocationDaily", "marketAccruedInterestAllocationMonthly", "marketProjectedAnnualizedInterestIncome", "marketInterestRepaymentActivityMonthly", "marketHealthBuckets", "marketBorrowConcentration", "marketCollateralizedSupplyConcentration",
+    "marketParameterRateCurve", "marketParameterBorrowRates", "marketParameterSupplyRates", "marketParameterUtilizationLimits", "marketParameterSupplyCap", "marketParameterIncomeAllocation", "marketParameterModelCoefficients",
+    "impactRiskRanking", "impactMarketMap", "impactBorrowConcentrationComparison", "impactCollateralizedSupplyConcentrationComparison",
     "impactInterestContributions", "impactGapContributions",
     "impactInterestRepaymentContributions", "impactDebtContributions", "impactRepaymentContributions", "impactDebtGapContributions",
     "impactCurrentContributions", "impactLoanState"
@@ -597,7 +686,9 @@ test("standalone app is one zero-data, folder-backed, client-only HTML workflow"
     const panelPattern = new RegExp(`(?:interactiveChartPanel|interactiveBreakdownPanel)\\([^\\n]*"${chartId}"`);
     assert.match(html, panelPattern, `standalone app is missing interactive chart ${chartId}`);
   }
-  assert.match(generator, /chartId === "marketDebtCumulativeGap"[\s\S]{0,260}?key: "cumulativeDebtGap"[\s\S]{0,260}?value: 0[\s\S]{0,120}?Debt-flow parity/);
+  assert.match(generator, /chartId:\s*"marketParameterRateCurve"[\s\S]{0,1000}?fixedXDomain:\s*\{\s*min:\s*0,\s*max:\s*1\s*\}/);
+  assert.match(generator, /chartId:\s*"marketParameterRateCurve"[\s\S]{0,1400}?xReferenceLines:/);
+  assert.match(generator, /chartId === "marketDebtCumulativeGap"[\s\S]{0,260}?key: "cumulativeDebtGap"[\s\S]{0,260}?value: 0[\s\S]{0,160}?Zero reported flow difference/);
   assert.match(generator, /chartId === "marketDebtCumulativeGapAsset"[\s\S]{0,260}?key: "cumulativeDebtGapAsset"/);
   assert.match(generator, /chartId === "marketDebtCoverageOperandsAsset"[\s\S]{0,260}?debtAccruedAsset30d[\s\S]{0,200}?debtRepaidAsset30d/);
   assert.match(generator, /chartId === "marketDebtCoverageOperandsUsd"[\s\S]{0,260}?debtAccrued30d[\s\S]{0,200}?debtRepaid30d/);
@@ -764,10 +855,29 @@ test("standalone bundled runtime treats zero liquidation gaps and failures as su
   );
   assert.equal(liquidationCard.value, "Complete daily coverage");
   assert.equal(liquidationCheck.value, "All covered months reconcile");
-  assert.equal(status.headline.failedChecks, 0);
+  assert.equal(
+    [liquidationCard, liquidationCheck, liquidationEvidence].filter(
+      (item) => item.status === "fail",
+    ).length,
+    0,
+  );
 });
 
-test("gap help explains native-first calculation and market-level USD aggregation", async () => {
+test("Data status renders textual states and expandable per-market operands accessibly", async () => {
+  const generator = await fs.readFile(path.join(projectRoot, "scripts", "static_app_generator.py"), "utf8");
+
+  assert.match(generator, /id="dataStatusButton"[^>]*aria-haspopup="dialog"[^>]*aria-controls="dataStatusDialog"/);
+  assert.match(generator, /function dataStatusLabel\(status\)/);
+  assert.match(generator, /class="data-status-badge/);
+  assert.match(generator, /function dataStatusOperands\(operands\)/);
+  assert.match(generator, /Show \$\{integer\(operands\.length\)\} per-market operands/);
+  assert.match(generator, /Market borrow \(USD\)/);
+  assert.match(generator, /Adjusted loan debt \(USD\)/);
+  assert.match(generator, /\.data-status-headline\.limited/);
+  assert.match(generator, /grid-template-columns:\s*repeat\(auto-fit,\s*minmax\(210px,\s*1fr\)\)/);
+});
+
+test("flow-difference help explains reconciliation, repricing, and semantic limits", async () => {
   const [html, generator] = await Promise.all([
     fs.readFile(path.join(projectRoot, "data", "liqwid", "liqwid-analysis-app.html"), "utf8"),
     fs.readFile(path.join(projectRoot, "scripts", "static_app_generator.py"), "utf8")
@@ -776,11 +886,17 @@ test("gap help explains native-first calculation and market-level USD aggregatio
   for (const source of [html, generator]) {
     assert.match(source, /summarizeDebtFlowReconciliation/);
     assert.match(source, /no direct debt-accrued flow/i);
-    assert.match(source, /repayment is added back before the inferred flow is compared with reported repayment/i);
+    assert.match(source, /Unclassified Reduction = max\(0, -\(Borrow Change \+ Reported Repayment\)\)/);
+    assert.match(source, /Borrow Change = Inferred Formation - Reported Repayment - Unclassified Reduction/);
+    assert.match(source, /does not identify the cause of an unclassified reduction/i);
     assert.match(source, /calculated in each market's asset units before USD valuation/i);
     assert.match(source, /USD market values are summed; unlike asset units are never added/i);
-    assert.match(source, /their difference does not define the gap/i);
-    assert.match(source, /not an extra balance to add to outstanding borrow/i);
+    assert.match(source, /can move solely because the asset price changes/i);
+    assert.match(source, /Current borrow is the remaining principal measure/i);
+    assert.match(source, /does not expose a current interest receivable/i);
     assert.match(source, /liquidation profit is protocol revenue, not liquidated principal/i);
+    assert.match(source, /cumulativeUnclassifiedBorrowReduction/);
+    assert.match(source, /Current-valued cumulative reported debt-flow difference/);
+    assert.match(source, /Current-valued cumulative reported interest-flow difference/);
   }
 });

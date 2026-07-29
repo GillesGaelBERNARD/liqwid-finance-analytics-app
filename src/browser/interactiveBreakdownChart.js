@@ -980,6 +980,13 @@ function breakdownRenderScatterState(container, state) {
     return;
   }
 
+  const requestedFixedXDomain = chartFixedYDomain(options.fixedXDomain);
+  const fixedXDomain = requestedFixedXDomain
+    && (xScaleType === "linear"
+      || (xScaleType === "log" && requestedFixedXDomain.min > 0)
+      || (xScaleType === "log1p" && requestedFixedXDomain.min >= 0))
+    ? requestedFixedXDomain
+    : null;
   const fixedYDomain = chartFixedYDomain(options.fixedYDomain);
   const supportsYScale = !fixedYDomain;
   const width = Math.max(breakdownChartMinimumWidth(options.minWidth), Math.round(Number(container.clientWidth) || 900));
@@ -989,11 +996,14 @@ function breakdownRenderScatterState(container, state) {
   const plotHeight = height - margin.top - margin.bottom;
   const xDataMin = Math.min(...points.map(point => point.x));
   const xDataMax = Math.max(...points.map(point => point.x));
-  let xMin = xDataMin;
-  let xMax = xDataMax;
+  let xMin = fixedXDomain?.min ?? xDataMin;
+  let xMax = fixedXDomain?.max ?? xDataMax;
   let yMin = Math.min(0, ...points.map(point => point.y));
   let yMax = Math.max(0, ...points.map(point => point.y));
-  if (xScaleType === "log") {
+  if (fixedXDomain) {
+    // Preserve the caller's semantic X domain exactly (for example, 0-100%
+    // utilization) instead of padding it around the observed points.
+  } else if (xScaleType === "log") {
     if (xMin === xMax) {
       xMin /= Math.sqrt(10);
       xMax *= Math.sqrt(10);
@@ -1035,6 +1045,19 @@ function breakdownRenderScatterState(container, state) {
   const transformedXMax = transformX(xMax);
   const scaleX = value => margin.left + (transformX(value) - transformedXMin) / (transformedXMax - transformedXMin) * plotWidth;
   const scaleY = chartCreateYScale(yDomain, yScaleMode, ySymlogConstant, margin.top, height - margin.bottom).map;
+  const xReferenceLines = (Array.isArray(options.xReferenceLines) ? options.xReferenceLines : [])
+    .flatMap((reference, index) => {
+      const value = breakdownFiniteNumber(reference?.value);
+      if (value == null || value < xMin || value > xMax
+          || (xScaleType === "log" && value <= 0)
+          || (xScaleType === "log1p" && value < 0)) return [];
+      return [{
+        value,
+        label: String(reference?.label || breakdownFormat(xFormatter, value)),
+        color: breakdownSafeColor(reference?.color || "#dceeff"),
+        dash: String(reference?.dash || (index % 2 ? "5 4" : ""))
+      }];
+    });
   const sizeValues = points.map(point => point.size).filter(value => value != null && value >= 0);
   const sizeMin = sizeValues.length ? Math.min(...sizeValues) : 0;
   const sizeMax = sizeValues.length ? Math.max(...sizeValues) : 0;
@@ -1070,6 +1093,13 @@ function breakdownRenderScatterState(container, state) {
       return `<line x1="${margin.left}" x2="${width - margin.right}" y1="${breakdownRound(y)}" y2="${breakdownRound(y)}" stroke="rgba(36,72,102,.52)"/><text x="${margin.left - 10}" y="${breakdownRound(y + 4)}" text-anchor="end" fill="#8fa9bf" font-size="11">${breakdownEscape(breakdownFormat(yFormatter, value))}</text>`;
     })
   ].join("");
+  const xReferenceMarkup = xReferenceLines.map((reference, index) => {
+    const x = scaleX(reference.value);
+    const labelX = breakdownClamp(x + (index % 2 ? 7 : -7), margin.left + 8, width - margin.right - 8);
+    const anchor = labelX >= x ? "start" : "end";
+    const dash = reference.dash ? ` stroke-dasharray="${breakdownEscape(reference.dash)}"` : "";
+    return `<g class="breakdown-scatter-x-reference" data-breakdown-x-reference="${breakdownEscape(reference.value)}"><line x1="${breakdownRound(x)}" x2="${breakdownRound(x)}" y1="${margin.top}" y2="${height - margin.bottom}" stroke="${reference.color}" stroke-opacity=".82" stroke-width="1.5"${dash}/><text x="${breakdownRound(labelX)}" y="${margin.top + 14 + index * 15}" text-anchor="${anchor}" fill="${reference.color}" font-size="10.5" font-weight="700">${breakdownEscape(reference.label)}</text></g>`;
+  }).join("");
 
   const isSeriesEmphasized = key => !seriesKey || state.activeKeys.has(key);
   const mutedSeriesColor = breakdownSafeColor(options.mutedSeriesColor || "#dceeff");
@@ -1107,7 +1137,7 @@ function breakdownRenderScatterState(container, state) {
       const yText = breakdownFormat(yFormatter, point.y);
       const sizeText = sizeKey ? (point.size == null ? "n/a" : breakdownFormat(sizeFormatter, point.size)) : null;
       const colorText = colorKey ? (point.color == null ? "n/a" : breakdownFormat(colorFormatter, point.color)) : null;
-      const parts = [seriesKey ? `${point.seriesLabel} Â· ${point.label}` : `${point.label}`, `${xLabel}: ${xText}`, `${yLabel}: ${yText}`];
+      const parts = [seriesKey ? `${point.seriesLabel} / ${point.label}` : `${point.label}`, `${xLabel}: ${xText}`, `${yLabel}: ${yText}`];
       if (sizeKey) parts.push(`${sizeLabel}: ${sizeText}`);
       if (colorKey) parts.push(`${colorLabel}: ${colorText}`);
       const label = parts.join(", ");
@@ -1147,13 +1177,15 @@ function breakdownRenderScatterState(container, state) {
     encodingItems.push(`<div class="breakdown-scatter-encoding" aria-label="Color, ${breakdownEscape(colorLabel)}: ${breakdownEscape(colorDomain)}" style="display:flex;align-items:center;gap:7px"><span style="color:#a9bfd3"><strong style="color:#dceeff">Color</strong> &middot; ${breakdownEscape(colorLabel)}</span><i aria-hidden="true" style="display:inline-block;width:72px;height:8px;border-radius:999px;background:linear-gradient(90deg,${lowColor},${highColor})"></i><span data-breakdown-color-readout data-breakdown-color-domain="${breakdownEscape(colorDomain)}" style="color:#8fa9bf">${breakdownEscape(colorDomain)}</span></div>`);
   }
   const encodingLegend = encodingItems.length ? `<div class="breakdown-scatter-legends" role="group" aria-label="Scatter encodings" style="display:flex;gap:8px 18px;flex-wrap:wrap;margin:0 0 6px;font-size:.75rem">${encodingItems.join("")}</div>` : "";
+  const seriesLegendLabel = String(options.seriesLegendLabel || "Markets");
+  const seriesLegendHelp = String(options.seriesLegendHelp || "Select a market to emphasize or mute it. Muted curves stay visible in pale grey for context.");
   const seriesLegend = scatterSeries.length
-    ? `<div class="breakdown-scatter-series-legend" role="group" aria-label="Market curve emphasis" style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin:0 0 8px"><span style="margin-right:2px;color:#a9bfd3;font-size:.75rem;font-weight:800">Markets</span>${scatterSeries.map(series => {
+    ? `<div class="breakdown-scatter-series-legend" role="group" aria-label="${breakdownEscape(seriesLegendLabel)} emphasis" style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin:0 0 8px"><span style="margin-right:2px;color:#a9bfd3;font-size:.75rem;font-weight:800">${breakdownEscape(seriesLegendLabel)}</span>${scatterSeries.map(series => {
       const emphasized = state.activeKeys.has(series.key);
       const stateLabel = emphasized ? "emphasized" : "muted";
       const detail = series.legendDetail ? ` · ${series.legendDetail}` : "";
       return `<button type="button" class="breakdown-scatter-series-toggle ${stateLabel}" data-breakdown-scatter-toggle="${breakdownEscape(series.key)}" aria-pressed="${emphasized}" aria-label="${breakdownEscape(series.label + detail)}, ${stateLabel}; activate to ${emphasized ? "mute" : "emphasize"}. The curve remains visible." title="${emphasized ? "Mute" : "Emphasize"} ${breakdownEscape(series.label)}" style="display:inline-flex;align-items:center;gap:6px;padding:5px 8px;border:1px solid ${emphasized ? series.color : "rgba(220,238,255,.22)"};border-radius:999px;background:${emphasized ? "rgba(25,181,254,.09)" : "rgba(220,238,255,.025)"};color:${emphasized ? "#e8f7ff" : "#71879a"};font-size:.72rem;line-height:1.1;opacity:${emphasized ? "1" : ".68"}"><i aria-hidden="true" style="display:inline-block;width:16px;height:${emphasized ? "3" : "1px"};border-radius:999px;background:${emphasized ? series.color : mutedSeriesColor}"></i>${breakdownEscape(series.label + detail)}</button>`;
-    }).join("")}</div><p class="breakdown-note" style="margin:0 0 8px;color:#8fa9bf;font-size:.75rem">${options.seriesOrderNote ? `${breakdownEscape(options.seriesOrderNote)} ` : ""}Select a market to emphasize or mute it. Muted curves stay visible in pale grey for context.</p>`
+    }).join("")}</div><p class="breakdown-note" style="margin:0 0 8px;color:#8fa9bf;font-size:.75rem">${options.seriesOrderNote ? `${breakdownEscape(options.seriesOrderNote)} ` : ""}${breakdownEscape(seriesLegendHelp)}</p>`
     : "";
   const scaleControls = supportsYScale
     ? `<div class="breakdown-y-scale-tools" role="group" aria-label="Y-axis scale" style="position:absolute;z-index:2;top:8px;left:8px;display:flex;align-items:center;gap:7px;color:#a9bfd3;font-size:.75rem"><span style="font-weight:800">Y axis</span><div style="display:flex;gap:3px;padding:3px;border:1px solid #244866;border-radius:8px;background:rgba(7,21,34,.90)"><button type="button" class="chart-mode-button${yScaleMode === "linear" ? " active" : ""}" data-breakdown-y-scale="linear" aria-pressed="${yScaleMode === "linear"}" style="padding:5px 8px">Linear</button><button type="button" class="chart-mode-button${yScaleMode === "symlog" ? " active" : ""}" data-breakdown-y-scale="symlog" aria-pressed="${yScaleMode === "symlog"}" style="padding:5px 8px">Symlog</button></div></div>`
@@ -1171,7 +1203,7 @@ function breakdownRenderScatterState(container, state) {
   const yAxisTarget = supportsYScale
     ? `<rect class="breakdown-y-axis-target" data-breakdown-y-axis x="0" y="${margin.top}" width="${Math.max(1, margin.left - 2)}" height="${plotHeight}" fill="transparent" pointer-events="all" tabindex="0" role="button" aria-label="${breakdownEscape(axisLabel)}" aria-keyshortcuts="ArrowUp ArrowDown Home Enter Space"><title>Drag the Y axis to rescale; double-click to reset to Linear</title></rect>`
     : "";
-  const plotSvg = `<svg class="breakdown-svg breakdown-scatter-svg" viewBox="0 0 ${width} ${height}" role="group" aria-label="${options.connectPoints ? "Cumulative line plot" : "Scatter plot"}" style="display:block;width:${width}px;max-width:none;height:auto;min-height:300px"><defs><clipPath id="${clipId}"><rect class="breakdown-scatter-clip-bounds" x="${breakdownRound(clipBounds.x)}" y="${breakdownRound(clipBounds.y)}" width="${breakdownRound(clipBounds.width)}" height="${breakdownRound(clipBounds.height)}"/></clipPath></defs><g aria-hidden="true">${grid}${axes}</g><g clip-path="url(#${clipId})">${connectionMarkup}${pointMarkup}</g>${yAxisTarget}</svg>`;
+  const plotSvg = `<svg class="breakdown-svg breakdown-scatter-svg" viewBox="0 0 ${width} ${height}" role="group" aria-label="${options.connectPoints ? "Cumulative line plot" : "Scatter plot"}" style="display:block;width:${width}px;max-width:none;height:auto;min-height:300px"><defs><clipPath id="${clipId}"><rect class="breakdown-scatter-clip-bounds" x="${breakdownRound(clipBounds.x)}" y="${breakdownRound(clipBounds.y)}" width="${breakdownRound(clipBounds.width)}" height="${breakdownRound(clipBounds.height)}"/></clipPath></defs><g aria-hidden="true">${grid}${axes}${xReferenceMarkup}</g><g clip-path="url(#${clipId})">${connectionMarkup}${pointMarkup}</g>${yAxisTarget}</svg>`;
   const svg = `<div class="breakdown-scroll" style="overflow-x:auto"><div class="breakdown-scatter-shell" style="position:relative;width:${width}px">${scaleControls}${plotSvg}</div></div>`;
   state.scatterGeometry = { width, height, plotHeight, yDomain, yScaleMode, ySymlogConstant, supportsYScale };
   container.innerHTML = breakdownFrameMarkup(state.chartId, toolbar, svg, options.connectPoints ? "Interactive cumulative line chart" : "Interactive scatter chart");

@@ -282,7 +282,14 @@ export async function loadPortableDataArchive(source) {
   const dataEntries = archiveEntries.filter((entry) => entry.path !== PORTABLE_DATA_MANIFEST_PATH);
   validateManifest(manifestEntries[0].text, dataEntries);
   const name = typeof source?.name === "string" && source.name ? source.name : DEFAULT_STORE_NAME;
-  return createPortableDataStore(dataEntries, { name });
+  const store = createPortableDataStore(dataEntries, { name });
+  store.archiveValidation = {
+    manifestValidated: true,
+    archiveFormat: PORTABLE_ARCHIVE_FORMAT,
+    archiveVersion: PORTABLE_ARCHIVE_VERSION,
+    entryCount: dataEntries.length
+  };
+  return store;
 }
 
 function relativePath(value) {

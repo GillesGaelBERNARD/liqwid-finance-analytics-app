@@ -1,10 +1,13 @@
 import { addDays, filterRowsByDate } from "../shared/dates.js";
 import { numberOrZero, summarizeMarket } from "../shared/metrics.js";
 import { buildMarketStressChartData } from "./chartData.js";
-import { csvToRows } from "./dataWorkflow.js";
+import { csvToRows, safeMarketFileId } from "./dataWorkflow.js";
 import { buildCurrentExposureAnalysis } from "./currentExposureAnalysis.js";
 import { buildDataStatus } from "./dataStatus.js";
 import { buildLoanSnapshotHistory, LOAN_HEALTH_BUCKETS } from "./loanSnapshotHistory.js";
+import { buildMarketParametersAnalysis } from "./marketParameterHistory.js";
+import { buildMarketRevenueAnalysis } from "./marketRevenueAnalysis.js";
+import { buildProtocolParameterLandscape } from "./protocolParameterLandscape.js";
 
 const REVENUE_RUN_RATE_WINDOW_DAYS = 90;
 const ANNUALIZATION_DAYS = 365.25;
@@ -14,6 +17,13 @@ export async function buildCompleteAnalysisFromStore(store, bundle) {
   const dailyOverview = csvToRows(await store.readText("clean/protocol-overview-daily.csv", ""));
   const allLoans = csvToRows(await store.readText("clean/current-all-loans.csv", ""));
   const loanPopulations = deriveLoanPopulations(allLoans);
+  const marketParamsById = {};
+  for (const market of bundle.markets || []) {
+    marketParamsById[market.id] = csvToRows(
+      await store.readText(`clean/market-params-history/${safeMarketFileId(market.id)}.csv`, "")
+    );
+  }
+  bundle.archiveAudit = await buildArchiveAudit(store, bundle, allLoans.length, marketParamsById);
   return buildCompleteAnalysis({
     bundle,
     monthlyLiquidations: csvToRows(await store.readText("clean/protocol-liquidation-monthly.csv", "")),
@@ -26,8 +36,150 @@ export async function buildCompleteAnalysisFromStore(store, bundle) {
       participation: csvToRows(await store.readText("computed/loan-participation-history.csv", "")),
       health: csvToRows(await store.readText("computed/loan-health-history.csv", "")),
       reconciliation: normalizeReconciliationRows(csvToRows(await store.readText("computed/loan-reconciliation-history.csv", "")))
-    }
+    },
+    marketParamsById
   });
+}
+
+export async function buildArchiveAudit(store, bundle, cleanLoanRowCount = null, marketParamsById = {}) {
+  const paths = typeof store?.listPaths === "function" ? store.listPaths() : [];
+  const captureRoot = String(bundle?.rawCapture || bundle?.archiveMetadata?.latestRawCapture || "").replace(/\/+$/, "");
+  const captureRoots = new Set(paths.flatMap((path) => {
+    const match = String(path).match(/^(raw\/api\/fetches\/[^/]+)\//);
+    return match ? [match[1]] : [];
+  }));
+  const latestPaths = captureRoot ? paths.filter((path) => String(path).startsWith(`${captureRoot}/`)) : [];
+  const envelopeRecords = typeof store?.readJson === "function"
+    ? await Promise.all(latestPaths.filter((path) => /\.json$/i.test(path)).map(async (path) => ({
+      path,
+      envelope: await store.readJson(path, null).catch(() => null)
+    })))
+    : [];
+  const envelopes = envelopeRecords.map((record) => record.envelope);
+  const sourceEnvelopes = envelopes.filter((envelope) => envelope && typeof envelope.source === "string");
+  const envelopeByPath = new Map(envelopeRecords.map((record) => [record.path, record.envelope]));
+  const rawLoanEnvelope = envelopeByPath.get(`${captureRoot}/loans/all.json`) || null;
+  const rawLoanResults = Array.isArray(rawLoanEnvelope?.payload?.results)
+    ? rawLoanEnvelope.payload.results
+    : [];
+  const rawMarketEnvelopes = envelopeRecords
+    .filter((record) => /^raw\/api\/fetches\/[^/]+\/markets\/page-\d+\.json$/i.test(record.path))
+    .map((record) => record.envelope)
+    .filter(Boolean);
+  const rawMarketResults = rawMarketEnvelopes.flatMap((envelope) => {
+    const results = envelope?.payload?.liqwid?.data?.markets?.results;
+    return Array.isArray(results) ? results : [];
+  });
+  const rawMarketTotalCounts = rawMarketEnvelopes
+    .map((envelope) => finiteNumber(envelope?.payload?.liqwid?.data?.markets?.totalCount))
+    .filter((value) => value !== null);
+  const rawMarketEnvelopeRowCounts = rawMarketEnvelopes
+    .map((envelope) => finiteNumber(envelope?.rowCount))
+    .filter((value) => value !== null);
+  const markets = Array.isArray(bundle?.markets) ? bundle.markets : [];
+  const historicalTables = historicalRawCleanAudit({
+    captureRoot,
+    envelopeByPath,
+    markets,
+    marketSeries: bundle?.marketSeries || {},
+    marketParamsById
+  });
+  const cursorRows = typeof store?.readText === "function"
+    ? csvToRows(await store.readText("metadata/market-params-cursors.csv", ""))
+    : [];
+  const requestedEndDate = String(bundle?.requestedRange?.endDate || "");
+  const parameterCursorsThroughEnd = cursorRows.filter((row) =>
+    requestedEndDate && String(row.requestedThrough || "") >= requestedEndDate
+  ).length;
+
+  return {
+    rawCaptureCount: captureRoots.size,
+    latestRawCapturePresent: Boolean(captureRoot && latestPaths.length),
+    latestRawEnvelopeCount: envelopes.filter(Boolean).length,
+    rawSourceEnvelopeCount: sourceEnvelopes.length,
+    rawSourceMismatchCount: sourceEnvelopes.filter((envelope) => envelope.source !== bundle?.source).length,
+    manifestValidated: store?.archiveValidation?.manifestValidated ?? null,
+    archiveFormat: store?.archiveValidation?.archiveFormat ?? null,
+    archiveVersion: store?.archiveValidation?.archiveVersion ?? null,
+    archiveEntryCount: store?.archiveValidation?.entryCount ?? paths.length,
+    currentLoans: {
+      rawEnvelopeRowCount: finiteNumber(rawLoanEnvelope?.rowCount),
+      rawTotalCount: finiteNumber(rawLoanEnvelope?.payload?.totalCount),
+      rawResultCount: rawLoanResults.length,
+      cleanRowCount: finiteNumber(cleanLoanRowCount)
+    },
+    currentMarkets: {
+      rawEnvelopeRowCount: rawMarketEnvelopeRowCounts.length
+        ? rawMarketEnvelopeRowCounts.reduce((total, value) => total + value, 0)
+        : null,
+      rawTotalCount: rawMarketTotalCounts.length ? Math.max(...rawMarketTotalCounts) : null,
+      rawResultCount: rawMarketEnvelopes.length ? rawMarketResults.length : null,
+      cleanRowCount: markets.length || null
+    },
+    historicalTables,
+    parameterCursors: {
+      rowCount: cursorRows.length,
+      requestedThroughEndCount: parameterCursorsThroughEnd,
+      requestedEndDate: requestedEndDate || null
+    }
+  };
+}
+
+function historicalRawCleanAudit({
+  captureRoot,
+  envelopeByPath,
+  markets,
+  marketSeries,
+  marketParamsById
+}) {
+  const marketHistoryMismatches = [];
+  const marketParameterMismatches = [];
+  let rawMarketHistoryFiles = 0;
+  let rawMarketHistoryRows = 0;
+  let cleanMarketHistoryRows = 0;
+  let rawMarketParameterFiles = 0;
+  let rawMarketParameterRows = 0;
+  let cleanMarketParameterRows = 0;
+
+  for (const market of markets) {
+    const marketId = String(market?.id || "");
+    const label = String(market?.displayName || market?.symbol || marketId || "Unknown market");
+    const fileId = safeMarketFileId(marketId);
+    const historyEnvelope = envelopeByPath.get(`${captureRoot}/market-history/${fileId}.json`);
+    const parameterEnvelope = envelopeByPath.get(`${captureRoot}/market-params-history/${fileId}.json`);
+    const cleanHistoryCount = Array.isArray(marketSeries?.[marketId]) ? marketSeries[marketId].length : 0;
+    const cleanParameterCount = Array.isArray(marketParamsById?.[marketId]) ? marketParamsById[marketId].length : 0;
+    const rawHistoryCount = envelopeRowCount(historyEnvelope);
+    const rawParameterCount = envelopeRowCount(parameterEnvelope);
+
+    cleanMarketHistoryRows += cleanHistoryCount;
+    cleanMarketParameterRows += cleanParameterCount;
+    if (historyEnvelope) rawMarketHistoryFiles += 1;
+    if (parameterEnvelope) rawMarketParameterFiles += 1;
+    if (rawHistoryCount !== null) rawMarketHistoryRows += rawHistoryCount;
+    if (rawParameterCount !== null) rawMarketParameterRows += rawParameterCount;
+    if (rawHistoryCount === null || rawHistoryCount !== cleanHistoryCount) marketHistoryMismatches.push(label);
+    if (rawParameterCount === null || rawParameterCount !== cleanParameterCount) marketParameterMismatches.push(label);
+  }
+
+  return {
+    expectedMarketFiles: markets.length,
+    rawMarketHistoryFiles,
+    rawMarketHistoryRows,
+    cleanMarketHistoryRows,
+    marketHistoryMismatches,
+    rawMarketParameterFiles,
+    rawMarketParameterRows,
+    cleanMarketParameterRows,
+    marketParameterMismatches
+  };
+}
+
+function envelopeRowCount(envelope) {
+  if (!envelope) return null;
+  const declared = finiteNumber(envelope.rowCount);
+  if (declared !== null) return declared;
+  return Array.isArray(envelope?.payload?.rows) ? envelope.payload.rows.length : null;
 }
 
 function normalizeReconciliationRows(rows) {
@@ -77,6 +229,13 @@ export function buildCompleteAnalysis(input) {
   const marketSummaries = (bundle.summaries || []).map((base) => buildMarketSummary(bundle, base));
   const loanContext = buildLoanContext(input.activeLoans || [], input.liquidatableLoans || []);
   attachLoanState(marketSummaries, loanContext.loanState);
+  const marketRevenue = buildMarketRevenueAnalysis({
+    markets: bundle.markets || [],
+    marketSeriesById: bundle.marketSeries || {},
+    marketParamsById: input.marketParamsById || {},
+    protocolRevenueDaily: input.dailyRevenue || [],
+    generatedAt: bundle.generatedAt || ""
+  });
   const revenue = buildRevenueContext(
     bundle,
     marketSummaries,
@@ -84,6 +243,7 @@ export function buildCompleteAnalysis(input) {
     input.dailyAllocatedFees || [],
     input.monthlyFees || []
   );
+  attachMarketRevenue(marketSummaries, marketRevenue);
   const marketStress = buildStressContext(bundle, loanContext.loanState);
   const protocolSummary = buildProtocolSummary(bundle, marketStress);
   const liquidation = buildLiquidationContext(
@@ -98,15 +258,30 @@ export function buildCompleteAnalysis(input) {
   });
   const loanSnapshotHistory = activeDebtLoanSnapshotHistory(input, bundle);
   const lqToken = buildLqTokenAnalysis(bundle, revenue);
+  const marketParameters = buildMarketParametersAnalysis({
+    markets: bundle.markets || [],
+    marketParamsById: input.marketParamsById || {},
+    marketSeriesById: bundle.marketSeries || {}
+  });
+  const protocolParameters = buildProtocolParameterLandscape({
+    markets: bundle.markets || [],
+    marketParameters,
+    marketSeriesById: bundle.marketSeries || {}
+  });
   const dataStatus = buildDataStatus({
     bundle,
     allLoans: input.allLoans || [],
     activeLoans: input.activeLoans || [],
+    liquidatableLoans: input.liquidatableLoans || [],
     collateralLoans: input.collateralLoans || [],
     loanSnapshotHistory,
     liquidation,
     revenue,
-    currentExposure
+    currentExposure,
+    marketRevenue,
+    lqToken,
+    marketParameters,
+    protocolParameters
   });
 
   return {
@@ -120,9 +295,27 @@ export function buildCompleteAnalysis(input) {
     marketStress,
     currentExposure,
     revenue,
+    marketRevenue,
     lqToken,
+    marketParameters,
+    protocolParameters,
     dataStatus
   };
+}
+
+function attachMarketRevenue(marketSummaries, marketRevenue) {
+  for (const summary of marketSummaries) {
+    const direct = marketRevenue?.byMarket?.[summary.marketId];
+    const matchingKey = direct
+      ? summary.marketId
+      : Object.keys(marketRevenue?.byMarket || {}).find((key) =>
+        String(key).toUpperCase() === String(summary.marketId).toUpperCase()
+      );
+    const revenue = direct || (matchingKey ? marketRevenue.byMarket[matchingKey] : null);
+    summary.marketRevenue = revenue?.summary || null;
+    summary.retainedInterestRevenueAvailable = revenue?.summary?.ytdAttributionComplete === true;
+    summary.totalCollectedRevenueAvailable = revenue?.summary?.ytdAttributionComplete === true;
+  }
 }
 
 export function buildLqTokenAnalysis(bundle, revenue) {
@@ -415,17 +608,22 @@ function buildLiquidationContext(monthlyInput, dailyInput, loanContext) {
 
 function buildRevenueContext(bundle, marketSummaries, dailyInput, dailyAllocatedFeesInput, monthlyFeesInput) {
   const daily = dailyInput.map((row) => {
-    const observedRepaidInterestFeeFlowInUsd = numberOrZero(row.revenueFromRepaidInterestInUsd);
-    const observedOriginationFeeFlowInUsd = numberOrZero(row.loanOriginationFeesInUsd);
+    const collectedInterestRevenueInUsd = numberOrZero(row.revenueFromRepaidInterestInUsd);
+    const collectedOriginationRevenueInUsd = numberOrZero(row.loanOriginationFeesInUsd) + numberOrZero(row.loanOriginationFeesMinAdaInUsd);
+    const collectedRevenueInUsd = collectedInterestRevenueInUsd + collectedOriginationRevenueInUsd;
     const clean = { ...row };
     delete clean.realizedProtocolRevenueInUsd;
     return {
       ...clean,
-      observedRepaidInterestFeeFlowInUsd,
-      observedOriginationFeeFlowInUsd,
-      combinedObservedFeeFlowInUsd: observedRepaidInterestFeeFlowInUsd + observedOriginationFeeFlowInUsd
+      collectedInterestRevenueInUsd,
+      collectedOriginationRevenueInUsd,
+      collectedRevenueInUsd,
+      observedRepaidInterestFeeFlowInUsd: collectedInterestRevenueInUsd,
+      observedOriginationFeeFlowInUsd: collectedOriginationRevenueInUsd,
+      combinedObservedFeeFlowInUsd: collectedRevenueInUsd
     };
   }).sort((a, b) => String(a.date).localeCompare(String(b.date)));
+  const monthlyCollectedRevenue = aggregateCollectedRevenueByMonth(daily);
   const dailyAllocation = dailyAllocatedFeesInput
     .map((row) => normalizeProtocolFeeAllocation(row, "day"))
     .sort((a, b) => String(a.date).localeCompare(String(b.date)));
@@ -434,6 +632,13 @@ function buildRevenueContext(bundle, marketSummaries, dailyInput, dailyAllocated
     .map((row) => normalizeProtocolFeeAllocation(row, "month"))
     .sort((a, b) => String(a.date).localeCompare(String(b.date)));
   const completeDays = daily.filter((row) => row.isComplete !== false && !row.fetchError);
+  const latestCompleteCollectedDate = completeDays.at(-1)?.date ?? null;
+  const ytdCollectedStartDate = latestCompleteCollectedDate
+    ? `${String(latestCompleteCollectedDate).slice(0, 4)}-01-01`
+    : null;
+  const ytdCollectedCompleteDays = ytdCollectedStartDate
+    ? completeDays.filter((row) => row.date >= ytdCollectedStartDate && row.date <= latestCompleteCollectedDate)
+    : [];
   const completeAllocationDays = dailyAllocation.filter((row) => row.isComplete !== false && !row.fetchError);
   const completeAllocationMonths = monthlyAllocation.filter((row) => row.isComplete !== false && !row.fetchError);
   const runRateSeries = buildProtocolRevenueRunRateSeries(dailyAllocation);
@@ -453,48 +658,58 @@ function buildRevenueContext(bundle, marketSummaries, dailyInput, dailyAllocated
   const marketRows = marketSummaries.map((summary) => {
     const rows = bundle.marketSeries?.[summary.marketId] || [];
     const generatedDate = String(bundle.generatedAt || "").slice(0, 10);
-    const completeRevenueRows = generatedDate ? rows.filter((row) => row.date < generatedDate) : rows;
-    const revenueEndDate = completeRevenueRows.at(-1)?.date ?? null;
-    const tail90 = revenueEndDate
-      ? filterRowsByDate(completeRevenueRows, addDays(revenueEndDate, -(REVENUE_RUN_RATE_WINDOW_DAYS - 1)), revenueEndDate)
-      : [];
-    const metrics = revenueMetrics(rows, tail90);
+    const metrics = marketRevenueMetrics(rows, generatedDate);
     Object.assign(summary, metrics);
     return {
       marketId: summary.marketId,
       currentBorrowInUsd: summary.currentBorrowInUsd,
-      grossRealizedRevenueProxy90dInUsd: metrics.grossRealizedRevenueProxy90dInUsd,
-      repaidInterestFeeFlow90dInUsd: metrics.repaidInterestFeeFlow90dInUsd,
-      originationFeeFlow90dInUsd: metrics.originationFeeFlow90dInUsd,
+      collectedOriginationRevenue90dInUsd: metrics.collectedOriginationRevenue90dInUsd,
+      interestRepaidActivity90dInUsd: metrics.interestRepaidActivity90dInUsd,
       marketRevenueState: metrics.marketRevenueState
     };
-  }).sort((a, b) => numberOrZero(b.grossRealizedRevenueProxy90dInUsd) - numberOrZero(a.grossRealizedRevenueProxy90dInUsd));
+  }).sort((a, b) => numberOrZero(b.collectedOriginationRevenue90dInUsd) - numberOrZero(a.collectedOriginationRevenue90dInUsd));
   const runRate = latestRunRate?.annualizedRunRateInUsd ?? null;
   const change = recent90Total !== null && previous90Total > 0 ? recent90Total / previous90Total - 1 : null;
   const positiveOriginationDays = completeDays.filter((row) => row.observedOriginationFeeFlowInUsd > 0);
   return {
     daily,
+    monthlyCollectedRevenue,
     dailyAllocation,
     monthlyAllocation,
     annualizedRunRateSeries: runRateSeries,
     summary: {
       coverageFromDate: daily[0]?.date ?? null,
       coverageToDate: daily.at(-1)?.date ?? null,
+      collectedCoverageFromDate: completeDays[0]?.date ?? null,
+      collectedCoverageToDate: completeDays.at(-1)?.date ?? null,
       completeDays: completeDays.length,
       dailyAllocationCoverageFromDate: dailyAllocation[0]?.periodStartDay ?? null,
       dailyAllocationCoverageToDate: dailyAllocation.at(-1)?.periodEndDay ?? null,
       allocationCoverageFromDate: monthlyAllocation[0]?.periodStartDay ?? null,
       allocationCoverageToDate: monthlyAllocation.at(-1)?.periodEndDay ?? null,
+      cumulativeAllocationFromDate: completeAllocationDays[0]?.periodStartDay ?? null,
+      cumulativeAllocationToDate: completeAllocationDays.at(-1)?.periodEndDay ?? null,
       completeAllocationDays: completeAllocationDays.length,
       completeAllocationMonths: completeAllocationMonths.length,
       combinedObservedFeeFlowInUsd: completeDays.length ? total(completeDays, "combinedObservedFeeFlowInUsd") : null,
       observedRepaidInterestFeeFlowInUsd: completeDays.length ? total(completeDays, "observedRepaidInterestFeeFlowInUsd") : null,
       observedOriginationFeeFlowInUsd: completeDays.length ? total(completeDays, "observedOriginationFeeFlowInUsd") : null,
+      collectedRevenueInUsd: completeDays.length ? total(completeDays, "collectedRevenueInUsd") : null,
+      collectedInterestRevenueInUsd: completeDays.length ? total(completeDays, "collectedInterestRevenueInUsd") : null,
+      collectedOriginationRevenueInUsd: completeDays.length ? total(completeDays, "collectedOriginationRevenueInUsd") : null,
+      ytdCollectedRevenueInUsd: ytdCollectedCompleteDays.length ? total(ytdCollectedCompleteDays, "collectedRevenueInUsd") : null,
+      ytdCollectedInterestRevenueInUsd: ytdCollectedCompleteDays.length ? total(ytdCollectedCompleteDays, "collectedInterestRevenueInUsd") : null,
+      ytdCollectedOriginationRevenueInUsd: ytdCollectedCompleteDays.length ? total(ytdCollectedCompleteDays, "collectedOriginationRevenueInUsd") : null,
+      ytdCollectedCoverageFromDate: ytdCollectedCompleteDays[0]?.date ?? null,
+      ytdCollectedCoverageToDate: ytdCollectedCompleteDays.at(-1)?.date ?? null,
+      ytdCollectedCompleteDays: ytdCollectedCompleteDays.length,
       latestPositiveOriginationFeeDate: positiveOriginationDays.at(-1)?.date ?? null,
-      allocatedProtocolRevenueInUsd: completeAllocationMonths.length ? total(completeAllocationMonths, "allocatedProtocolRevenueInUsd") : null,
-      allocatedProtocolInterestRevenueInUsd: completeAllocationMonths.length ? total(completeAllocationMonths, "allocatedProtocolInterestRevenueInUsd") : null,
-      allocatedProtocolOriginationRevenueInUsd: completeAllocationMonths.length ? total(completeAllocationMonths, "allocatedProtocolOriginationRevenueInUsd") : null,
-      allocatedHoldersRevenueInUsd: completeAllocationMonths.length ? total(completeAllocationMonths, "allocatedHoldersRevenueInUsd") : null,
+      allocatedProtocolRevenueInUsd: completeAllocationDays.length ? total(completeAllocationDays, "allocatedProtocolRevenueInUsd") : null,
+      allocatedProtocolInterestRevenueInUsd: completeAllocationDays.length ? total(completeAllocationDays, "allocatedProtocolInterestRevenueInUsd") : null,
+      allocatedProtocolOriginationRevenueInUsd: completeAllocationDays.length ? total(completeAllocationDays, "allocatedProtocolOriginationRevenueInUsd") : null,
+      allocatedHoldersRevenueInUsd: completeAllocationDays.length ? total(completeAllocationDays, "allocatedHoldersRevenueInUsd") : null,
+      allocatedHoldersInterestRevenueInUsd: completeAllocationDays.length ? total(completeAllocationDays, "allocatedHoldersInterestRevenueInUsd") : null,
+      allocatedHoldersOriginationRevenueInUsd: completeAllocationDays.length ? total(completeAllocationDays, "allocatedHoldersOriginationRevenueInUsd") : null,
       allocatedProtocolRevenueTrailing90DaysInUsd: recent90Total,
       allocatedProtocolRevenueTrailing12MonthsInUsd: trailing12.length ? total(trailing12, "allocatedProtocolRevenueInUsd") : null,
       allocatedProtocolRevenueAnnualizedRunRateInUsd: runRate,
@@ -504,13 +719,48 @@ function buildRevenueContext(bundle, marketSummaries, dailyInput, dailyAllocated
     },
     marketRows,
     narrative: !completeAllocationDays.length
-      ? "Official allocated protocol revenue is unavailable for this dataset. The full-history overview fields remain useful as fee-flow activity, but cannot establish how much the DAO retained."
+      ? "Collected retained-interest and origination revenue is available for the full overview history, but official DAO and LQ-staker accrual allocations are unavailable for this dataset."
       : runRate === null
         ? "Official allocated protocol revenue is refreshed, but fewer than 90 consecutive complete UTC days prevent a stable annualized run-rate comparison."
         : `The latest 90 consecutive complete UTC days annualize to ${formatMoney(runRate)} of official DAO/treasury revenue. The current UTC day is excluded until closed. LQ-staker allocation is reported separately, and operating costs are not exposed, so profitability is not inferred.`,
-    scope: `Official DAO/treasury and LQ-staker allocation comes only from analytics.fees beginning 2026-01-01. Closed days are preserved individually; rolling run rates use those daily rows, while calendar-month totals are rebuilt from the same source.`,
+    scope: `Collected revenue uses analytics.overview revenueFromRepaidInterestInUsd plus both origination-fee fields. The API does not split repayment-time collections between the DAO and LQ stakers. Accrued DAO/treasury and LQ-staker allocations come separately from analytics.fees beginning 2026-01-01.`,
     fetchErrorSummary: {}
   };
+}
+
+function aggregateCollectedRevenueByMonth(dailyRows) {
+  const groups = new Map();
+  for (const row of dailyRows) {
+    const month = String(row.date).slice(0, 7);
+    if (!groups.has(month)) groups.set(month, []);
+    groups.get(month).push(row);
+  }
+  return [...groups.entries()].sort(([left], [right]) => left.localeCompare(right)).map(([month, rows]) => {
+    rows.sort((left, right) => String(left.date).localeCompare(String(right.date)));
+    const periodStartDay = rows[0].date;
+    const periodEndDay = rows.at(-1).date;
+    const monthStart = `${month}-01`;
+    const nextMonth = monthOffset(monthStart, 1);
+    const monthEnd = new Date(Date.parse(`${nextMonth}T00:00:00Z`) - 86400000).toISOString().slice(0, 10);
+    const expectedDays = Math.round((Date.parse(`${periodEndDay}T00:00:00Z`) - Date.parse(`${periodStartDay}T00:00:00Z`)) / 86400000) + 1;
+    return {
+      date: monthStart,
+      periodStartDay,
+      periodEndDay,
+      fromDate: rows[0].fromDate,
+      toDate: rows.at(-1).toDate,
+      collectedInterestRevenueInUsd: total(rows, "collectedInterestRevenueInUsd"),
+      collectedOriginationRevenueInUsd: total(rows, "collectedOriginationRevenueInUsd"),
+      collectedRevenueInUsd: total(rows, "collectedRevenueInUsd"),
+      isComplete: periodStartDay === monthStart
+        && periodEndDay === monthEnd
+        && rows.length === expectedDays
+        && rows.every((row, index) => index === 0 || addDays(rows[index - 1].date, 1) === row.date)
+        && rows.every((row) => row.isComplete !== false && !row.fetchError),
+      sourceRowCount: rows.length,
+      provenance: "analytics-overview-daily-aggregate-v1"
+    };
+  });
 }
 
 export function buildProtocolRevenueRunRateSeries(dailyRows) {
@@ -633,23 +883,58 @@ function ongoingDrySpellDays(rows, field, options = {}) {
   return count;
 }
 
-function revenueMetrics(rows, tail90) {
-  const repaidInterest = (row) => numberOrZero(row.interestRepaidInUsd);
-  const origination = (row) => numberOrZero(row.loanOriginationFeesInUsd) + numberOrZero(row.loanOriginationFeesMinAdaInUsd);
-  const realized = (row) => repaidInterest(row) + origination(row);
-  const realizedFull = rows.reduce((value, row) => value + realized(row), 0);
-  const realized90 = tail90.reduce((value, row) => value + realized(row), 0);
+function marketRevenueMetrics(rows, generatedDate = "") {
+  const completeRows = [...rows]
+    .filter((row) => row?.date && row.isComplete !== false && !row.fetchError)
+    .filter((row) => !generatedDate || row.date < generatedDate)
+    .sort((left, right) => String(left.date).localeCompare(String(right.date)));
+  const coverageToDate = completeRows.at(-1)?.date ?? null;
+  const windowRows = (days) => coverageToDate
+    ? filterRowsByDate(completeRows, addDays(coverageToDate, -(days - 1)), coverageToDate)
+    : [];
+  const rows30 = windowRows(30);
+  const rows90 = windowRows(REVENUE_RUN_RATE_WINDOW_DAYS);
+  const ytdStartDate = coverageToDate ? `${coverageToDate.slice(0, 4)}-01-01` : null;
+  const ytdRows = ytdStartDate
+    ? filterRowsByDate(completeRows, ytdStartDate, coverageToDate)
+    : [];
+  const interestRepaidActivity = (row) => numberOrZero(row.interestRepaidInUsd);
+  const collectedOriginationRevenue = (row) => (
+    numberOrZero(row.loanOriginationFeesInUsd)
+    + numberOrZero(row.loanOriginationFeesMinAdaInUsd)
+  );
+  const sum = (source, value) => source.reduce((totalValue, row) => totalValue + value(row), 0);
+  const allTimeOriginationRevenue = sum(completeRows, collectedOriginationRevenue);
+  const trailing90OriginationRevenue = sum(rows90, collectedOriginationRevenue);
+  const positiveOriginationDays = completeRows.filter((row) => collectedOriginationRevenue(row) > 0);
   return {
-    grossRealizedRevenueProxyInUsd: realizedFull,
-    grossRealizedRevenueProxy30dInUsd: rows.slice(-30).reduce((value, row) => value + realized(row), 0),
-    grossRealizedRevenueProxy90dInUsd: realized90,
-    repaidInterestFeeFlowInUsd: rows.reduce((value, row) => value + repaidInterest(row), 0),
-    repaidInterestFeeFlow30dInUsd: rows.slice(-30).reduce((value, row) => value + repaidInterest(row), 0),
-    repaidInterestFeeFlow90dInUsd: tail90.reduce((value, row) => value + repaidInterest(row), 0),
-    originationFeeFlowInUsd: rows.reduce((value, row) => value + origination(row), 0),
-    originationFeeFlow30dInUsd: rows.slice(-30).reduce((value, row) => value + origination(row), 0),
-    originationFeeFlow90dInUsd: tail90.reduce((value, row) => value + origination(row), 0),
-    marketRevenueState: realizedFull <= 1 ? "no_observable_revenue" : realized90 <= 1 ? "no_recent_revenue" : realized90 < 100 ? "very_low_recent_revenue" : "revenue_generating"
+    marketRevenueCoverageFromDate: completeRows[0]?.date ?? null,
+    marketRevenueCoverageToDate: coverageToDate,
+    marketRevenueCompleteDays: completeRows.length,
+    marketRevenueYtdCoverageFromDate: ytdRows[0]?.date ?? null,
+    marketRevenueYtdCoverageToDate: ytdRows.at(-1)?.date ?? null,
+    marketRevenueYtdCompleteDays: ytdRows.length,
+    marketRevenue90dCoverageFromDate: rows90[0]?.date ?? null,
+    marketRevenue90dCoverageToDate: rows90.at(-1)?.date ?? null,
+    marketRevenue90dObservedDays: rows90.length,
+    collectedOriginationRevenueInUsd: allTimeOriginationRevenue,
+    ytdCollectedOriginationRevenueInUsd: sum(ytdRows, collectedOriginationRevenue),
+    collectedOriginationRevenue30dInUsd: sum(rows30, collectedOriginationRevenue),
+    collectedOriginationRevenue90dInUsd: trailing90OriginationRevenue,
+    interestRepaidActivityInUsd: sum(completeRows, interestRepaidActivity),
+    ytdInterestRepaidActivityInUsd: sum(ytdRows, interestRepaidActivity),
+    interestRepaidActivity30dInUsd: sum(rows30, interestRepaidActivity),
+    interestRepaidActivity90dInUsd: sum(rows90, interestRepaidActivity),
+    latestPositiveOriginationRevenueDate: positiveOriginationDays.at(-1)?.date ?? null,
+    retainedInterestRevenueAvailable: false,
+    totalCollectedRevenueAvailable: false,
+    marketRevenueState: allTimeOriginationRevenue <= 1
+      ? "no_observable_collected_revenue"
+      : trailing90OriginationRevenue <= 1
+        ? "no_recent_collected_revenue"
+        : trailing90OriginationRevenue < 100
+          ? "very_low_recent_collected_revenue"
+          : "collected_revenue_observed"
   };
 }
 

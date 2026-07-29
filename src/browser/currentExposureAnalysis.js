@@ -361,10 +361,12 @@ function buildBorrowerConcentration(bundle, activeLoans) {
   const currentBorrow = new Map((bundle.markets || []).map((market) => [market.id, finite(market.borrow, 0)]));
   const marketKeyDebt = new Map();
   const marketLoanRowDebt = new Map();
+  const marketLoanRowAmount = new Map();
   const missingByMarket = new Map();
   const allKeyState = new Map();
   for (const loan of activeLoans) {
     marketLoanRowDebt.set(loan.marketId, (marketLoanRowDebt.get(loan.marketId) || 0) + loan.debtInUsd);
+    marketLoanRowAmount.set(loan.marketId, (marketLoanRowAmount.get(loan.marketId) || 0) + loan.amountInUsd);
     if (!loan.observedKey) {
       missingByMarket.set(loan.marketId, (missingByMarket.get(loan.marketId) || 0) + loan.debtInUsd);
       continue;
@@ -439,12 +441,13 @@ function buildBorrowerConcentration(bundle, activeLoans) {
       : null;
     const marketObj = (bundle.markets || []).find((m) => m.id === marketId) || { id: marketId, borrowInUsd: marketBorrow };
     const marketLoans = activeLoans.filter((loan) => loan.marketId === marketId);
-    const recon = computeLoanAggregateReconciliation({ market: marketObj, loans: marketLoans });
+    const recon = computeLoanAggregateReconciliation({ market: marketObj, loans: marketLoans, valuesInUsd: true });
 
     return {
       marketId,
       marketDisplayName: marketNames.get(marketId) || marketId,
       marketBorrowInUsd: marketBorrow,
+      loanRowAmountInUsd: marketLoanRowAmount.get(marketId) || 0,
       loanRowDebtInUsd,
       loanAdjustedDebtInUsd: recon.loanAdjustedDebtInUsd,
       loanUnadjustedDebtInUsd: recon.loanDebtInUsd,

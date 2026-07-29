@@ -60,12 +60,53 @@ test("chart help text helpers provide truthful, code-grounded explanations for p
 
   // Verify debtFlowReconciliationHelp
   assert.match(generator, /function debtFlowReconciliationHelp/);
+  assert.match(generator, /Unclassified Reduction = max\(0, -\(Borrow Change \+ Reported Repayment\)\)/);
+  assert.match(generator, /Borrow Change = Inferred Formation - Reported Repayment - Unclassified Reduction/);
 
   // Verify gapValuationHelp
   assert.match(generator, /function gapValuationHelp/);
+  assert.match(generator, /can move solely because the asset price changes/i);
 
   // Verify interestFlowHelp
   assert.match(generator, /function interestFlowHelp/);
+  assert.match(generator, /does not expose a current interest receivable/i);
+});
+
+test("revenue KPI info bubbles match the official daily allocation implementation", async () => {
+  const generator = await fs.readFile(path.join(projectRoot, "scripts", "static_app_generator.py"), "utf8");
+
+  assert.match(generator, /"Annualized run rate":\s*\{[\s\S]*?"formulaText":\s*"Revenue_90d \* \(365\.25 \/ 90\)"/);
+  assert.match(generator, /"DAO interest allocation":\s*\{[\s\S]*?API-reported DAO interest allocation across complete daily analytics\.fees rows[\s\S]*?"formulaText":\s*"sum\(Complete daily borrowInterestAccruedForProtocol USD\)"/);
+  assert.doesNotMatch(
+    generator.match(/"DAO interest allocation":\s*\{[\s\S]*?\n\s*\}/)?.[0] || "",
+    /Reserve Factor|reserve factor/,
+    "DAO interest metadata must not claim that the app reapplies a reserve factor"
+  );
+  assert.match(generator, /"LQ-staker allocation":\s*\{[\s\S]*?"formulaText":\s*"sum\(Complete daily holder interest \+ holder origination allocation USD\)"/);
+});
+
+test("collected revenue bubbles use repayment-timed retained interest and both origination fee components", async () => {
+  const generator = await fs.readFile(path.join(projectRoot, "scripts", "static_app_generator.py"), "utf8");
+
+  assert.match(generator, /"YTD collected revenue":\s*\{[\s\S]*?complete days in the latest collected-revenue calendar year[\s\S]*?"formulaText":\s*"sum\(Latest calendar-year complete days: revenueFromRepaidInterestInUsd \+ loanOriginationFeesInUsd \+ loanOriginationFeesMinAdaInUsd\)"/);
+  assert.match(generator, /"Revenue from repaid interest":\s*\{[\s\S]*?"formulaText":\s*"sum\(Latest calendar-year complete days: revenueFromRepaidInterestInUsd\)"/);
+  assert.match(generator, /"Loan origination fees":\s*\{[\s\S]*?"formulaText":\s*"sum\(Latest calendar-year complete days: loanOriginationFeesInUsd \+ loanOriginationFeesMinAdaInUsd\)"/);
+  assert.match(generator, /"Collected revenue":\s*\{[\s\S]*?revenueFromRepaidInterestInUsd[\s\S]*?loanOriginationFeesInUsd[\s\S]*?loanOriginationFeesMinAdaInUsd[\s\S]*?"formulaText":\s*"sum\(revenueFromRepaidInterestInUsd \+ loanOriginationFeesInUsd \+ loanOriginationFeesMinAdaInUsd\)"/);
+  assert.match(generator, /"Interest revenue collected":\s*\{[\s\S]*?"formulaText":\s*"sum\(revenueFromRepaidInterestInUsd\)"/);
+  assert.match(generator, /"Origination fees collected":\s*\{[\s\S]*?"formulaText":\s*"sum\(loanOriginationFeesInUsd \+ loanOriginationFeesMinAdaInUsd\)"/);
+});
+
+test("market revenue bubbles distinguish reconciled collections, direct fees, accruals, and projections", async () => {
+  const generator = await fs.readFile(path.join(projectRoot, "scripts", "static_app_generator.py"), "utf8");
+
+  assert.match(generator, /"YTD attributed collected revenue":\s*\{[\s\S]*?official protocol retained-interest total[\s\S]*?parameter-weighted market repayment[\s\S]*?"formulaText":/i);
+  assert.match(generator, /"Attributed interest revenue collected":\s*\{[\s\S]*?revenueFromRepaidInterestInUsd[\s\S]*?interestRepaidInUsd \* protocolInterestShare[\s\S]*?"formulaText":/);
+  assert.match(generator, /"Market origination fees collected":\s*\{[\s\S]*?analytics\.marketHistory[\s\S]*?"formulaText":\s*"sum\(YTD complete market days: loanOriginationFeesInUsd \+ loanOriginationFeesMinAdaInUsd\)"/);
+  assert.match(generator, /"Accrued protocol\/reserve interest revenue":\s*\{[\s\S]*?interestAccruedInUsd \* \(1 - incomeRatioSuppliers \/ incomeRatioSum\)[\s\S]*?"formulaText":/);
+  assert.match(generator, /"Annualized protocol\/reserve interest revenue":\s*\{[\s\S]*?borrowInUsd \* borrowApr \* \(1 - incomeRatioSuppliers \/ incomeRatioSum\)[\s\S]*?"formulaText":/);
+  assert.match(generator, /"YTD interest repaid activity":\s*\{[\s\S]*?not retained protocol revenue[\s\S]*?"formulaText":\s*"sum\(YTD complete market days: interestRepaidInUsd\)"/);
+  assert.doesNotMatch(generator, /Unavailable: analytics\.marketHistory has no revenueFromRepaidInterestInUsd field/);
+  assert.doesNotMatch(generator, /Gross realized fee flow/);
 });
 
 test("breakdown matrix header info bubbles render accessible, non-empty popovers with calculation descriptions", async () => {

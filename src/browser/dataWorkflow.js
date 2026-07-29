@@ -35,6 +35,44 @@ query PublicMarkets($page: Int!, $perPage: Int!) {
           delisting
           prime
           updatedAt
+          parameters {
+            borrowCap
+            supplyCap
+            minValue
+            minHealthFactor
+            actionCount
+            maxCollateralCount
+            maxBatchTime
+            minBatchSize
+            minBatchTime
+            closeFactor0
+            incomeParameters {
+              reserve
+              supplier
+              staker
+              treasury
+            }
+            interestModelParameters {
+              baseRate
+              kinkRate
+              utilMultiplier
+              utilMultiplierJump
+            }
+            collateralParameters {
+              collateral {
+                id
+                displayName
+                symbol
+              }
+              maxLoanToValue
+              weightedMaxLoanToValue
+              liquidationThreshold
+              weightedLiquidationThreshold
+              liquidationPenalty
+              liquidationProfitability
+              collateralWeight
+            }
+          }
           asset {
             id
             name
@@ -315,7 +353,7 @@ async function runRefresh({
     await store.writeJson(`${captureRoot}/markets-current.json`, marketsCapture, { overwrite: false });
   }
   await store.writeText("metadata/settings.csv", rowsToCsv([{
-    schemaVersion: 3,
+    schemaVersion: 4,
     endpoint: LIQWID_GRAPHQL_ENDPOINT,
     historyStartDate: startDay,
     historyEndDate: endDay,
@@ -464,6 +502,11 @@ async function runRefresh({
     lqStatsHistory
   });
   bundle.rawCapture = captureRoot;
+  bundle.archiveMetadata = {
+    schemaVersion: 4,
+    endpoint: LIQWID_GRAPHQL_ENDPOINT,
+    latestRawCapture: captureRoot
+  };
   onProgress({ phase: "complete", total: markets.length, latestDate: bundle.protocolSeries.at(-1)?.date ?? null });
   return bundle;
 }
@@ -498,6 +541,12 @@ export async function buildAnalysisBundleFromStore(store, options = {}) {
   });
   const generatedAt = settings.generatedAt;
   const rawCapture = settings.latestRawCapture;
+  bundle.source = settings.endpoint || null;
+  bundle.archiveMetadata = {
+    schemaVersion: settings.schemaVersion ?? null,
+    endpoint: settings.endpoint || null,
+    latestRawCapture: rawCapture || null
+  };
   if (generatedAt) bundle.generatedAt = generatedAt;
   if (rawCapture) bundle.rawCapture = rawCapture;
   return bundle;

@@ -9,7 +9,7 @@ import {
   rowsToCsv,
   safeMarketFileId
 } from "./dataWorkflow.js";
-import { aggregateDailyProtocolFeeAllocations, buildCompleteAnalysis, deriveLoanPopulations } from "./fullAnalysis.js";
+import { aggregateDailyProtocolFeeAllocations, buildArchiveAudit, buildCompleteAnalysis, deriveLoanPopulations } from "./fullAnalysis.js";
 import { appendLoanSnapshotHistory, buildLoanSnapshotHistory } from "./loanSnapshotHistory.js";
 import { addDays, toUtcApiRange } from "../shared/dates.js";
 
@@ -70,6 +70,7 @@ query ProtocolOverview($startDate: String!, $endDate: String!) {
         interestRepaidInUsd
         revenueFromRepaidInterestInUsd
         loanOriginationFeesInUsd
+        loanOriginationFeesMinAdaInUsd
       }
     }
   }
@@ -144,7 +145,7 @@ export function buildProtocolFeesBatchRequest(dateKeys) {
 export function buildProtocolOverviewBatchRequest(dateKeys) {
   const fields = dateKeys.map((date, index) => {
     const { startDate, endDate } = toUtcApiRange({ startDay: date, endDay: date });
-    return `d${index}: overview(startDate: "${startDate}", endDate: "${endDate}") { current { fromDate toDate liquidationProfitInUsd debtRepaidInUsd interestAccruedInUsd interestRepaidInUsd revenueFromRepaidInterestInUsd loanOriginationFeesInUsd } }`;
+    return `d${index}: overview(startDate: "${startDate}", endDate: "${endDate}") { current { fromDate toDate liquidationProfitInUsd debtRepaidInUsd interestAccruedInUsd interestRepaidInUsd revenueFromRepaidInterestInUsd loanOriginationFeesInUsd loanOriginationFeesMinAdaInUsd } }`;
   });
   return { query: `query DailyProtocolOverviewBatch { analytics { ${fields.join(" ")} } }`, variables: {} };
 }
@@ -259,6 +260,7 @@ export async function refreshCompleteDataset(options = {}) {
   }
 
   onProgress({ phase: "analysis" });
+  bundle.archiveAudit = await buildArchiveAudit(store, bundle, allLoans.length);
   const analysis = buildCompleteAnalysis({
     bundle,
     monthlyLiquidations,
@@ -423,6 +425,7 @@ async function refreshDailyOverview({ store, api, apiOptions, captureRoot, fetch
       const request = buildProtocolOverviewRequest({ startDay: date, endDay: date });
       const revenueFromRepaidInterestInUsd = numeric(current.revenueFromRepaidInterestInUsd);
       const loanOriginationFeesInUsd = numeric(current.loanOriginationFeesInUsd);
+      const loanOriginationFeesMinAdaInUsd = numeric(current.loanOriginationFeesMinAdaInUsd);
       const row = {
         date,
         periodStartDay: date,
@@ -435,7 +438,8 @@ async function refreshDailyOverview({ store, api, apiOptions, captureRoot, fetch
         interestRepaidInUsd: numeric(current.interestRepaidInUsd),
         revenueFromRepaidInterestInUsd,
         loanOriginationFeesInUsd,
-        combinedObservedFeeFlowInUsd: revenueFromRepaidInterestInUsd + loanOriginationFeesInUsd,
+        loanOriginationFeesMinAdaInUsd,
+        combinedObservedFeeFlowInUsd: revenueFromRepaidInterestInUsd + loanOriginationFeesInUsd + loanOriginationFeesMinAdaInUsd,
         isComplete: date < String(fetchedAt).slice(0, 10),
         provenance: "daily-api"
       };
@@ -590,6 +594,7 @@ function hasCurrentDailyOverviewBoundary(row, date) {
   return row?.provenance === "daily-api"
     && row.revenueFromRepaidInterestInUsd !== undefined
     && row.loanOriginationFeesInUsd !== undefined
+    && row.loanOriginationFeesMinAdaInUsd !== undefined
     && sameUtcSecond(row.fromDate, expected.startDate)
     && sameUtcSecond(row.toDate, expected.endDate);
 }

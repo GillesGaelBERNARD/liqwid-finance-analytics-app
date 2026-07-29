@@ -110,6 +110,45 @@ test("scatter can connect points in ascending X order for cumulative curves", ()
   assert.match(container.innerHTML, /<polyline[^>]+points="[^"]+"/);
 });
 
+test("scatter rate curves keep a fixed 0-100% utilization axis and labelled utilization markers", () => {
+  const container = fakeContainer();
+  renderInteractiveScatterChart(container, {
+    chartId: "market-parameter-rate-curve",
+    rows: [
+      { curve: "borrower", curveLabel: "Borrow APR", label: "0%", utilization: 0, rate: 0.03 },
+      { curve: "borrower", curveLabel: "Borrow APR", label: "90%", utilization: 0.9, rate: 0.4 },
+      { curve: "supplier", curveLabel: "Supply APY", label: "0%", utilization: 0, rate: 0 },
+      { curve: "supplier", curveLabel: "Supply APY", label: "90%", utilization: 0.9, rate: 0.28 }
+    ],
+    seriesKey: "curve",
+    seriesLabelKey: "curveLabel",
+    series: [
+      { key: "borrower", label: "Borrow APR", color: "#ffb84d" },
+      { key: "supplier", label: "Supply APY", color: "#19b5fe" }
+    ],
+    labelKey: "label",
+    xKey: "utilization",
+    yKey: "rate",
+    connectPoints: true,
+    fixedXDomain: { min: 0, max: 1 },
+    xReferenceLines: [
+      { value: 0.42, label: "Current utilization", color: "#e8f7ff" },
+      { value: 0.8, label: "Optimal utilization", color: "#3edc81", dash: "5 4" }
+    ],
+    seriesLegendLabel: "Rate curves",
+    seriesLegendHelp: "Select a curve to emphasize or mute it.",
+    xFormatter: value => `${(value * 100).toFixed(0)}%`,
+    yFormatter: value => `${(value * 100).toFixed(0)}%`
+  });
+
+  assert.match(container.innerHTML, />100%<\/text>/);
+  assert.match(container.innerHTML, /class="breakdown-scatter-x-reference"[^>]+data-breakdown-x-reference="0\.42"/);
+  assert.match(container.innerHTML, /Current utilization/);
+  assert.match(container.innerHTML, /Optimal utilization/);
+  assert.match(container.innerHTML, />Rate curves<\/span>/);
+  assert.match(container.innerHTML, /Select a curve to emphasize or mute it\./);
+});
+
 test("grouped cumulative curves keep every market visible while toggles mute selected context", () => {
   const container = fakeContainer();
   renderInteractiveScatterChart(container, {

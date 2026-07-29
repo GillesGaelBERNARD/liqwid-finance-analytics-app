@@ -127,6 +127,31 @@ test("debt accrued is inferred in native units before conversion to USD", () => 
   assert.equal(rows[1].debtAccruedSource, "native-balance-identity");
 });
 
+test("unclassified borrow reductions complete the native debt balance identity", () => {
+  const rows = withDerivedMarketMetrics(normalizeMarketHistoryRows([
+    { timestamp: "2026-01-01T00:00:00Z", borrow: 100, borrowInUsd: 100 },
+    {
+      timestamp: "2026-01-02T00:00:00Z",
+      borrow: 60,
+      borrowInUsd: 60,
+      debtRepaid: 10,
+      debtRepaidInUsd: 10
+    }
+  ], { id: "ASSET-A" }));
+
+  const previous = rows[0];
+  const current = rows[1];
+  assert.equal(current.debtAccrued, 0);
+  assert.equal(current.unclassifiedBorrowReduction, 30);
+  assert.equal(current.unclassifiedBorrowReductionInUsd, 30);
+  assert.equal(current.cumulativeUnclassifiedBorrowReduction, 30);
+  assert.equal(current.cumulativeUnclassifiedBorrowReductionInUsd, 30);
+  assert.equal(
+    current.borrow - previous.borrow,
+    current.debtAccrued - current.debtRepaid - current.unclassifiedBorrowReduction
+  );
+});
+
 test("cumulative native debt and interest gaps are valued at every observation's price", () => {
   const rows = withDerivedMarketMetrics(normalizeMarketHistoryRows([
     {
@@ -244,6 +269,36 @@ test("protocol gaps sum current-valued market gaps instead of historical USD dif
   assert.equal(protocol[2].interestCoverage7d, 10 / 16);
 });
 
+test("protocol unclassified borrow reductions sum current-valued market amounts", () => {
+  const marketA = normalizeMarketHistoryRows([
+    { timestamp: "2026-01-01T00:00:00Z", borrow: 100, borrowInUsd: 100 },
+    {
+      timestamp: "2026-01-02T00:00:00Z",
+      borrow: 60,
+      borrowInUsd: 120,
+      debtRepaid: 10,
+      debtRepaidInUsd: 20
+    }
+  ], { id: "A" });
+  const marketB = normalizeMarketHistoryRows([
+    { timestamp: "2026-01-01T00:00:00Z", borrow: 50, borrowInUsd: 500 },
+    {
+      timestamp: "2026-01-02T00:00:00Z",
+      borrow: 40,
+      borrowInUsd: 400,
+      debtRepaid: 5,
+      debtRepaidInUsd: 50
+    }
+  ], { id: "B" });
+
+  const protocol = aggregateProtocolSeries({ A: marketA, B: marketB });
+
+  assert.equal(protocol[1].unclassifiedBorrowReductionInUsd, 110);
+  assert.equal(protocol[1].cumulativeUnclassifiedBorrowReductionInUsd, 110);
+  assert.equal(protocol[1].unclassifiedBorrowReduction, null);
+  assert.equal(protocol[1].gapAggregation, "market-usd-sum");
+});
+
 test("repayment burst score compares active repayment against prior active median", () => {
   const rows = withDerivedMarketMetrics(
     normalizeMarketHistoryRows(
@@ -316,5 +371,3 @@ test("normalized repayment HHI is unchanged by the number of equal active days",
   assert.equal(normalizedHhi(Array(30).fill(10)), 0);
   assert.equal(normalizedHhi([0, 0, 25]), 1);
 });
-
-

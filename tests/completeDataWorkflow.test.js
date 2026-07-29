@@ -37,7 +37,8 @@ function completeApi(overrides = {}) {
         interestAccruedInUsd: 2,
         interestRepaidInUsd: 1,
         revenueFromRepaidInterestInUsd: 6,
-        loanOriginationFeesInUsd: 2
+        loanOriginationFeesInUsd: 2,
+        loanOriginationFeesMinAdaInUsd: 1
       };
     },
     async fetchProtocolFees(input) {
@@ -189,6 +190,7 @@ test("successful refreshes append irregular loan observations and archive reload
 
   const reopened = await buildCompleteAnalysisFromStore(store, refreshed.bundle);
   assert.deepEqual(reopened.loanSnapshotHistory, refreshed.analysis.loanSnapshotHistory);
+  assert.deepEqual(reopened.marketParameters, refreshed.analysis.marketParameters);
   assert.deepEqual(refreshed.analysis.dataStatus.loanPopulation, reopened.dataStatus.loanPopulation);
   assert.equal(firstRefresh.analysis.dataStatus.coverageCards.find((card) => card.id === "loan-observations").value, "1 saved observation");
   assert.equal(refreshed.analysis.dataStatus.coverageCards.find((card) => card.id === "loan-observations").value, "2 saved observations");
@@ -202,6 +204,12 @@ test("successful refreshes append irregular loan observations and archive reload
     activeDebtPositions: 2,
     zeroDebtPositions: 1,
     excludedDustPositions: 1,
+    liquidatablePositions: 0,
+    collateralPositions: 2,
+    missingObservedKeyPositions: 0,
+    missingHealthFactorPositions: 0,
+    activeDebtInUsd: 20,
+    representedBorrowShare: 1,
     activeDebtShare: 0.5,
     hasUnfilteredSnapshot: true
   });
@@ -235,7 +243,7 @@ test("daily overview batches request observed fee components with full UTC bound
       return {
         ok: true,
         async json() {
-          return { data: { analytics: { d0: { current: { fromDate: "2026-06-05", toDate: "2026-06-05", revenueFromRepaidInterestInUsd: 42, loanOriginationFeesInUsd: 0 } } } } };
+          return { data: { analytics: { d0: { current: { fromDate: "2026-06-05", toDate: "2026-06-05", revenueFromRepaidInterestInUsd: 42, loanOriginationFeesInUsd: 3, loanOriginationFeesMinAdaInUsd: 1 } } } } };
         }
       };
     }
@@ -244,8 +252,10 @@ test("daily overview batches request observed fee components with full UTC bound
   assert.match(request.query, /d0: overview\(startDate: "2026-06-05T00:00:00Z", endDate: "2026-06-05T23:59:59Z"\)/);
   assert.match(request.query, /revenueFromRepaidInterestInUsd/);
   assert.match(request.query, /loanOriginationFeesInUsd/);
+  assert.match(request.query, /loanOriginationFeesMinAdaInUsd/);
   assert.equal(rows[0].revenueFromRepaidInterestInUsd, 42);
-  assert.equal(rows[0].loanOriginationFeesInUsd, 0);
+  assert.equal(rows[0].loanOriginationFeesInUsd, 3);
+  assert.equal(rows[0].loanOriginationFeesMinAdaInUsd, 1);
 });
 
 test("a legacy zero-length daily cache row is invalidated and refetched", async () => {
@@ -358,9 +368,15 @@ test("observed fee flow covers every protocol day while allocated DAO revenue st
   assert.deepEqual(analysis.revenue.daily.map((row) => row.date), ["2025-12-29", "2025-12-30", "2025-12-31", "2026-01-01", "2026-01-02"]);
   assert.ok(overviewCalls.some((input) => input.startDay === "2025-12-29" && input.endDay === "2025-12-29"));
   assert.equal(analysis.revenue.daily[0].observedRepaidInterestFeeFlowInUsd, 5);
-  assert.equal(analysis.revenue.daily[0].observedOriginationFeeFlowInUsd, 0);
-  assert.equal(analysis.revenue.daily[0].combinedObservedFeeFlowInUsd, 5);
-  assert.equal(analysis.revenue.summary.combinedObservedFeeFlowInUsd, 25);
+  assert.equal(analysis.revenue.daily[0].observedOriginationFeeFlowInUsd, 99);
+  assert.equal(analysis.revenue.daily[0].combinedObservedFeeFlowInUsd, 104);
+  assert.equal(analysis.revenue.daily[0].collectedInterestRevenueInUsd, 5);
+  assert.equal(analysis.revenue.daily[0].collectedOriginationRevenueInUsd, 99);
+  assert.equal(analysis.revenue.daily[0].collectedRevenueInUsd, 104);
+  assert.equal(analysis.revenue.summary.collectedRevenueInUsd, 520);
+  assert.equal(analysis.revenue.summary.collectedInterestRevenueInUsd, 25);
+  assert.equal(analysis.revenue.summary.collectedOriginationRevenueInUsd, 495);
+  assert.equal(analysis.revenue.monthlyCollectedRevenue[0].collectedRevenueInUsd, 312);
   assert.equal(analysis.revenue.monthlyAllocation[0].periodStartDay, "2026-01-01");
   assert.equal(analysis.revenue.monthlyAllocation[0].allocatedProtocolInterestRevenueInUsd, 8);
   assert.equal(analysis.revenue.monthlyAllocation[0].allocatedProtocolOriginationRevenueInUsd, 2);
@@ -410,6 +426,15 @@ test("monthly official allocation is aggregated from canonical daily rows", asyn
   assert.deepEqual(analysis.revenue.monthlyAllocation.map((row) => row.allocatedProtocolRevenueInUsd), [310, 560, 930, 600]);
   assert.deepEqual(analysis.revenue.monthlyAllocation.map((row) => row.allocatedHoldersRevenueInUsd), [31, 56, 93, 60]);
   assert.deepEqual(analysis.revenue.monthlyAllocation.map((row) => row.isComplete), [true, true, true, false]);
+  assert.equal(analysis.revenue.summary.allocatedProtocolRevenueInUsd, 2400);
+  assert.equal(analysis.revenue.summary.allocatedProtocolInterestRevenueInUsd, 1680);
+  assert.equal(analysis.revenue.summary.allocatedProtocolOriginationRevenueInUsd, 720);
+  assert.equal(analysis.revenue.summary.allocatedHoldersRevenueInUsd, 240);
+  assert.equal(analysis.revenue.summary.allocatedHoldersInterestRevenueInUsd, 180);
+  assert.equal(analysis.revenue.summary.allocatedHoldersOriginationRevenueInUsd, 60);
+  assert.equal(analysis.revenue.summary.cumulativeAllocationFromDate, "2026-01-01");
+  assert.equal(analysis.revenue.summary.cumulativeAllocationToDate, "2026-04-15");
+  assert.equal(analysis.revenue.summary.completeAllocationDays, 105);
 });
 
 test("an old monthly cache is ignored in favor of canonical daily aggregation", async () => {

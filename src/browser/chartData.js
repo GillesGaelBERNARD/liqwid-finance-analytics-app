@@ -230,6 +230,14 @@ export function enrichChartTimeSeries(rows, options = {}) {
     const dailyDebtGapAsset = debtGapAssets[index];
     const dailyInterestGapAsset = interestGapAssets[index];
     const cumulativeDebtGapAsset = chartDataProvidedNumber(row, "cumulativeDebtFlowGap");
+    const unclassifiedBorrowReductionAsset = chartDataProvidedNumber(
+      row,
+      "unclassifiedBorrowReduction"
+    );
+    const cumulativeUnclassifiedBorrowReductionAsset = chartDataProvidedNumber(
+      row,
+      "cumulativeUnclassifiedBorrowReduction"
+    );
     const cumulativeInterestGapAsset = chartDataProvidedNumber(row, "cumulativeInterestGap");
     const dailyDebtGap = chartDataProvidedNumber(
       row,
@@ -247,8 +255,16 @@ export function enrichChartTimeSeries(rows, options = {}) {
       debtChange1d: index ? borrow - values.borrowInUsd[index - 1] : null,
       dailyDebtGapAsset,
       dailyDebtGap,
-      cumulativeDebtAccrued: prefixes.debtAccruedInUsd[index + 1],
-      cumulativeDebtRepaid: prefixes.debtRepaidInUsd[index + 1],
+      cumulativeDebtAccrued: chartDataProvidedNumber(
+        row,
+        "debtAccruedCumulativeInUsd",
+        prefixes.debtAccruedInUsd[index + 1]
+      ),
+      cumulativeDebtRepaid: chartDataProvidedNumber(
+        row,
+        "debtRepaidCumulativeInUsd",
+        prefixes.debtRepaidInUsd[index + 1]
+      ),
       cumulativeDebtGapAsset,
       cumulativeDebtGap: !protocolAggregate && cumulativeDebtGapAsset !== null
         ? chartDataValueAtPrice(cumulativeDebtGapAsset, assetPriceInUsd)
@@ -257,10 +273,30 @@ export function enrichChartTimeSeries(rows, options = {}) {
             "cumulativeDebtFlowGapInUsd",
             prefixes.debtAccruedInUsd[index + 1] - prefixes.debtRepaidInUsd[index + 1]
           ),
+      unclassifiedBorrowReductionAsset,
+      unclassifiedBorrowReduction: !protocolAggregate && unclassifiedBorrowReductionAsset !== null
+        ? chartDataValueAtPrice(unclassifiedBorrowReductionAsset, assetPriceInUsd)
+        : chartDataProvidedNumber(row, "unclassifiedBorrowReductionInUsd"),
+      cumulativeUnclassifiedBorrowReductionAsset,
+      cumulativeUnclassifiedBorrowReduction:
+        !protocolAggregate && cumulativeUnclassifiedBorrowReductionAsset !== null
+          ? chartDataValueAtPrice(
+              cumulativeUnclassifiedBorrowReductionAsset,
+              assetPriceInUsd
+            )
+          : chartDataProvidedNumber(row, "cumulativeUnclassifiedBorrowReductionInUsd"),
       dailyInterestGapAsset,
       dailyInterestGap,
-      cumulativeInterestAccrued: prefixes.interestAccruedInUsd[index + 1],
-      cumulativeInterestRepaid: prefixes.interestRepaidInUsd[index + 1],
+      cumulativeInterestAccrued: chartDataProvidedNumber(
+        row,
+        "interestAccruedCumulativeInUsd",
+        prefixes.interestAccruedInUsd[index + 1]
+      ),
+      cumulativeInterestRepaid: chartDataProvidedNumber(
+        row,
+        "interestRepaidCumulativeInUsd",
+        prefixes.interestRepaidInUsd[index + 1]
+      ),
       cumulativeInterestGapAsset,
       cumulativeInterestGap: !protocolAggregate && cumulativeInterestGapAsset !== null
         ? chartDataValueAtPrice(cumulativeInterestGapAsset, assetPriceInUsd)
@@ -498,15 +534,31 @@ export function summarizeDebtFlowReconciliation(rows) {
 
   const openingBorrowInUsd = chartDataNumber(source[0].borrowInUsd);
   const currentBorrowInUsd = chartDataNumber(source.at(-1).borrowInUsd);
-  const cumulativeDebtAccruedInUsd = source.reduce(
-    (total, row) => total + (chartDataOptionalNumber(row.debtAccruedInUsd) ?? 0),
-    0
-  );
-  const cumulativeDebtRepaidInUsd = source.reduce(
-    (total, row) => total + chartDataNumber(row.debtRepaidInUsd),
-    0
-  );
   const latest = source.at(-1);
+  const cumulativeDebtAccruedInUsd = chartDataProvidedNumber(
+    latest,
+    ["cumulativeDebtAccrued", "debtAccruedCumulativeInUsd"],
+    source.reduce(
+      (total, row) => total + (chartDataOptionalNumber(row.debtAccruedInUsd) ?? 0),
+      0
+    )
+  );
+  const cumulativeDebtRepaidInUsd = chartDataProvidedNumber(
+    latest,
+    ["cumulativeDebtRepaid", "debtRepaidCumulativeInUsd"],
+    source.reduce(
+      (total, row) => total + chartDataNumber(row.debtRepaidInUsd),
+      0
+    )
+  );
+  const cumulativeUnclassifiedBorrowReductionInUsd = chartDataProvidedNumber(
+    latest,
+    [
+      "cumulativeUnclassifiedBorrowReduction",
+      "cumulativeUnclassifiedBorrowReductionInUsd"
+    ],
+    0
+  );
   const cumulativeDebtFlowGap = chartDataProvidedNumber(
     latest,
     ["cumulativeDebtGapAsset", "cumulativeDebtFlowGap"]
@@ -542,6 +594,7 @@ export function summarizeDebtFlowReconciliation(rows) {
     currentBorrowInUsd,
     cumulativeDebtAccruedInUsd,
     cumulativeDebtRepaidInUsd,
+    cumulativeUnclassifiedBorrowReductionInUsd,
     ...(cumulativeDebtFlowGap === null ? {} : { cumulativeDebtFlowGap }),
     cumulativeDebtFlowGapInUsd,
     observedBorrowChangeInUsd,
@@ -555,22 +608,38 @@ export function summarizeDebtFlowReconciliation(rows) {
 
 export function aggregateMonthlyChartRows(rows) {
   const months = new Map();
+  const derivedRevenueFields = [
+    "directOriginationRevenueInUsd",
+    "attributedCollectedInterestRevenueInUsd",
+    "attributedCollectedMarketRevenueInUsd",
+    "interestAccruedInUsd",
+    "accruedSupplierInterestIncomeInUsd",
+    "accruedProtocolInterestRevenueInUsd"
+  ];
 
   for (const row of chartDataRows(rows)) {
     const month = `${row.date.slice(0, 7)}-01`;
     const repaid = chartDataNumber(row.interestRepaidInUsd);
-    const origination = chartDataNumber(row.loanOriginationFeesInUsd) + chartDataNumber(row.loanOriginationFeesMinAdaInUsd);
+    const origination = chartDataNumber(row.loanOriginationFeesInUsd);
+    const minAdaOrigination = chartDataNumber(row.loanOriginationFeesMinAdaInUsd);
     const current = months.get(month) ?? {
       date: month,
       observations: 0,
-      interestRepaidInUsd: 0,
-      observableOriginationFeeFlowInUsd: 0,
-      grossRealizedRevenueProxyInUsd: 0
+      interestRepaidActivityInUsd: 0,
+      loanOriginationFeesInUsd: 0,
+      loanOriginationFeesMinAdaInUsd: 0,
+      collectedOriginationRevenueInUsd: 0
     };
+    for (const field of derivedRevenueFields) {
+      if (!(field in row)) continue;
+      if (!(field in current)) current[field] = 0;
+      current[field] += chartDataNumber(row[field]);
+    }
     current.observations += 1;
-    current.interestRepaidInUsd += repaid;
-    current.observableOriginationFeeFlowInUsd += origination;
-    current.grossRealizedRevenueProxyInUsd += repaid + origination;
+    current.interestRepaidActivityInUsd += repaid;
+    current.loanOriginationFeesInUsd += origination;
+    current.loanOriginationFeesMinAdaInUsd += minAdaOrigination;
+    current.collectedOriginationRevenueInUsd += origination + minAdaOrigination;
     months.set(month, current);
   }
 

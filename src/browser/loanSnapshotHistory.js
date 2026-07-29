@@ -40,7 +40,7 @@ export function buildLoanSnapshotHistory(input = {}) {
         const marketReconciliations = marketIds.map((mId) => {
           const mObj = markets.find((m) => String(m?.id ?? m?.marketId) === mId) || { id: mId };
           const mLoans = activeLoans.filter((loan) => snapshotMarketId(loan?.marketId) === mId);
-          return computeLoanAggregateReconciliation({ market: mObj, loans: mLoans });
+          return computeLoanAggregateReconciliation({ market: mObj, loans: mLoans, valuesInUsd: true });
         });
         const marketBorrowNative = marketReconciliations.reduce((acc, r) => acc + r.marketBorrowNative, 0);
         const loanDebtNative = marketReconciliations.reduce((acc, r) => acc + r.loanDebtNative, 0);
@@ -69,7 +69,7 @@ export function buildLoanSnapshotHistory(input = {}) {
           classification: classifyReconciliationState(adjustedDifferenceInUsd)
         };
       }
-      const r = computeLoanAggregateReconciliation({ market: marketObj, loans: scopedLoans });
+      const r = computeLoanAggregateReconciliation({ market: marketObj, loans: scopedLoans, valuesInUsd: true });
       return {
         timestamp,
         scope: "market",

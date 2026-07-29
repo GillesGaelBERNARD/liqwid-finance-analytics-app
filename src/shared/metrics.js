@@ -85,6 +85,8 @@ export function withDerivedMarketMetrics(rows, options = {}) {
   );
   let cumulativeDebtFlowGap = 0;
   let cumulativeDebtFlowGapInUsdFallback = 0;
+  let cumulativeUnclassifiedBorrowReduction = 0;
+  let cumulativeUnclassifiedBorrowReductionInUsdFallback = 0;
   let cumulativeInterestGap = 0;
   let cumulativeInterestGapInUsdFallback = 0;
   const debtGapHistory = [];
@@ -108,6 +110,12 @@ export function withDerivedMarketMetrics(rows, options = {}) {
       ? { assetPriceInUsd: null, assetPriceSource: null }
       : impliedAssetPriceInUsd(row);
     const debtAccrual = deriveDebtAccrued(rows, index, price.assetPriceInUsd);
+    let unclassifiedBorrowReduction = null;
+    let unclassifiedBorrowReductionInUsd = optionalNumber(row.unclassifiedBorrowReductionInUsd);
+    let cumulativeUnclassifiedBorrowReductionValue = null;
+    let cumulativeUnclassifiedBorrowReductionInUsd = optionalNumber(
+      row.cumulativeUnclassifiedBorrowReductionInUsd
+    );
     let debtFlowGap = null;
     let debtFlowGapInUsd = optionalNumber(row.dailyDebtFlowGapInUsd ?? row.debtFlowGapInUsd);
     let cumulativeDebtFlowGapValue = null;
@@ -123,9 +131,25 @@ export function withDerivedMarketMetrics(rows, options = {}) {
 
     if (protocolAggregate) {
       cumulativeDebtFlowGapInUsd = optionalNumber(row.cumulativeDebtFlowGapInUsd);
+      cumulativeUnclassifiedBorrowReductionInUsd = optionalNumber(
+        row.cumulativeUnclassifiedBorrowReductionInUsd
+      );
       cumulativeInterestGapInUsd = optionalNumber(row.cumulativeInterestGapInUsd);
     } else {
       if (nativeDebtAvailable) {
+        unclassifiedBorrowReduction = deriveUnclassifiedBorrowReduction(rows, index, false);
+        if (unclassifiedBorrowReduction !== null) {
+          cumulativeUnclassifiedBorrowReduction += unclassifiedBorrowReduction;
+        }
+        cumulativeUnclassifiedBorrowReductionValue = cumulativeUnclassifiedBorrowReduction;
+        unclassifiedBorrowReductionInUsd = valueNativeAmountInUsd(
+          unclassifiedBorrowReduction,
+          price.assetPriceInUsd
+        );
+        cumulativeUnclassifiedBorrowReductionInUsd = valueNativeAmountInUsd(
+          cumulativeUnclassifiedBorrowReduction,
+          price.assetPriceInUsd
+        );
         debtFlowGap = debtAccrual.debtAccrued === null
           ? null
           : debtAccrual.debtAccrued - numberOrZero(row.debtRepaid);
@@ -134,6 +158,12 @@ export function withDerivedMarketMetrics(rows, options = {}) {
         debtFlowGapInUsd = valueNativeAmountInUsd(debtFlowGap, price.assetPriceInUsd);
         cumulativeDebtFlowGapInUsd = valueNativeAmountInUsd(cumulativeDebtFlowGap, price.assetPriceInUsd);
       } else {
+        unclassifiedBorrowReductionInUsd = deriveUnclassifiedBorrowReduction(rows, index, true);
+        if (unclassifiedBorrowReductionInUsd !== null) {
+          cumulativeUnclassifiedBorrowReductionInUsdFallback += unclassifiedBorrowReductionInUsd;
+        }
+        cumulativeUnclassifiedBorrowReductionInUsd =
+          cumulativeUnclassifiedBorrowReductionInUsdFallback;
         debtFlowGapInUsd = debtAccrual.debtAccruedInUsd === null
           ? null
           : debtAccrual.debtAccruedInUsd - numberOrZero(row.debtRepaidInUsd);
@@ -309,6 +339,10 @@ export function withDerivedMarketMetrics(rows, options = {}) {
       dailyDebtFlowGapInUsd: debtFlowGapInUsd,
       cumulativeDebtFlowGap: cumulativeDebtFlowGapValue,
       cumulativeDebtFlowGapInUsd,
+      unclassifiedBorrowReduction,
+      unclassifiedBorrowReductionInUsd,
+      cumulativeUnclassifiedBorrowReduction: cumulativeUnclassifiedBorrowReductionValue,
+      cumulativeUnclassifiedBorrowReductionInUsd,
       interestGap,
       interestGapInUsd,
       dailyInterestGapInUsd: interestGapInUsd,
@@ -415,6 +449,10 @@ export function aggregateProtocolSeries(marketSeriesById) {
         dailyDebtFlowGapObservedMarkets: 0,
         cumulativeDebtFlowGapInUsd: 0,
         cumulativeDebtFlowGapObservedMarkets: 0,
+        unclassifiedBorrowReductionInUsd: 0,
+        unclassifiedBorrowReductionObservedMarkets: 0,
+        cumulativeUnclassifiedBorrowReductionInUsd: 0,
+        cumulativeUnclassifiedBorrowReductionObservedMarkets: 0,
         dailyInterestGapInUsd: 0,
         dailyInterestGapObservedMarkets: 0,
         cumulativeInterestGapInUsd: 0,
@@ -455,6 +493,16 @@ export function aggregateProtocolSeries(marketSeriesById) {
       existing.interestRepaidInUsd += numberOrZero(row.interestRepaidInUsd);
       addObservedGap(existing, "dailyDebtFlowGap", row.dailyDebtFlowGapInUsd);
       addObservedGap(existing, "cumulativeDebtFlowGap", row.cumulativeDebtFlowGapInUsd);
+      addObservedGap(
+        existing,
+        "unclassifiedBorrowReduction",
+        row.unclassifiedBorrowReductionInUsd
+      );
+      addObservedGap(
+        existing,
+        "cumulativeUnclassifiedBorrowReduction",
+        row.cumulativeUnclassifiedBorrowReductionInUsd
+      );
       addObservedGap(existing, "dailyInterestGap", row.dailyInterestGapInUsd);
       addObservedGap(existing, "cumulativeInterestGap", row.cumulativeInterestGapInUsd);
       addCoveragePair(
@@ -541,6 +589,17 @@ function deriveDebtAccrued(rows, index, assetPriceInUsd = null) {
   };
 }
 
+function deriveUnclassifiedBorrowReduction(rows, index, useUsdAmounts) {
+  if (index === 0) return null;
+  const row = rows[index] || {};
+  const previous = rows[index - 1] || {};
+  const suffix = useUsdAmounts ? "InUsd" : "";
+  const borrowChange = numberOrZero(row[`borrow${suffix}`])
+    - numberOrZero(previous[`borrow${suffix}`]);
+  const reportedRepayment = numberOrZero(row[`debtRepaid${suffix}`]);
+  return Math.max(0, -(borrowChange + reportedRepayment));
+}
+
 function optionalNumber(value) {
   if (value === null || value === undefined || value === "") return null;
   const number = Number(value);
@@ -622,6 +681,14 @@ function finalizeProtocolGapRow(row) {
     dailyDebtFlowGapInUsd: observedGapOrNull(row, "dailyDebtFlowGap"),
     debtFlowGapInUsd: observedGapOrNull(row, "dailyDebtFlowGap"),
     cumulativeDebtFlowGapInUsd: observedGapOrNull(row, "cumulativeDebtFlowGap"),
+    unclassifiedBorrowReductionInUsd: observedGapOrNull(
+      row,
+      "unclassifiedBorrowReduction"
+    ),
+    cumulativeUnclassifiedBorrowReductionInUsd: observedGapOrNull(
+      row,
+      "cumulativeUnclassifiedBorrowReduction"
+    ),
     dailyInterestGapInUsd: observedGapOrNull(row, "dailyInterestGap"),
     interestGapInUsd: observedGapOrNull(row, "dailyInterestGap"),
     cumulativeInterestGapInUsd: observedGapOrNull(row, "cumulativeInterestGap"),
@@ -751,18 +818,30 @@ export function classifyReconciliationState(differenceInUsd, toleranceUsd = 1.0)
   return "reconciled";
 }
 
-export function computeLoanAggregateReconciliation({ market = {}, loans = [], assetPriceInUsd = null, toleranceUsd = 1.0 }) {
+export function computeLoanAggregateReconciliation({
+  market = {},
+  loans = [],
+  assetPriceInUsd = null,
+  toleranceUsd = 1.0,
+  valuesInUsd = false
+}) {
   const activeLoans = (Array.isArray(loans) ? loans : []).filter((loan) => {
-    const amt = Number(loan?.amount ?? loan?.adjustedAmount ?? loan?.debtInUsd ?? 0);
+    const amt = Number(valuesInUsd
+      ? loan?.adjustedAmountInUsd ?? loan?.adjustedAmount ?? loan?.debtInUsd ?? loan?.amountInUsd ?? loan?.amount ?? 0
+      : loan?.amount ?? loan?.adjustedAmount ?? loan?.debtInUsd ?? 0);
     return Number.isFinite(amt) && amt > 0;
   });
 
-  const marketBorrowNative = numberOrZero(market.borrow ?? market.marketBorrowNative);
+  const marketBorrowNative = valuesInUsd
+    ? numberOrZero(market.marketBorrowNative)
+    : numberOrZero(market.borrow ?? market.marketBorrowNative);
   let price = assetPriceInUsd !== null && Number.isFinite(Number(assetPriceInUsd))
     ? Number(assetPriceInUsd)
     : numberOrZero(market.asset?.price ?? market.marketAssetPriceInUsd);
 
-  let marketBorrowInUsd = market.borrowInUsd !== undefined && market.borrowInUsd !== null
+  let marketBorrowInUsd = valuesInUsd
+    ? numberOrZero(market.borrowInUsd ?? market.borrow)
+    : market.borrowInUsd !== undefined && market.borrowInUsd !== null
     ? numberOrZero(market.borrowInUsd)
     : marketBorrowNative * price;
 
@@ -770,12 +849,17 @@ export function computeLoanAggregateReconciliation({ market = {}, loans = [], as
     price = marketBorrowInUsd / marketBorrowNative;
   }
 
-  const loanDebtNative = activeLoans.reduce((acc, l) => acc + numberOrZero(l.amount ?? l.principalAmount), 0);
-  const loanAdjustedDebtNative = activeLoans.reduce((acc, l) => acc + numberOrZero(l.adjustedAmount ?? l.adjustedDebt ?? l.amount), 0);
+  const loanDebtNative = activeLoans.reduce((acc, l) => acc + numberOrZero(
+    valuesInUsd ? l.amountNative ?? l.principalAmountNative : l.amount ?? l.principalAmount
+  ), 0);
+  const loanAdjustedDebtNative = activeLoans.reduce((acc, l) => acc + numberOrZero(
+    valuesInUsd ? l.adjustedAmountNative ?? l.adjustedDebtNative : l.adjustedAmount ?? l.adjustedDebt ?? l.amount
+  ), 0);
   const minInterestFloorNative = loanAdjustedDebtNative - loanDebtNative;
 
   let loanDebtInUsd = activeLoans.reduce((acc, l) => {
     if (l.amountInUsd !== undefined && l.amountInUsd !== null) return acc + numberOrZero(l.amountInUsd);
+    if (valuesInUsd && l.amount !== undefined && l.amount !== null) return acc + numberOrZero(l.amount);
     if (l.amount !== undefined && l.amount !== null && price > 0) return acc + numberOrZero(l.amount) * price;
     if (l.loanUnadjustedDebtInUsd !== undefined && l.loanUnadjustedDebtInUsd !== null) return acc + numberOrZero(l.loanUnadjustedDebtInUsd);
     return acc;
@@ -784,6 +868,8 @@ export function computeLoanAggregateReconciliation({ market = {}, loans = [], as
   let loanAdjustedDebtInUsd = activeLoans.reduce((acc, l) => {
     if (l.adjustedAmountInUsd !== undefined && l.adjustedAmountInUsd !== null) return acc + numberOrZero(l.adjustedAmountInUsd);
     if (l.debtInUsd !== undefined && l.debtInUsd !== null) return acc + numberOrZero(l.debtInUsd);
+    if (valuesInUsd && l.adjustedAmount !== undefined && l.adjustedAmount !== null) return acc + numberOrZero(l.adjustedAmount);
+    if (valuesInUsd && l.amount !== undefined && l.amount !== null) return acc + numberOrZero(l.amount);
     if (l.adjustedAmount !== undefined && l.adjustedAmount !== null && price > 0) return acc + numberOrZero(l.adjustedAmount) * price;
     return acc;
   }, 0);
@@ -804,6 +890,7 @@ export function computeLoanAggregateReconciliation({ market = {}, loans = [], as
   const adjustedCoverage = marketBorrowInUsd > 0 ? loanAdjustedDebtInUsd / marketBorrowInUsd : null;
   const adjustedCoveragePercent = adjustedCoverage !== null ? adjustedCoverage * 100 : null;
   const classification = classifyReconciliationState(adjustedDifferenceInUsd, toleranceUsd);
+  const normalizedToleranceUsd = Math.max(0, Number(toleranceUsd) || 1.0);
 
   return {
     marketId: String(market.id ?? market.marketId ?? ""),
@@ -819,8 +906,8 @@ export function computeLoanAggregateReconciliation({ market = {}, loans = [], as
     adjustedDifferenceInUsd,
     adjustedCoverage,
     adjustedCoveragePercent,
+    toleranceUsd: normalizedToleranceUsd,
     marketAssetPriceInUsd: price,
     classification
   };
 }
-

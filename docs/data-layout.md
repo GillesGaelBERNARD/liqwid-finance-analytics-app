@@ -26,6 +26,8 @@ Market history and parameter history keep independent cursors. `metadata/market-
 
 Normalized market-history and parameter-history CSV files, partitioned by market. These partitions do not overlap: no per-market file is a saved subset of another clean table.
 
+`clean/markets.csv` is the current official market snapshot. Its nested `parameters` column preserves current operational and liquidation guardrails plus every market-collateral configuration returned by `liqwid.data.markets.parameters`. These current-only values are not copied backward into parameter history.
+
 Current point-in-time loans use one canonical table:
 
 - `clean/current-all-loans.csv`: the complete unfiltered current loan-position listing, including observed keys, per-asset collateral composition, `adjustedAmount`, and the three boolean classification columns `hasDebt`, `canBeLiquidated`, and `hasCollateral`.
@@ -37,9 +39,10 @@ Active-debt, liquidatable, and collateral-bearing populations are filtered in me
 Only append-only observations that cannot be reconstructed from the latest clean tables are persisted:
 
 - `loan-participation-history.csv`;
-- `loan-health-history.csv`.
+- `loan-health-history.csv`;
+- `loan-reconciliation-history.csv`.
 
-These tables are keyed by exact fetch timestamp and protocol/market scope. They contain only aggregates derived from current-only loan snapshots and do not copy fields already available from historical API endpoints.
+These tables are keyed by exact fetch timestamp and protocol/market scope. They contain only aggregates derived from current-only loan snapshots and do not copy fields already available from historical API endpoints. Reconciliation rows compare the USD-valued clean `Loan.amount` and `Loan.adjustedAmount` fields with the USD-valued current `Market.borrow` field; ambiguous clean columns are never converted by asset price a second time.
 
 All other derived metrics, summaries, rankings, protocol aggregates, status checks, exposure tables, monthly fee aggregates, and chart inputs are rebuilt in memory from canonical clean tables. They are not written to the archive.
 
@@ -60,6 +63,6 @@ Use lowercase market ids in filenames where possible:
 
 Settings and generation provenance are stored in `metadata/settings.csv`; parameter cursors are stored in `metadata/market-params-cursors.csv`. Raw official GraphQL request/response envelopes remain compact JSON because their nested request variables, response shape, and fetch metadata must be preserved; clean and append-only observation tables are CSV.
 
-Schema version 3 is the canonical layout. The app reads and writes that layout directly; it does not carry an automatic migration path for earlier redundant layouts. Existing data is converted once as a separate archive copy, preserving the source archive unchanged.
+Schema version 4 is the canonical layout. It adds current market, collateral, liquidation, and operational parameter fields to `clean/markets.csv`. Reopened bundles preserve the endpoint and schema declared in this file instead of replacing them with trusted defaults. Data status validates that endpoint against the official Liqwid v2 URL, inventories immutable raw-capture roots, confirms that the latest capture exists, reconciles the latest raw market and loan counts with their canonical clean snapshots, compares each latest full market-history and parameter-history raw row count with its clean table, and checks that every current API market has a parameter cursor through the requested end. The app reads older archives defensively and marks unsupported or absent metadata unavailable or failed; it never infers or backfills it. Existing data is converted once as a separate archive copy, preserving the source archive unchanged.
 
 The app first tries the native writable-directory picker. If that API is absent or blocked, it uses native **Save as...** for `liqwid-data.zip`; if that is also unavailable, it downloads the same archive normally. Portable ZIP entries use standard DEFLATE compression when browser compression streams are available and fall back to stored entries otherwise. A standard file input can reopen either form. Both forms keep the data layout above, and the HTML never requires an absolute path.

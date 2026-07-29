@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { buildAnalysisBundle } from "../src/browser/dataWorkflow.js";
-import { aggregateDailyProtocolFeeAllocations, buildCompleteAnalysis, buildLqTokenAnalysis, buildProtocolRevenueRunRateSeries, deriveLoanPopulations } from "../src/browser/fullAnalysis.js";
+import { aggregateDailyProtocolFeeAllocations, buildArchiveAudit, buildCompleteAnalysis, buildLqTokenAnalysis, buildProtocolRevenueRunRateSeries, deriveLoanPopulations } from "../src/browser/fullAnalysis.js";
 
 function history(date, overrides = {}) {
   return {
@@ -24,6 +24,97 @@ function history(date, overrides = {}) {
     ...overrides
   };
 }
+
+test("archive audit reconciles current markets and historical raw captures with canonical rows", async () => {
+  const capture = "raw/api/fetches/20260729T111547642Z";
+  const jsonByPath = new Map([
+    [`${capture}/markets/page-0000.json`, {
+      source: "https://v2.api.liqwid.finance/graphql",
+      rowCount: 2,
+      payload: {
+        liqwid: {
+          data: {
+            markets: {
+              totalCount: 2,
+              results: [{ id: "ADA" }, { id: "DJED" }]
+            }
+          }
+        }
+      }
+    }],
+    [`${capture}/market-history/ada.json`, {
+      source: "https://v2.api.liqwid.finance/graphql",
+      rowCount: 2,
+      payload: { rows: [{ date: "2026-01-01" }, { date: "2026-01-02" }] }
+    }],
+    [`${capture}/market-history/djed.json`, {
+      source: "https://v2.api.liqwid.finance/graphql",
+      rowCount: 1,
+      payload: { rows: [{ date: "2026-01-02" }] }
+    }],
+    [`${capture}/market-params-history/ada.json`, {
+      source: "https://v2.api.liqwid.finance/graphql",
+      rowCount: 1,
+      payload: { rows: [{ timestamp: "2026-01-01T00:00:00Z" }] }
+    }],
+    [`${capture}/market-params-history/djed.json`, {
+      source: "https://v2.api.liqwid.finance/graphql",
+      rowCount: 1,
+      payload: { rows: [{ timestamp: "2026-01-01T00:00:00Z" }] }
+    }],
+    [`${capture}/loans/all.json`, {
+      source: "https://v2.api.liqwid.finance/graphql",
+      rowCount: 1,
+      payload: { totalCount: 1, results: [{ marketId: "ADA" }] }
+    }]
+  ]);
+  const store = {
+    listPaths: () => [...jsonByPath.keys(), "metadata/market-params-cursors.csv"],
+    readJson: async (path, fallback) => jsonByPath.get(path) ?? fallback,
+    readText: async (path, fallback) => path === "metadata/market-params-cursors.csv"
+      ? "marketId,requestedThrough\nADA,2026-01-02\nDJED,2026-01-02\n"
+      : fallback,
+    archiveValidation: {
+      manifestValidated: true,
+      archiveFormat: "liqwid-portable-data",
+      archiveVersion: "1",
+      entryCount: 7
+    }
+  };
+  const bundle = {
+    source: "https://v2.api.liqwid.finance/graphql",
+    rawCapture: capture,
+    requestedRange: { endDate: "2026-01-02" },
+    markets: [{ id: "ADA" }, { id: "DJED" }],
+    marketSeries: {
+      ADA: [{ date: "2026-01-01" }, { date: "2026-01-02" }],
+      DJED: [{ date: "2026-01-02" }]
+    }
+  };
+
+  const audit = await buildArchiveAudit(store, bundle, 1, {
+    ADA: [{ timestamp: "2026-01-01T00:00:00Z" }],
+    DJED: [{ timestamp: "2026-01-01T00:00:00Z" }]
+  });
+
+  assert.deepEqual(audit.currentMarkets, {
+    rawEnvelopeRowCount: 2,
+    rawTotalCount: 2,
+    rawResultCount: 2,
+    cleanRowCount: 2
+  });
+  assert.deepEqual(audit.historicalTables, {
+    expectedMarketFiles: 2,
+    rawMarketHistoryFiles: 2,
+    rawMarketHistoryRows: 3,
+    cleanMarketHistoryRows: 3,
+    marketHistoryMismatches: [],
+    rawMarketParameterFiles: 2,
+    rawMarketParameterRows: 2,
+    cleanMarketParameterRows: 2,
+    marketParameterMismatches: []
+  });
+});
 
 test("one canonical loan table reconstructs the official filtered populations", () => {
   const populations = deriveLoanPopulations([
@@ -97,6 +188,138 @@ test("protocol and market summaries use native-first current-valued interest cov
   assert.equal(analysis.marketSummaries[0].interestCoverage90d, 1);
 });
 
+test("complete analysis carries current and historical market parameters into a selected-market view model", () => {
+  const market = {
+    id: "ADA",
+    displayName: "ADA",
+    symbol: "ADA",
+    supply: 100,
+    borrow: 42,
+    liquidity: 58,
+    utilization: 0.42,
+    asset: { price: 1 },
+    parameters: {
+      minHealthFactor: 1.15,
+      closeFactor0: 0.5,
+      collateralParameters: [{
+        collateral: { id: "DJED", displayName: "DJED" },
+        maxLoanToValue: 0.7,
+        liquidationThreshold: 0.8,
+        liquidationPenalty: 0.1
+      }]
+    }
+  };
+  const bundle = buildAnalysisBundle({
+    markets: [market],
+    marketSeriesById: { ADA: [history("2026-01-01", { utilizationPercentage: 0.42 })] },
+    dataRoot: "liqwid",
+    startDate: "2026-01-01",
+    endDate: "2026-01-01"
+  });
+  const analysis = buildCompleteAnalysis({
+    bundle,
+    allLoans: [],
+    activeLoans: [],
+    collateralLoans: [],
+    liquidatableLoans: [],
+    marketParamsById: {
+      ADA: [{
+        timestamp: "2025-12-01T10:15:00.000Z",
+        txHash: "governance-update",
+        baseRate: 0.000001,
+        utilMultiplier: 0.000002,
+        utilMultiplierJump: 0.0001,
+        kink: 0.8,
+        supplyCap: null,
+        borrowCap: 0.9,
+        incomeRatioSum: 10,
+        incomeRatioSuppliers: 8,
+        incomeRatioDividends: 1,
+        incomeRatioTreasury: 0,
+        baseBorrowerAPR: 0.05,
+        baseSupplierAPY: 0.02,
+        optimalBorrowerAPR: 0.1,
+        optimalSupplierAPY: 0.068,
+        maxBorrowerAPR: 0.6,
+        maxSupplierAPY: 0.434
+      }]
+    }
+  });
+
+  const parameters = analysis.marketParameters.byMarket.ADA;
+  assert.equal(parameters.current.txHash, "governance-update");
+  assert.equal(parameters.current.capacity.utilizationCap, 0.9);
+  assert.equal(parameters.rateCurve.currentUtilization, 0.42);
+  assert.ok(parameters.rateCurve.rows.length > 100);
+  assert.equal(analysis.protocolParameters.current.totalMarketCount, 1);
+  assert.equal(analysis.protocolParameters.current.borrowWeightedKink, 0.8);
+  assert.equal(analysis.protocolParameters.current.collateralPairCount, 1);
+  assert.equal(analysis.protocolParameters.marketRows[0].minHealthFactor, 1.15);
+});
+
+test("complete analysis exposes reconciled market collections and parameter-derived accruals beside market summaries", () => {
+  const markets = [
+    { id: "A", displayName: "A", symbol: "A" },
+    { id: "B", displayName: "B", symbol: "B" }
+  ];
+  const bundle = buildAnalysisBundle({
+    markets,
+    marketSeriesById: {
+      A: [history("2026-07-20", {
+        marketId: "A",
+        interestAccruedInUsd: 50,
+        interestRepaidInUsd: 80,
+        loanOriginationFeesInUsd: 3
+      })],
+      B: [history("2026-07-20", {
+        marketId: "B",
+        interestAccruedInUsd: 20,
+        interestRepaidInUsd: 20,
+        loanOriginationFeesInUsd: 1
+      })]
+    },
+    dataRoot: "liqwid",
+    startDate: "2026-07-20",
+    endDate: "2026-07-20"
+  });
+  bundle.generatedAt = "2026-07-21T08:00:00.000Z";
+  const parameter = (supplierRatio) => ({
+    timestamp: "2026-01-01T00:00:00.000Z",
+    incomeRatioSum: 10,
+    incomeRatioSuppliers: supplierRatio,
+    incomeRatioDividends: 0,
+    incomeRatioTreasury: 0
+  });
+
+  const analysis = buildCompleteAnalysis({
+    bundle,
+    allLoans: [],
+    activeLoans: [],
+    collateralLoans: [],
+    liquidatableLoans: [],
+    monthlyLiquidations: [],
+    dailyLiquidations: [],
+    dailyRevenue: [{
+      date: "2026-07-20",
+      interestRepaidInUsd: 100,
+      revenueFromRepaidInterestInUsd: 18,
+      isComplete: true
+    }],
+    dailyAllocatedFees: [],
+    monthlyFees: [],
+    marketParamsById: {
+      A: [parameter(8)],
+      B: [parameter(9)]
+    }
+  });
+
+  assert.equal(analysis.marketRevenue.protocolReconciliation.daily[0].differenceInUsd, 0);
+  assert.equal(analysis.marketRevenue.byMarket.A.summary.ytdAttributedCollectedInterestRevenueInUsd, 16);
+  assert.equal(analysis.marketRevenue.byMarket.A.summary.ytdAttributedCollectedMarketRevenueInUsd, 19);
+  assert.equal(analysis.marketRevenue.byMarket.A.summary.ytdAccruedProtocolInterestRevenueInUsd, 10);
+  assert.equal(analysis.marketSummaries.find((row) => row.marketId === "A").retainedInterestRevenueAvailable, true);
+});
+
 test("complete analysis is rebuilt exclusively from the current refresh generation", () => {
   const rows = Array.from({ length: 12 }, (_, index) => history(`2026-01-${String(index + 1).padStart(2, "0")}`, {
     debtRepaidInUsd: index === 11 ? 100 : index + 1
@@ -147,16 +370,30 @@ test("complete analysis is rebuilt exclusively from the current refresh generati
       }
     ],
     liquidatableLoans: [],
-    dailyRevenue: [{
-      date: "2026-01-01", fromDate: "2026-01-01T00:00:00Z", toDate: "2026-01-01T23:59:59Z", isComplete: true,
-      revenueFromRepaidInterestInUsd: 6, loanOriginationFeesInUsd: 2
-    }],
-    dailyAllocatedFees: [{
-      date: "2026-01-01", periodStartDay: "2026-01-01", periodEndDay: "2026-01-01", isComplete: true,
-      protocolRevenueInUsd: 5, holdersRevenueInUsd: 3,
-      borrowInterestAccruedForProtocolInUsd: 4, loanOriginationFeesForProtocolInUsd: 1,
-      borrowInterestAccruedForHoldersInUsd: 2, loanOriginationFeesForHoldersInUsd: 1
-    }],
+    dailyRevenue: [
+      {
+        date: "2025-12-31", fromDate: "2025-12-31T00:00:00Z", toDate: "2025-12-31T23:59:59Z", isComplete: true,
+        revenueFromRepaidInterestInUsd: 60, loanOriginationFeesInUsd: 20, loanOriginationFeesMinAdaInUsd: 10
+      },
+      {
+        date: "2026-01-01", fromDate: "2026-01-01T00:00:00Z", toDate: "2026-01-01T23:59:59Z", isComplete: true,
+        revenueFromRepaidInterestInUsd: 6, loanOriginationFeesInUsd: 2, loanOriginationFeesMinAdaInUsd: 1
+      }
+    ],
+    dailyAllocatedFees: [
+      {
+        date: "2026-01-01", periodStartDay: "2026-01-01", periodEndDay: "2026-01-01", isComplete: true,
+        protocolRevenueInUsd: 5, holdersRevenueInUsd: 3,
+        borrowInterestAccruedForProtocolInUsd: 4, loanOriginationFeesForProtocolInUsd: 1,
+        borrowInterestAccruedForHoldersInUsd: 2, loanOriginationFeesForHoldersInUsd: 1
+      },
+      {
+        date: "2026-01-02", periodStartDay: "2026-01-02", periodEndDay: "2026-01-02", isComplete: false,
+        protocolRevenueInUsd: 500, holdersRevenueInUsd: 300,
+        borrowInterestAccruedForProtocolInUsd: 400, loanOriginationFeesForProtocolInUsd: 100,
+        borrowInterestAccruedForHoldersInUsd: 200, loanOriginationFeesForHoldersInUsd: 100
+      }
+    ],
     monthlyFees: [{
       date: "2026-01-01", periodStartDay: "2026-01-01", periodEndDay: "2026-01-31", isComplete: true,
       protocolRevenueInUsd: 5, holdersRevenueInUsd: 3,
@@ -178,12 +415,31 @@ test("complete analysis is rebuilt exclusively from the current refresh generati
   assert.equal(analysis.protocolSummary.currentBorrowInUsd, 20);
   assert.equal(analysis.loanState.summary.activeDebtLoanCount, 1);
   assert.equal(analysis.liquidation.monthlyProtocolLiquidationProfit[0].liquidationProfitInUsd, 12);
-  assert.equal(analysis.revenue.daily[0].combinedObservedFeeFlowInUsd, 8);
+  assert.equal(analysis.revenue.daily[1].combinedObservedFeeFlowInUsd, 9);
+  assert.equal(analysis.revenue.daily[1].collectedInterestRevenueInUsd, 6);
+  assert.equal(analysis.revenue.daily[1].collectedOriginationRevenueInUsd, 3);
+  assert.equal(analysis.revenue.daily[1].collectedRevenueInUsd, 9);
   assert.equal("realizedProtocolRevenueInUsd" in analysis.revenue.daily[0], false);
-  assert.equal(analysis.revenue.summary.combinedObservedFeeFlowInUsd, 8);
+  assert.equal(analysis.revenue.summary.combinedObservedFeeFlowInUsd, 99);
+  assert.equal(analysis.revenue.summary.collectedRevenueInUsd, 99);
+  assert.equal(analysis.revenue.summary.collectedInterestRevenueInUsd, 66);
+  assert.equal(analysis.revenue.summary.collectedOriginationRevenueInUsd, 33);
+  assert.equal(analysis.revenue.summary.collectedCoverageFromDate, "2025-12-31");
+  assert.equal(analysis.revenue.summary.collectedCoverageToDate, "2026-01-01");
+  assert.equal(analysis.revenue.summary.ytdCollectedRevenueInUsd, 9);
+  assert.equal(analysis.revenue.summary.ytdCollectedInterestRevenueInUsd, 6);
+  assert.equal(analysis.revenue.summary.ytdCollectedOriginationRevenueInUsd, 3);
+  assert.equal(analysis.revenue.summary.ytdCollectedCoverageFromDate, "2026-01-01");
+  assert.equal(analysis.revenue.summary.ytdCollectedCoverageToDate, "2026-01-01");
+  assert.equal(analysis.revenue.summary.ytdCollectedCompleteDays, 1);
+  assert.equal(analysis.revenue.monthlyCollectedRevenue[0].collectedRevenueInUsd, 90);
+  assert.equal(analysis.revenue.monthlyCollectedRevenue[1].collectedRevenueInUsd, 9);
   assert.equal(analysis.revenue.summary.allocatedProtocolRevenueInUsd, 5);
   assert.equal(analysis.revenue.summary.allocatedHoldersRevenueInUsd, 3);
+  assert.equal(analysis.revenue.summary.cumulativeAllocationFromDate, "2026-01-01");
+  assert.equal(analysis.revenue.summary.cumulativeAllocationToDate, "2026-01-01");
   assert.equal(analysis.revenue.dailyAllocation[0].date, "2026-01-01");
+  assert.equal(analysis.revenue.dailyAllocation[1].isComplete, false);
   assert.equal(analysis.revenue.dailyAllocation[0].allocatedProtocolInterestRevenueInUsd, 4);
   assert.equal(analysis.revenue.dailyAllocation[0].allocatedHoldersOriginationRevenueInUsd, 1);
   assert.equal("currentParameterProtocolInterestShare" in analysis.marketSummaries[0], false);
@@ -284,12 +540,14 @@ test("full analysis ensures activeLoanDebtBelow100InUsd is at least activeLoanBa
 });
 
 
-test("market trailing-90-day fee activity excludes the current UTC day without estimating recipient allocation", () => {
-  const rows = Array.from({ length: 91 }, (_, index) => {
-    const date = new Date(Date.UTC(2026, 0, 1 + index)).toISOString().slice(0, 10);
+test("market revenue evidence reports collected origination revenue separately from interest repayment activity", () => {
+  const rows = Array.from({ length: 93 }, (_, index) => {
+    const date = new Date(Date.UTC(2025, 11, 30 + index)).toISOString().slice(0, 10);
     return history(date, {
       interestAccruedInUsd: 1000,
-      interestRepaidInUsd: index < 90 ? 1 : 1000
+      interestRepaidInUsd: index < 92 ? 10 : 1000,
+      loanOriginationFeesInUsd: index < 92 ? 2 : 1000,
+      loanOriginationFeesMinAdaInUsd: index < 92 ? 1 : 1000
     });
   });
   const market = { id: "ADA", displayName: "ADA", symbol: "ADA", supply: 100, borrow: 20, liquidity: 80 };
@@ -315,10 +573,27 @@ test("market trailing-90-day fee activity excludes the current UTC day without e
     collateralLoans: []
   });
 
-  assert.equal(analysis.marketSummaries[0].grossRealizedRevenueProxy90dInUsd, 90);
-  assert.equal(analysis.marketSummaries[0].repaidInterestFeeFlow90dInUsd, 90);
-  assert.equal("estimatedProtocolRevenue90dInUsd" in analysis.marketSummaries[0], false);
-  assert.equal("estimatedProtocolRevenueYield90dAnnualized" in analysis.marketSummaries[0], false);
+  const summary = analysis.marketSummaries[0];
+  assert.equal(summary.marketRevenueCoverageFromDate, "2025-12-30");
+  assert.equal(summary.marketRevenueCoverageToDate, "2026-03-31");
+  assert.equal(summary.marketRevenueCompleteDays, 92);
+  assert.equal(summary.marketRevenueYtdCoverageFromDate, "2026-01-01");
+  assert.equal(summary.marketRevenueYtdCoverageToDate, "2026-03-31");
+  assert.equal(summary.marketRevenueYtdCompleteDays, 90);
+  assert.equal(summary.collectedOriginationRevenueInUsd, 276);
+  assert.equal(summary.ytdCollectedOriginationRevenueInUsd, 270);
+  assert.equal(summary.collectedOriginationRevenue30dInUsd, 90);
+  assert.equal(summary.collectedOriginationRevenue90dInUsd, 270);
+  assert.equal(summary.interestRepaidActivityInUsd, 920);
+  assert.equal(summary.ytdInterestRepaidActivityInUsd, 900);
+  assert.equal(summary.interestRepaidActivity30dInUsd, 300);
+  assert.equal(summary.interestRepaidActivity90dInUsd, 900);
+  assert.equal(summary.latestPositiveOriginationRevenueDate, "2026-03-31");
+  assert.equal(summary.retainedInterestRevenueAvailable, false);
+  assert.equal(summary.totalCollectedRevenueAvailable, false);
+  assert.equal("grossRealizedRevenueProxy90dInUsd" in summary, false);
+  assert.equal("repaidInterestFeeFlow90dInUsd" in summary, false);
+  assert.equal("estimatedProtocolRevenue90dInUsd" in summary, false);
 });
 
 test("protocol revenue run rate uses 90 consecutive complete UTC days and excludes the incomplete current day", () => {
@@ -462,5 +737,3 @@ test("buildLqTokenAnalysis returns null lqPriceInUsd and stakedLqAmount for date
   assert.equal(analysis.series[1].lqPriceInUsd, 0.25);
   assert.equal(analysis.series[1].stakedLqAmount, 3000000);
 });
-
-
