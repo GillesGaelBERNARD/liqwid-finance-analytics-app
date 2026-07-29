@@ -7,9 +7,9 @@ An open-source, client-side web application and data pipeline for monitoring and
 ## Features
 
 - **Protocol & Market Dynamics Analytics**: Explore TVL, utilization rate, borrow/supply APYs, active debt, debt and interest accrual vs repayment flows, risk metrics across all active markets, and more.
-- **Client-Side & Offline Ready**: Runs directly in any web browser without needing a backend server.
+- **Client-Side & Offline Ready**: Runs directly in any web browser without needing a backend server or persistent daemon.
 - **Portable Data Store & Zip Archive**: Bundles raw historical fetches, cleaned daily histories, and computed market datasets in a portable ZIP archive (`liqwid-data.zip`) and CSV manifest (`liqwid-portable-manifest.csv`).
-- **Live GraphQL Sync**: Queries the official Liqwid v2 GraphQL API directly from the browser to refresh data and keep market dynamics up to date.
+- **On-Demand Data Ingestion**: Does **not** perform always-on or continuous background data ingestion. New protocol observations are queried on-demand from the official Liqwid v2 GraphQL API only when triggered by the user clicking **"Fetch new data"**.
 - **Data Status** page: A separate page with data coverage and consistency checks.
 
 ## Project Layout
@@ -46,8 +46,8 @@ An open-source, client-side web application and data pipeline for monitoring and
    - Inside the app, click the **"Open Archive"** / **"Load Data Archive"** button in the header or data management section.
    - Select the pre-packaged archive at `data/liqwid/liqwid-data.zip` (or select the `data/liqwid` local directory if using the File System Access API).
    - The application will instantaneously unpack and render the entire historical analytics workspace, protocol aggregates, and per-market dynamics offline.
-3. **Fetch new data**:
-   - Inside the app, click the **"Fetch new data** button to fetch the most recent data from the API.
+3. **Fetch New Data (On-Demand Data Ingestion)**:
+   - Note: The app does **not** ingest data continuously in the background. To update the dataset with the latest metrics from the API, click the **"Fetch new data"** button inside the app.
 
 ### Rebuilding the Application Bundle
 
