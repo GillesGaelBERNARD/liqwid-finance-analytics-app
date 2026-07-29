@@ -6,7 +6,7 @@ An open-source, client-side web application and data pipeline for monitoring and
 
 ## Features
 
-- **Protocol & Market Dynamics Analytics**: Explore TVL, utilization rate, borrow/supply APYs, active debt, debet and interest accrual vs repayment flows, risk metrics across all active markets, and more.
+- **Protocol & Market Dynamics Analytics**: Explore TVL, utilization rate, borrow/supply APYs, active debt, debt and interest accrual vs repayment flows, risk metrics across all active markets, and more.
 - **Client-Side & Offline Ready**: Runs directly in any web browser without needing a backend server.
 - **Portable Data Store & Zip Archive**: Bundles raw historical fetches, cleaned daily histories, and computed market datasets in a portable ZIP archive (`liqwid-data.zip`) and CSV manifest (`liqwid-portable-manifest.csv`).
 - **Live GraphQL Sync**: Queries the official Liqwid v2 GraphQL API directly from the browser to refresh data and keep market dynamics up to date.
