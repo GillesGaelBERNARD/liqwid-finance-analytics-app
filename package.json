@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "Client-only Liqwid Finance market dynamics HTML app.",
+  "description": "Open-source analytics application and data pipeline for Cardano's Liqwid Finance DeFi lending protocol.",
   "scripts": {
     "build:app": "python scripts/static_app_generator.py --data-root data/liqwid",
     "refresh:data": "node scripts/refresh_official_data.js data/liqwid",
