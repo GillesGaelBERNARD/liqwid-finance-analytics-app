@@ -89,6 +89,16 @@ npm run rebuild:data-archive
 All protocol data is sourced from the official Liqwid v2 GraphQL endpoint:
 `https://v2.api.liqwid.finance/graphql`
 
-## License
+## License & Attribution
 
-MIT
+This project is open-source and licensed under the [MIT License](LICENSE).
+
+### Citation / Citing this Source
+
+If you clone, adapt, or build upon this codebase or dataset, please cite the source:
+
+```text
+Gilles-Gael Bernard. Liqwid Finance Analytics App.
+Repository: https://github.com/GillesGaelBERNARD/liqwid-finance-analytics-app
+```
+

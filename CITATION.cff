@@ -1,0 +1,10 @@
+cff-version: 1.2.0
+message: "If you use, clone, or build upon this software, please cite it as below."
+authors:
+  - family-names: Bernard
+    given-names: Gilles-Gael
+title: "Liqwid Finance Analytics App"
+date-released: 2026-07-29
+url: "https://github.com/GillesGaelBERNARD/liqwid-finance-analytics-app"
+repository-code: "https://github.com/GillesGaelBERNARD/liqwid-finance-analytics-app"
+license: MIT
