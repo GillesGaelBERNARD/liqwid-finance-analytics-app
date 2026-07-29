@@ -2,6 +2,8 @@
 
 An open-source, client-side web application and data pipeline for monitoring and analyzing Cardano's [Liqwid Finance](https://liqwid.finance) market dynamics, liquidity, interest gaps, borrow/repayment trends, and bad debt history.
 
+![Liqwid Analysis Viewer Overview](screenshots/UI_overview.png)
+
 ## Features
 
 - **Protocol & Market Dynamics Analytics**: Explore TVL, utilization rate, borrow/supply APYs, active debt, interest accrual vs repayment gaps, and risk metrics across all active markets.
@@ -25,6 +27,7 @@ An open-source, client-side web application and data pipeline for monitoring and
 ├── docs/                             # Architecture specifications & methodology docs
 ├── public/                           # Static public assets
 ├── scripts/                          # Data processing and static app generation scripts
+├── screenshots/                      # UI overview screenshots & preview assets
 ├── src/                              # Source code (browser app & shared data utilities)
 └── tests/                            # Test suite for data workflow, metrics, & app logic
 ```
