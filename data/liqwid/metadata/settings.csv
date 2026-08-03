@@ -1,2 +1,2 @@
 schemaVersion,endpoint,historyStartDate,historyEndDate,generatedAt,latestRawCapture,dataFolderName
-4,https://v2.api.liqwid.finance/graphql,2020-01-01,2026-07-29,2026-07-29T12:02:54.206Z,raw/api/fetches/20260729T120251784Z,liqwid
+4,https://v2.api.liqwid.finance/graphql,2020-01-01,2026-08-03,2026-08-03T13:28:17.755Z,raw/api/fetches/20260803T132817755Z,liqwid-data.zip
