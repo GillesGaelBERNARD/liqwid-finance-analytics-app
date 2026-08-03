@@ -5,6 +5,36 @@ import { encodeZipArchive, decodeZipArchive } from "../src/browser/portableArchi
 async function rebuildDataArchive(dataRoot, archiveName = "liqwid-data.zip") {
   const root = path.resolve(dataRoot);
   const subdirs = ["clean", "computed", "metadata", "raw"];
+  const archivePath = path.join(root, archiveName);
+
+  // Safety check: If the zip archive exists, unpack its entries first so no user-saved data is lost
+  if (fs.existsSync(archivePath)) {
+    try {
+      const existingBuffer = fs.readFileSync(archivePath);
+      const decoded = await decodeZipArchive(existingBuffer);
+      let unpackedCount = 0;
+      for (const entry of decoded) {
+        if (entry.path === "liqwid-portable-manifest.csv") continue;
+        const targetFile = path.join(root, entry.path);
+        if (!fs.existsSync(targetFile)) {
+          fs.mkdirSync(path.dirname(targetFile), { recursive: true });
+          fs.writeFileSync(targetFile, entry.text, "utf-8");
+          unpackedCount++;
+        } else {
+          const currentText = fs.readFileSync(targetFile, "utf-8");
+          if (currentText !== entry.text) {
+            fs.writeFileSync(targetFile, entry.text, "utf-8");
+            unpackedCount++;
+          }
+        }
+      }
+      if (unpackedCount > 0) {
+        console.log(`[DATA SAFETY] Automatically restored/unpacked ${unpackedCount} updated entries from ${archiveName} into repository.`);
+      }
+    } catch (err) {
+      console.warn(`[DATA SAFETY] Warning: Could not pre-read existing archive ${archiveName}:`, err.message);
+    }
+  }
 
   function scanDir(dir) {
     const results = [];
