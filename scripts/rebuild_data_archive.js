@@ -90,7 +90,6 @@ async function rebuildDataArchive(dataRoot, archiveName = "liqwid-data.zip") {
   console.log("Encoding ZIP archive using portableArchive.js...");
   const zipBuffer = await encodeZipArchive(inputEntries);
 
-  const archivePath = path.join(root, archiveName);
   fs.writeFileSync(archivePath, Buffer.from(zipBuffer));
 
   console.log(`Successfully built archive: ${archivePath}`);

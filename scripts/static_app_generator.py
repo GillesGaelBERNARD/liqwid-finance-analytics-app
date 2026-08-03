@@ -3706,7 +3706,7 @@ HTML_TEMPLATE = r"""<!doctype html>
     function healthFactorSeries(hasDetailedSafeBands) {
       const series = [
         { key: "debtBelow100InUsd", label: "HF < 1.0", color: "#991b1b" },
-        { key: "debt100To110InUsd", label: "HF 1.00-1.10", color: riskPalette[4] },
+        { key: "debt100To110InUsd", label: "HF 1.00-1.10", color: "#c2410c" },
         { key: "debt110To125InUsd", label: "HF 1.10-1.25", color: riskPalette[3] },
         { key: "debt125To150InUsd", label: "HF 1.25-1.50", color: riskPalette[2] }
       ];

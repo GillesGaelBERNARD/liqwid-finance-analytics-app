@@ -726,6 +726,8 @@ test("standalone app is one zero-data, folder-backed, client-only HTML workflow"
   assert.match(generator, /chartId: "impactCurrentContributions"[\s\S]{0,900}?mode: "stacked"[\s\S]{0,500}?fixedXDomain:\s*\{\s*min:\s*0,\s*max:\s*1\s*\}/);
   assert.match(generator, /chartId:\s*"impactLoanState"[\s\S]{0,300}?series:\s*healthFactorSeries\(false\)/);
   assert.match(generator, /function healthFactorSeries[\s\S]{0,200}?key:\s*"debtBelow100InUsd"[\s\S]{0,100}?label:\s*"HF < 1\.0"/);
+  assert.match(generator, /key:\s*"debt100To110InUsd"[\s\S]{0,50}?color:\s*"#c2410c"/);
+  assert.match(html, /key:\s*"debt100To110InUsd"[\s\S]{0,50}?color:\s*"#c2410c"/);
 
   for (const label of ["Week", "Month", "3 months", "YTD", "Year", "All"]) {
     assert.ok(html.includes(label), `standalone app is missing ${label}`);
