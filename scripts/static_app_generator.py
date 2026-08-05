@@ -23,6 +23,31 @@ def build_static_app(data_root, output_path=None):
     output_path.parent.mkdir(parents=True, exist_ok=True)
     output_path.write_text(html, encoding="utf-8")
     return output_path
+import json
+import base64
+import hashlib
+import re
+from pathlib import Path
+
+
+def build_static_app(data_root, output_path=None):
+    data_root = Path(data_root)
+    output_path = Path(output_path) if output_path else data_root / "liqwid-analysis-app.html"
+    payload = json.dumps({"bundle": None, "deep": None}, separators=(",", ":")).replace("</", "<\\/")
+    browser_runtime = build_browser_runtime().replace("</", "<\\/")
+    viewer_build = hashlib.sha256(f"{browser_runtime}\0{HTML_TEMPLATE}".encode("utf-8")).hexdigest()[:12]
+    logo_path = Path(__file__).resolve().parents[1] / "public" / "assets" / "liqwid-logo.png"
+    logo_uri = "data:image/png;base64," + base64.b64encode(logo_path.read_bytes()).decode("ascii")
+    html = (
+        HTML_TEMPLATE
+        .replace("__LIQWID_PAYLOAD__", payload)
+        .replace("__LIQWID_BROWSER_DATA__", browser_runtime)
+        .replace("__LIQWID_VIEWER_BUILD__", viewer_build)
+        .replace("__LIQWID_LOGO__", logo_uri)
+    )
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    output_path.write_text(html, encoding="utf-8")
+    return output_path
 
 
 def build_browser_runtime():
@@ -31,6 +56,7 @@ def build_browser_runtime():
         project_root / "src" / "shared" / "dates.js",
         project_root / "src" / "shared" / "metrics.js",
         project_root / "src" / "browser" / "chartData.js",
+        project_root / "src" / "browser" / "lqStatsHistory.js",
         project_root / "src" / "browser" / "loanSnapshotHistory.js",
         project_root / "src" / "browser" / "memoryDataStore.js",
         project_root / "src" / "browser" / "portableArchive.js",

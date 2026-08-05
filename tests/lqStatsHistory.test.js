@@ -48,3 +48,11 @@ test("appendLqStatsHistory accumulates observations idempotently by timestamp", 
   const replayed = appendLqStatsHistory(appended, second);
   assert.equal(replayed.length, 2);
 });
+
+test("static app generator includes lqStatsHistory.js in bundled runtime modules", async () => {
+  const fs = await import("node:fs/promises");
+  const path = await import("node:path");
+  const generatorContent = await fs.readFile(path.resolve("scripts/static_app_generator.py"), "utf-8");
+  assert.match(generatorContent, /src.*browser.*lqStatsHistory/);
+});
+

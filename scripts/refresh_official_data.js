@@ -47,10 +47,13 @@ async function refreshOfficialData(options = {}) {
     (entry) => isUnderAnyRoot(entry.path, GENERATED_ROOTS)
   );
   const rawEntries = exportedEntries.filter((entry) => entry.path.startsWith("raw/"));
-  const existingRawPaths = new Set(stagedEntries.map((entry) => entry.path));
-  const newRawEntries = rawEntries.filter((entry) => !existingRawPaths.has(entry.path));
+  const existingRawMap = new Map(stagedEntries.map((entry) => [entry.path, entry.text]));
+  const updatedRawEntries = rawEntries.filter((entry) => {
+    const previousText = existingRawMap.get(entry.path);
+    return previousText === undefined || previousText !== entry.text;
+  });
 
-  await writeEntriesAtomically(dataRoot, [...generatedEntries, ...newRawEntries], runId);
+  await writeEntriesAtomically(dataRoot, [...generatedEntries, ...updatedRawEntries], runId);
 
   const nextGeneratedPaths = new Set(generatedEntries.map((entry) => entry.path));
   const staleGeneratedPaths = [...previousGeneratedPaths].filter(
@@ -58,7 +61,7 @@ async function refreshOfficialData(options = {}) {
   );
   await removeStaleGeneratedFiles(dataRoot, staleGeneratedPaths);
 
-  console.log(`Committed ${generatedEntries.length} generated files and ${newRawEntries.length} new raw captures.`);
+  console.log(`Committed ${generatedEntries.length} generated files and ${updatedRawEntries.length} new/updated raw captures.`);
   if (staleGeneratedPaths.length) {
     console.log(`Removed ${staleGeneratedPaths.length} stale generated files.`);
   }
