@@ -326,4 +326,43 @@ test("collateral risk calculates bad debt excess per asset for both collateral a
   assert.equal(byBorrowed[0].borrowedMarketId, "DJED");
 });
 
+test("isolated silos are dynamically discovered and segmented with ring-fenced metrics", () => {
+  const customBundle = {
+    markets: [
+      { id: "ADA", displayName: "ADA", supply: 10_000, borrow: 5_000, group: null, parameters: { borrowCap: 0.95 } },
+      { id: "SNEK2", displayName: "SNEK", supply: 500, borrow: 0, group: { id: "SNEK", name: "SNEK" }, parameters: { borrowCap: 0 } },
+      { id: "SNEK2-ADA", displayName: "SNEK-ADA", supply: 1_000, borrow: 300, group: { id: "SNEK", name: "SNEK" }, parameters: { borrowCap: 0.95 } },
+      { id: "STRIKE", displayName: "STRIKE", supply: 2_000, borrow: 0, group: { id: "STRIKE", name: "STRIKE" }, parameters: { borrowCap: 0 } },
+      { id: "STRIKE-USDCx", displayName: "STRIKE-USDCx", supply: 1_500, borrow: 400, group: { id: "STRIKE", name: "STRIKE" }, parameters: { borrowCap: 0.95 } }
+    ],
+    marketSeriesById: {}
+  };
+
+  const customLoans = [
+    { marketId: "ADA", publicKey: "key1", amount: 100, healthFactor: 1.5, collateral: 200, collaterals: [collateral("ADA", 200)] },
+    { marketId: "SNEK2-ADA", publicKey: "key2", amount: 150, healthFactor: 1.3, collateral: 300, collaterals: [collateral("SNEK2", 300)] },
+    { marketId: "STRIKE-USDCx", publicKey: "key3", amount: 200, healthFactor: 1.2, collateral: 500, collaterals: [collateral("STRIKE", 500)] }
+  ];
+
+  const exposure = buildCurrentExposureAnalysis({ bundle: customBundle, activeLoans: customLoans, collateralLoans: customLoans });
+  assert.equal(exposure.isolatedSilos?.length, 2);
+
+  const snekSilo = exposure.isolatedSilos.find((s) => s.groupName === "SNEK");
+  const strikeSilo = exposure.isolatedSilos.find((s) => s.groupName === "STRIKE");
+
+  assert.ok(snekSilo);
+  assert.equal(snekSilo.collateralDisplayName, "SNEK");
+  assert.equal(snekSilo.totalCollateralInUsd, 500);
+  assert.equal(snekSilo.totalDebtInUsd, 150);
+  assert.equal(snekSilo.activeLoanCount, 1);
+  assert.equal(snekSilo.coverageRatio, 500 / 150);
+
+  assert.ok(strikeSilo);
+  assert.equal(strikeSilo.collateralDisplayName, "STRIKE");
+  assert.equal(strikeSilo.totalCollateralInUsd, 2_000);
+  assert.equal(strikeSilo.totalDebtInUsd, 200);
+  assert.equal(strikeSilo.activeLoanCount, 1);
+  assert.equal(strikeSilo.coverageRatio, 2_000 / 200);
+});
+
 

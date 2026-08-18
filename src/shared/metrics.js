@@ -384,11 +384,23 @@ export function summarizeMarket(market, rows, options = {}) {
     : null;
   const drySpells = computeDrySpells(windowed);
   const highUtilizationThreshold = options.highUtilizationThreshold ?? 0.85;
+  const groupName = market.group?.name ?? market.group?.id ?? (typeof market.group === "string" ? market.group : null);
+  const isIsolated = Boolean(groupName || market.group);
+  const borrowCap = market.parameters?.borrowCap !== undefined ? market.parameters.borrowCap : null;
+  const supplyCap = market.parameters?.supplyCap !== undefined ? market.parameters.supplyCap : null;
+  const collateralCount = Array.isArray(market.parameters?.collateralParameters)
+    ? market.parameters.collateralParameters.length
+    : (market.collaterals?.length ?? 0);
 
   return {
     marketId: market.id,
     displayName: market.displayName ?? market.id,
     symbol: market.symbol ?? market.id,
+    group: groupName,
+    isIsolated,
+    borrowCap,
+    supplyCap,
+    collateralCount,
     rows: windowed.length,
     firstDate: windowed[0]?.date ?? null,
     lastDate: current?.date ?? null,

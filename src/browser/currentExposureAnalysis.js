@@ -175,7 +175,8 @@ export function buildCurrentExposureAnalysis(input) {
     collateralRisk: buildCollateralRisk(activeLoans),
     borrowerConcentration: buildBorrowerConcentration(bundle, activeLoans),
     supplySide: buildSupplySide(bundle, collateralLoans),
-    healthTranches: buildHealthTranches(activeLoans)
+    healthTranches: buildHealthTranches(activeLoans),
+    isolatedSilos: buildIsolatedSilos(bundle, activeLoans, collateralLoans)
   };
 }
 
@@ -802,4 +803,97 @@ function nullableNumber(value) {
 
 function clamp(value, minimum, maximum) {
   return Math.min(maximum, Math.max(minimum, value));
+}
+
+export function buildIsolatedSilos(bundle, activeLoans = [], collateralLoans = []) {
+  const markets = bundle?.markets || [];
+  const groupsMap = new Map();
+
+  for (const market of markets) {
+    let group = market.group;
+    if (typeof group === "string" && group.trim().startsWith("{")) {
+      try {
+        group = JSON.parse(group);
+      } catch {}
+    }
+    const groupName = group?.name ?? group?.id ?? (typeof group === "string" && group.trim() ? group.trim() : null);
+    const groupId = group?.id ?? groupName;
+    if (!groupName) continue;
+    if (!groupsMap.has(groupName)) {
+      groupsMap.set(groupName, {
+        groupId,
+        groupName,
+        markets: []
+      });
+    }
+    groupsMap.get(groupName).markets.push(market);
+  }
+
+  if (groupsMap.size === 0) return [];
+
+  const silos = [];
+  for (const [groupName, groupData] of groupsMap.entries()) {
+    const marketIds = new Set(groupData.markets.map((m) => m.id));
+    const collateralMarket = groupData.markets.find((m) => m.parameters?.borrowCap === 0 || m.parameters?.collateralParameters?.length === 0) || groupData.markets[0];
+
+    const siloLoans = activeLoans.filter((loan) => marketIds.has(loan.marketId) || loan.collaterals?.some((c) => marketIds.has(c.marketId)));
+    const totalDebtInUsd = siloLoans.reduce((sum, loan) => sum + (loan.debtInUsd || 0), 0);
+    const totalCollateralInUsd = finite(collateralMarket.supply, collateralMarket.supplyInUsd);
+    const badDebtLoans = siloLoans.filter((loan) => (loan.debtInUsd || 0) > (loan.collateralInUsd || 0));
+    const badDebtInUsd = badDebtLoans.reduce((sum, loan) => sum + loan.debtInUsd, 0);
+    const debtBelowHf100InUsd = siloLoans
+      .filter((loan) => (Number.isFinite(loan.healthFactor) && loan.healthFactor < 1.0) || (loan.debtInUsd || 0) > (loan.collateralInUsd || 0))
+      .reduce((sum, loan) => sum + loan.debtInUsd, 0);
+
+    const coverageRatio = totalDebtInUsd > 0 ? totalCollateralInUsd / totalDebtInUsd : null;
+
+    silos.push({
+      groupId: groupData.groupId,
+      groupName,
+      collateralMarketId: collateralMarket.id,
+      collateralDisplayName: collateralMarket.displayName || collateralMarket.id,
+      collateralSymbol: collateralMarket.symbol || collateralMarket.id,
+      totalCollateralInUsd,
+      totalDebtInUsd,
+      coverageRatio,
+      activeLoanCount: siloLoans.length,
+      badDebtInUsd,
+      debtBelowHf100InUsd,
+      healthTranches: buildHealthTranches(siloLoans),
+      collateralMarket: {
+        marketId: collateralMarket.id,
+        displayName: collateralMarket.displayName || collateralMarket.id,
+        symbol: collateralMarket.symbol || collateralMarket.id,
+        assetPrice: collateralMarket.asset?.price ?? (collateralMarket.supply ? finite(collateralMarket.supply, collateralMarket.supplyInUsd) : 0),
+        asset: collateralMarket.asset,
+        parameters: collateralMarket.parameters
+      },
+      pools: groupData.markets.filter((m) => m.id !== collateralMarket.id).map((m) => ({
+        marketId: m.id,
+        displayName: m.displayName || m.id,
+        symbol: m.symbol || m.id,
+        currentSupplyInUsd: finite(m.supply, m.supplyInUsd),
+        currentBorrowInUsd: finite(m.borrow, m.borrowInUsd),
+        currentLiquidityInUsd: finite(m.liquidity, m.liquidityInUsd),
+        currentSupplyApy: m.supplyAPY ?? 0,
+        currentBorrowApr: m.borrowAPR ?? 0,
+        currentUtilization: m.utilization ?? 0,
+        borrowCap: m.parameters?.borrowCap ?? null
+      })),
+      markets: groupData.markets.map((m) => ({
+        marketId: m.id,
+        displayName: m.displayName || m.id,
+        symbol: m.symbol || m.id,
+        role: m.id === collateralMarket.id ? "collateral" : "borrow-pool",
+        supplyInUsd: finite(m.supply, m.supplyInUsd),
+        borrowInUsd: finite(m.borrow, m.borrowInUsd),
+        liquidityInUsd: finite(m.liquidity, m.liquidityInUsd),
+        supplyAPY: m.supplyAPY ?? 0,
+        borrowAPR: m.borrowAPR ?? 0,
+        utilization: m.utilization ?? 0
+      }))
+    });
+  }
+
+  return silos.sort((a, b) => b.totalCollateralInUsd - a.totalCollateralInUsd || a.groupName.localeCompare(b.groupName));
 }

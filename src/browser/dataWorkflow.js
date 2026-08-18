@@ -22,6 +22,10 @@ query PublicMarkets($page: Int!, $perPage: Int!) {
           id
           displayName
           symbol
+          group {
+            id
+            name
+          }
           supply(input: { currency: USD })
           borrow(input: { currency: USD })
           liquidity(input: { currency: USD })

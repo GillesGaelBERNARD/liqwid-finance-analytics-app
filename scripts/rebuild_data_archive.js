@@ -20,12 +20,6 @@ async function rebuildDataArchive(dataRoot, archiveName = "liqwid-data.zip") {
           fs.mkdirSync(path.dirname(targetFile), { recursive: true });
           fs.writeFileSync(targetFile, entry.text, "utf-8");
           unpackedCount++;
-        } else {
-          const currentText = fs.readFileSync(targetFile, "utf-8");
-          if (currentText !== entry.text) {
-            fs.writeFileSync(targetFile, entry.text, "utf-8");
-            unpackedCount++;
-          }
         }
       }
       if (unpackedCount > 0) {

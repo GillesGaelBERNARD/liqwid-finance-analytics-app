@@ -299,13 +299,38 @@ HTML_TEMPLATE = r"""<!doctype html>
     .tabs button { flex: 0 0 auto; padding: 9px 13px; white-space: nowrap; }
     .scope-tabs { padding-bottom: 2px; }
     .scope-tabs button { border-color: rgba(36,72,102,.92); font-weight: 800; }
-    .section-tabs { padding-top: 8px; border-top: 1px solid rgba(36,72,102,.58); }
-    .section-tabs button { border-color: transparent; background: rgba(16,42,68,.62); color: var(--muted); font-size: .84rem; }
-    .section-tabs button.active { border-color: rgba(62,220,129,.68); background: rgba(25,181,254,.15); color: var(--text); box-shadow: inset 0 -2px 0 var(--mint); }
-    .market-context { display: flex; align-items: center; gap: 12px; padding-top: 4px; }
+    .market-context { display: flex; align-items: center; gap: 12px; padding-top: 6px; padding-bottom: 2px; border-top: 1px solid rgba(36,72,102,.58); flex-wrap: wrap; }
     .market-context[hidden] { display: none; }
     .market-context label { display: flex; align-items: center; gap: 10px; color: var(--muted); font-size: .8rem; }
     .market-context select { min-width: min(320px, 70vw); padding: 8px 34px 8px 11px; font-size: .86rem; }
+    .section-tabs { padding-top: 8px; border-top: 1px solid rgba(36,72,102,.58); }
+    .section-tabs button { border-color: transparent; background: rgba(16,42,68,.62); color: var(--muted); font-size: .84rem; }
+    .section-tabs button.active { border-color: rgba(62,220,129,.68); background: rgba(25,181,254,.15); color: var(--text); box-shadow: inset 0 -2px 0 var(--mint); }
+    .market-type-toggle {
+      display: inline-flex;
+      gap: 4px;
+      background: rgba(16,42,68,.75);
+      padding: 3px;
+      border-radius: 8px;
+      border: 1px solid rgba(36,72,102,.7);
+      flex-shrink: 0;
+    }
+    .market-type-toggle button {
+      padding: 6px 12px;
+      font-size: .8rem;
+      font-weight: 700;
+      border: none;
+      border-radius: 6px;
+      background: transparent;
+      color: var(--muted);
+      cursor: pointer;
+      transition: all .15s ease;
+    }
+    .market-type-toggle button.active {
+      background: linear-gradient(135deg, #0287d0, #19b5fe);
+      color: white;
+      box-shadow: 0 2px 8px rgba(25,181,254,.35);
+    }
     .view {
       scroll-margin-top: 190px;
     }
@@ -666,8 +691,8 @@ HTML_TEMPLATE = r"""<!doctype html>
     <nav id="analyticsNav" class="analytics-nav" aria-label="Analytics navigation">
       <div id="analysisLocation" class="nav-location" aria-live="polite"></div>
       <div id="scopeTabs" class="tabs scope-tabs" role="tablist" aria-label="Analytics scope"></div>
-      <div id="sectionTabs" class="tabs section-tabs" role="tablist" aria-label="Analysis section"></div>
       <div id="marketContext" class="market-context" hidden></div>
+      <div id="sectionTabs" class="tabs section-tabs" role="tablist" aria-label="Analysis section"></div>
     </nav>
     <section id="overview" class="view active"></section>
     <section id="protocolDebtFlows" class="view"></section>
@@ -769,6 +794,12 @@ HTML_TEMPLATE = r"""<!doctype html>
         "formulaHtml": '<div class="formula-card"><div style="margin-bottom:4px"><strong>Gross Debt:</strong> &sum;<sub>Debt<sub>i</sub> &gt; Collateral<sub>i</sub></sub> <span class="formula-num">Debt<sub>i</sub></span></div><div><strong>Net Shortfall:</strong> &sum;<sub>Debt<sub>i</sub> &gt; Collateral<sub>i</sub></sub> <span class="formula-paren">(</span><span class="formula-num">Debt<sub>i</sub></span> &minus; <span class="formula-num">Collateral<sub>i</sub></span><span class="formula-paren">)</span></div></div>',
         "formulaText": "Gross = sum(Debt where Debt > Collateral); Net Shortfall = sum(max(0, Debt - Collateral))"
     },
+    "Bad debt in silo": {
+        "description": "Total USD debt in this silo where loan borrow exceeds collateral value.",
+        "explanation": "Uncollateralized shortfall isolated entirely within this silo, posing zero contagion risk to the core cross-margin protocol.",
+        "formulaHtml": '<div class="formula-card">&sum;<sub>Debt &gt; Collateral</sub> <span class="formula-paren">(</span><span class="formula-num">Debt</span> &minus; <span class="formula-num">Collateral</span><span class="formula-paren">)</span></div>',
+        "formulaText": "sum(max(0, Debt - Collateral))"
+    },
     "Bad-debt positions": {
         "description": "Count of active loans where borrow exceeds collateral value.",
         "explanation": "Number of undercollateralized user loan positions currently in bad debt state (Debt > Collateral).",
@@ -786,6 +817,12 @@ HTML_TEMPLATE = r"""<!doctype html>
         "explanation": "Sum of all active principal loan balances borrowed by users across Liqwid pools, converted to USD at current market prices.",
         "formulaHtml": '<div class="formula-card">&sum; <span class="formula-num">Borrow<sub>native, i</sub></span> &times; <span class="formula-num">Price<sub>USD, i</sub></span></div>',
         "formulaText": "sum(Borrow_i * Price_i)"
+    },
+    "Borrow APR": {
+        "description": "Annualized interest rate charged to borrowers in this market.",
+        "explanation": "Current annualized borrowing cost determined by the interest rate model curve at current pool utilization.",
+        "formulaHtml": '<div class="formula-card"><span class="formula-num">Borrow APR</span><span class="formula-paren">(</span><span class="formula-num">Utilization</span><span class="formula-paren">)</span></div>',
+        "formulaText": "Borrow APR at current utilization"
     },
     "Borrowed asset under most pressure": {
         "description": "Market pool currently experiencing the highest borrow-to-liquidity utilization stress.",
@@ -810,6 +847,12 @@ HTML_TEMPLATE = r"""<!doctype html>
         "explanation": "Identifies the primary collateral asset backing positions that entered an undercollateralized state (Debt > Collateral). Shows the gross debt and net shortfall associated with that collateral asset type.",
         "formulaHtml": '<div class="formula-card"><span class="formula-num">Collateral Asset of max<sub>i</sub> (Bad Debt<sub>USD, i</sub>)</span></div>',
         "formulaText": "Collateral Asset linked to Max Bad Debt"
+    },
+    "Collateral coverage ratio": {
+        "description": "Ratio of total silo collateral value to total silo outstanding debt.",
+        "explanation": "Measures total collateral backing per dollar of active borrow in this isolated silo. Above 100% means silo is solvent.",
+        "formulaHtml": '<div class="formula-card"><div class="formula-frac"><span class="formula-num">Total Collateral<sub>USD</sub></span><span class="formula-den">Total Borrow<sub>USD</sub></span></div></div>',
+        "formulaText": "Total Collateral USD / Total Borrow USD"
     },
     "Critical debt at HF <= 1.10": {
         "description": "Total USD debt in positions with Health Factor <= 1.10.",
@@ -1255,6 +1298,12 @@ HTML_TEMPLATE = r"""<!doctype html>
         "formulaHtml": '<div class="formula-card">&sum; <span class="formula-num">Supply<sub>native, i</sub></span> &times; <span class="formula-num">Price<sub>USD, i</sub></span></div>',
         "formulaText": "sum(Supply_i * Price_i)"
     },
+    "Supply APY": {
+        "description": "Annualized compounding yield earned by suppliers in this market.",
+        "explanation": "Current annualized supplier yield based on borrower interest paid, supplier split ratio, and pool utilization.",
+        "formulaHtml": '<div class="formula-card"><span class="formula-paren">(</span>1 &minus; <span class="formula-num">U</span><span class="formula-paren">)</span> &times; <span class="formula-num">Base APY</span> + <span class="formula-num">U</span> &times; <span class="formula-num">Borrow APR</span> &times; <span class="formula-num">Supplier Split</span></div>',
+        "formulaText": "(1 - utilization) * baseSupplierAPY + utilization * borrowerAPR * supplierSplit"
+    },
     "Top 1 key concentration": {
         "description": "Percentage share of active protocol debt held by the single largest wallet/key.",
         "explanation": "Measures borrower centralization risk by tracking the debt share controlled by the single largest wallet address.",
@@ -1314,6 +1363,18 @@ HTML_TEMPLATE = r"""<!doctype html>
         "explanation": "Selects the greatest official timestamp from analytics.marketParamsHistory after excluding POL from detailed protocol analytics.",
         "formulaHtml": '<div class="formula-card"><span class="formula-func">max</span><sub>included markets</sub> ParameterEventTimestamp</div>',
         "formulaText": "max(non-POL analytics.marketParamsHistory.timestamp)"
+    },
+    "Total collateral locked": {
+        "description": "Total USD market value of collateral deposited in this isolated silo.",
+        "explanation": "Total market value of single-asset collateral locked exclusively within this ring-fenced silo to back isolated borrowing pools.",
+        "formulaHtml": '<div class="formula-card"><span class="formula-num">Collateral Tokens</span> &times; <span class="formula-num">Oracle Price<sub>USD</sub></span></div>',
+        "formulaText": "Collateral Tokens * Oracle Price USD"
+    },
+    "Total outstanding borrow": {
+        "description": "Total USD borrow balance across all lending pools within this isolated silo.",
+        "explanation": "Sum of all active user loan balances borrowed across the paired pools in this isolated silo.",
+        "formulaHtml": '<div class="formula-card">&sum; <span class="formula-num">Pool Borrow<sub>USD, i</sub></span></div>',
+        "formulaText": "sum(Pool Borrow USD_i)"
     },
     "Utilization": {
         "description": "Protocol-wide capital utilization percentage.",
@@ -1456,6 +1517,7 @@ HTML_TEMPLATE = r"""<!doctype html>
     let activeScope = "protocol";
     let activeView = "overview";
     const activeViewsByScope = { protocol: "overview", markets: "marketOverview" };
+    let marketCategory = "core";
     const renderedViews = new Set();
     let refreshInFlight = false;
     let savingInFlight = false;
@@ -1528,8 +1590,46 @@ HTML_TEMPLATE = r"""<!doctype html>
         context.replaceChildren();
         return;
       }
-      const market = currentMarketSummary();
-      context.innerHTML = `<label>Selected market<select id="marketSelect">${deep.marketSummaries.map((row) => `<option value="${esc(row.marketId)}" ${row.marketId === market.marketId ? "selected" : ""}>${esc(row.displayName || row.marketId)}</option>`).join("")}</select></label>`;
+
+      const allSummaries = deep.marketSummaries || [];
+      const coreMarkets = allSummaries.filter((row) => !row.group && !row.isIsolated);
+      const isolatedMarkets = allSummaries.filter((row) => row.group || row.isIsolated);
+
+      const currentList = marketCategory === "isolated" ? isolatedMarkets : coreMarkets;
+      if (!currentList.some((m) => m.marketId === selectedMarket)) {
+        selectedMarket = currentList[0]?.marketId || allSummaries[0]?.marketId;
+      }
+
+      const typeToggleHtml = isolatedMarkets.length > 0 ? `
+        <div class="market-type-toggle" role="group" aria-label="Market category">
+          <button type="button" class="${marketCategory === 'core' ? 'active' : ''}" data-market-category="core" aria-pressed="${marketCategory === 'core'}">Core markets</button>
+          <button type="button" class="${marketCategory === 'isolated' ? 'active' : ''}" data-market-category="isolated" aria-pressed="${marketCategory === 'isolated'}">Isolated markets</button>
+        </div>
+      ` : "";
+
+      let optionsHtml = "";
+      if (marketCategory === "isolated") {
+        const byGroup = new Map();
+        for (const m of isolatedMarkets) {
+          const gName = m.group?.name || m.group?.id || (typeof m.group === "string" ? m.group : "Isolated");
+          if (!byGroup.has(gName)) byGroup.set(gName, []);
+          byGroup.get(gName).push(m);
+        }
+        optionsHtml = [...byGroup.entries()].map(([groupName, groupMarkets]) => `
+          <optgroup label="${esc(groupName)} Silo">
+            ${groupMarkets.map((row) => {
+              const isCollateral = row.parameters?.borrowCap === 0 || !row.parameters?.collateralParameters?.length;
+              const roleLabel = isCollateral ? " (Collateral)" : " (Borrow Pool)";
+              return `<option value="${esc(row.marketId)}" ${row.marketId === selectedMarket ? "selected" : ""}>${esc(row.displayName || row.marketId)}${roleLabel}</option>`;
+            }).join("")}
+          </optgroup>
+        `).join("");
+      } else {
+        optionsHtml = coreMarkets.map((row) => `<option value="${esc(row.marketId)}" ${row.marketId === selectedMarket ? "selected" : ""}>${esc(row.displayName || row.marketId)}</option>`).join("");
+      }
+
+      context.innerHTML = `${typeToggleHtml}<label>Selected ${marketCategory === 'isolated' ? 'isolated ' : 'core '}market<select id="marketSelect">${optionsHtml}</select></label>`;
+
       document.querySelector("#marketSelect").addEventListener("change", (event) => {
         selectedMarket = event.target.value;
         const marketViews = analyticsScopes.find(([id]) => id === "markets")[2];
@@ -1539,6 +1639,22 @@ HTML_TEMPLATE = r"""<!doctype html>
         }
         renderActiveView(true);
       });
+
+      document.querySelectorAll("[data-market-category]").forEach((btn) => btn.addEventListener("click", () => {
+        const targetCategory = btn.dataset.marketCategory;
+        if (targetCategory !== marketCategory) {
+          marketCategory = targetCategory;
+          const newList = marketCategory === "isolated" ? isolatedMarkets : coreMarkets;
+          selectedMarket = newList[0]?.marketId || selectedMarket;
+          const marketViews = analyticsScopes.find(([id]) => id === "markets")[2];
+          for (const [viewId] of marketViews) {
+            renderedViews.delete(viewId);
+            if (viewId !== activeView) document.querySelector(`#${viewId}`)?.replaceChildren();
+          }
+          renderMarketContext();
+          renderActiveView(true);
+        }
+      }));
     }
 
     function renderAll() {
@@ -2214,6 +2330,24 @@ HTML_TEMPLATE = r"""<!doctype html>
           </div>
         </section>
 
+        ${exposure.isolatedSilos?.length ? `
+        <section class="summary-group" aria-labelledby="isolatedSilosHeading">
+          <div class="summary-heading">
+            <h3 id="isolatedSilosHeading">Isolated Market Silos</h3>
+            <p>Ring-fenced isolated lending pools where volatile single collaterals back specific borrow pairs with zero contagion risk to the core protocol.</p>
+          </div>
+          <div class="kpis">
+            ${exposure.isolatedSilos.map((silo) => `
+              ${kpi(
+                `${esc(silo.groupName)} Silo`,
+                `${usd(silo.totalCollateralInUsd)} Collateral · ${usd(silo.totalDebtInUsd)} Borrow`,
+                `${silo.activeLoanCount} active loan${silo.activeLoanCount === 1 ? '' : 's'} · Coverage: ${silo.coverageRatio ? (silo.coverageRatio * 100).toFixed(1) + '%' : 'n/a'} · Bad Debt: ${usd(silo.badDebtInUsd)}`
+              )}
+            `).join('')}
+          </div>
+        </section>
+        ` : ''}
+
         <section class="summary-group" aria-labelledby="coverageHeading">
           <div class="summary-heading">
             <h3 id="coverageHeading">Debt and interest coverage</h3>
@@ -2714,6 +2848,7 @@ HTML_TEMPLATE = r"""<!doctype html>
       if (chartId.startsWith("protocol")) drawProtocolTimeChart(chartId, resetRange);
       else if (chartId.startsWith("marketParameter")) drawMarketParameterTimeChart(chartId, resetRange);
       else if (chartId.startsWith("market")) drawMarketTimeChart(chartId, resetRange);
+      else if (chartId.startsWith("isolated")) drawIsolatedCharts(chartId, resetRange);
       else if (chartId.startsWith("liquidation")) drawLiquidationTimeChart(chartId, resetRange);
       else if (chartId.startsWith("impact")) drawImpactTimeChart(chartId, resetRange);
     }
@@ -4214,8 +4349,13 @@ HTML_TEMPLATE = r"""<!doctype html>
       bundle = nextBundle;
       deep = nextAnalysis;
       chartCache = null;
-      const marketIds = new Set(deep.marketSummaries.map((market) => market.marketId));
-      if (!marketIds.has(selectedMarket)) selectedMarket = deep.marketSummaries.find((market) => market.currentBorrowInUsd > 0)?.marketId || deep.marketSummaries[0]?.marketId;
+      const allMarkets = deep.marketSummaries || [];
+      const coreMarkets = allMarkets.filter((market) => !market.group && !market.isIsolated);
+      const isolatedMarkets = allMarkets.filter((market) => market.group || market.isIsolated);
+      const activeList = marketCategory === "isolated" ? isolatedMarkets : coreMarkets;
+      if (!activeList.some((m) => m.marketId === selectedMarket)) {
+        selectedMarket = activeList.find((m) => m.currentBorrowInUsd > 0)?.marketId || activeList[0]?.marketId || allMarkets[0]?.marketId;
+      }
       updateHeader();
       if (document.querySelector("#dataStatusDialog").open) renderDataStatusDialog();
       renderTabs();
