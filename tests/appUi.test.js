@@ -139,13 +139,13 @@ test("standalone app is one zero-data, folder-backed, client-only HTML workflow"
   assert.match(html, /analysisLocation"\)\.innerHTML = `<span>\$\{esc\(scopeLabel\)\}<\/span><span aria-hidden="true">\/<\/span><strong>\$\{esc\(sectionLabel\)\}<\/strong>`/);
   assert.match(html, /position:\s*sticky[\s\S]{0,160}?top:\s*0/);
   for (const section of [
-    "Liquidity", "Liquidity & Rates", "Debt flows", "Interest flows", "Revenue", "Liquidations", "Exposure", "Market impact", "Participation and concentration",
+    "Liquidity", "Liquidity & Rates", "Debt flows", "Interest flows", "USD stablecoin yields", "Revenue", "Liquidations", "Exposure", "Market impact", "Participation and concentration",
     "Health", "Parameters History", "Risk & Parameters"
   ]) {
     assert.ok(html.includes(section), `standalone app is missing section tab ${section}`);
   }
   for (const viewId of [
-    "overview", "protocolDebtFlows", "protocolInterestFlows", "revenue", "liquidations", "exposure", "impact", "protocolParticipation",
+    "overview", "protocolDebtFlows", "protocolInterestFlows", "protocolStablecoinYields", "revenue", "liquidations", "exposure", "impact", "protocolParticipation",
     "protocolParameters", "marketOverview", "marketRepayments", "marketInterest", "marketRevenue", "marketHealth", "marketParticipation", "marketParameters"
   ]) {
     assert.match(html, new RegExp(`<section id="${viewId}" class="view`), `standalone app is missing ${viewId}`);
@@ -263,7 +263,8 @@ test("standalone app is one zero-data, folder-backed, client-only HTML workflow"
   assert.ok(marketViewSource.indexOf('"marketHealthHistoryDebt"') < marketViewSource.indexOf('"marketBorrowConcentration"'));
   assert.ok(marketViewSource.indexOf('"marketBorrowConcentration"') < marketViewSource.indexOf('"marketCollateralizedSupplyConcentration"'));
   const protocolDebtView = generator.match(/function renderProtocolDebtFlows\(\)[\s\S]*?function renderProtocolInterestFlows\(\)/)?.[0] || "";
-  const protocolInterestView = generator.match(/function renderProtocolInterestFlows\(\)[\s\S]*?function renderProtocolParticipation\(\)/)?.[0] || "";
+  const protocolInterestView = generator.match(/function renderProtocolInterestFlows\(\)[\s\S]*?function renderProtocolStablecoinYields\(\)/)?.[0] || "";
+  const protocolStablecoinYieldsView = generator.match(/function renderProtocolStablecoinYields\(\)[\s\S]*?function renderProtocolParticipation\(\)/)?.[0] || "";
   assert.match(protocolDebtView, /Ongoing days without debt repayments/);
   assert.ok(protocolDebtView.indexOf('"protocolDebtRolling"') < protocolDebtView.indexOf('"protocolDebtCoverage"'));
   assert.ok(protocolDebtView.indexOf('"protocolDebtCoverage"') < protocolDebtView.indexOf('"protocolDebtDaily"'));
@@ -286,8 +287,15 @@ test("standalone app is one zero-data, folder-backed, client-only HTML workflow"
   assert.ok(protocolInterestView.indexOf('"protocolInterestCumulative"') < protocolInterestView.indexOf('"protocolInterestCumulativeGap"'));
   assert.ok(protocolInterestView.indexOf('"protocolInterestCumulativeGap"') < protocolInterestView.indexOf('"protocolInterestGap"'));
   assert.ok(protocolInterestView.indexOf('"protocolInterestGap"') < protocolInterestView.indexOf('"protocolInterestRepaymentDistribution"'));
+  assert.match(protocolStablecoinYieldsView, /USD stablecoin yields/);
+  assert.match(protocolStablecoinYieldsView, /Top USD stablecoin yield/);
+  assert.match(protocolStablecoinYieldsView, /Supply-weighted USD stablecoin yield/);
+  assert.match(protocolStablecoinYieldsView, /USD stablecoin supply APR over time/);
+  assert.match(protocolStablecoinYieldsView, /USD stablecoin market comparison/);
   assert.match(generator, /function drawProtocolDebtCharts\(/);
   assert.match(generator, /function drawProtocolInterestCharts\(/);
+  assert.match(generator, /function drawProtocolStablecoinYieldsCharts\(/);
+  assert.match(generator, /chartId === "protocolStablecoinYields"/);
   assert.match(generator, /chartId === "protocolInterestCoverage"[\s\S]{0,300}?interestCoverage7d[\s\S]{0,100}?interestCoverage30d[\s\S]{0,100}?interestCoverage90d/);
   for (const appSource of [generator, html]) {
     const marketDebtView = appSource.match(/function renderMarketRepayments\(\)[\s\S]*?function renderMarketInterest\(\)/)?.[0] || "";
@@ -901,4 +909,27 @@ test("flow-difference help explains reconciliation, repricing, and semantic limi
     assert.match(source, /Current-valued cumulative reported debt-flow difference/);
     assert.match(source, /Current-valued cumulative reported interest-flow difference/);
   }
+});
+
+test("pct formatter defaults to 2 decimal places and ignores string seriesKey argument", async () => {
+  const html = await fs.readFile(path.join(projectRoot, "data", "liqwid", "liqwid-analysis-app.html"), "utf8");
+  assert.match(html, /function pct\(value, decimals = 2\)/);
+  assert.match(html, /typeof decimals === "number"/);
+
+  // Evaluate the pct function definition
+  const pctDefMatch = html.match(/function pct\(value[\s\S]*?function displayNumber\(value\)\s*\{[\s\S]*?\n\s*\}/);
+  assert.ok(pctDefMatch, "pct and displayNumber definitions found");
+  const evaluateFormatter = new Function(`
+    ${pctDefMatch[0]}
+    return { pct, displayNumber };
+  `);
+  const { pct } = evaluateFormatter();
+
+  assert.equal(pct(0.1276498), "12.76%");
+  assert.equal(pct(0.1276498, "djedSupplyApy"), "12.76%");
+  assert.equal(pct(0.043512, "iusdSupplyApy"), "4.35%");
+  assert.equal(pct(0.19876, "wanusdtSupplyApy"), "19.88%");
+  assert.equal(pct(0.00123, "wandaiSupplyApy"), "0.12%");
+  assert.equal(pct(0.0845, 1), "8.5%");
+  assert.equal(pct(null), "n/a");
 });

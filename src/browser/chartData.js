@@ -897,3 +897,61 @@ export function buildMarketStressChartData(marketSeries, options = {}) {
 
   return { protocolRows, currentRows, contributionRows };
 }
+
+export const USD_STABLECOIN_MARKET_IDS = [
+  "DJED",
+  "IUSD",
+  "USDC",
+  "USDT",
+  "DAI",
+  "USDM",
+  "USDA",
+  "PYUSD",
+  "USDCx"
+];
+
+export const USD_STABLECOIN_CONFIG = [
+  { id: "DJED", label: "DJED", color: "#3edc81" },
+  { id: "IUSD", label: "iUSD", color: "#19b5fe" },
+  { id: "USDC", label: "wanUSDC", color: "#00cec9" },
+  { id: "USDT", label: "wanUSDT", color: "#26de81" },
+  { id: "DAI", label: "wanDAI", color: "#ffb84d" },
+  { id: "USDM", label: "USDM", color: "#d593ff" },
+  { id: "USDA", label: "USDA", color: "#ff5a67" },
+  { id: "PYUSD", label: "wanPYUSD", color: "#f368e0" },
+  { id: "USDCx", label: "USDCx", color: "#fed330" }
+];
+
+export function buildStablecoinYieldComparisonData(marketSeriesById, stablecoinMarketIds = USD_STABLECOIN_MARKET_IDS) {
+  const ids = Array.isArray(stablecoinMarketIds) ? stablecoinMarketIds : USD_STABLECOIN_MARKET_IDS;
+  const seriesByMarket = {};
+  const dateSet = new Set();
+
+  for (const id of ids) {
+    const rawKey = Object.keys(marketSeriesById || {}).find(
+      (candidate) => candidate.toUpperCase() === String(id).toUpperCase()
+    );
+    const rows = rawKey ? chartDataRows(marketSeriesById[rawKey]) : [];
+    const dateMap = new Map();
+    for (const row of rows) {
+      if (row.date) {
+        dateSet.add(row.date);
+        dateMap.set(row.date, row);
+      }
+    }
+    seriesByMarket[id] = dateMap;
+  }
+
+  const sortedDates = [...dateSet].sort((a, b) => a.localeCompare(b));
+  return sortedDates.map((date) => {
+    const combinedRow = { date };
+    for (const id of ids) {
+      const marketRow = seriesByMarket[id]?.get(date);
+      const key = `${id.toLowerCase()}SupplyApy`;
+      combinedRow[key] = marketRow && Number.isFinite(Number(marketRow.supplyApy))
+        ? Number(marketRow.supplyApy)
+        : null;
+    }
+    return combinedRow;
+  });
+}

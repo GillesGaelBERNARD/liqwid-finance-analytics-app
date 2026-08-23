@@ -12,7 +12,9 @@ import {
   contributionKeysByLatest,
   enrichChartTimeSeries,
   fillMonthlyChartGaps,
-  summarizeDebtFlowReconciliation
+  summarizeDebtFlowReconciliation,
+  buildStablecoinYieldComparisonData,
+  USD_STABLECOIN_MARKET_IDS
 } from "../src/browser/chartData.js";
 import { normalizeMarketHistoryRows, withDerivedMarketMetrics } from "../src/shared/metrics.js";
 
@@ -531,4 +533,55 @@ test("stress contribution timelines choose top markets from the latest rolling s
 
   assert.deepEqual(Object.keys(contributionRows.at(-1)), ["date", "Current", "Other"]);
   assert.ok(contributionRows.at(-1).Current > contributionRows.at(-1).Other);
+});
+
+test("buildStablecoinYieldComparisonData aligns multi-market dates and preserves null for unobserved dates", () => {
+  const marketSeries = {
+    DJED: [
+      { date: "2024-01-01", supplyApy: 0.05 },
+      { date: "2024-01-02", supplyApy: 0.06 },
+      { date: "2024-01-03", supplyApy: 0.07 }
+    ],
+    USDC: [
+      { date: "2024-01-02", supplyApy: 0.04 },
+      { date: "2024-01-03", supplyApy: 0.045 },
+      { date: "2024-01-04", supplyApy: 0.048 }
+    ],
+    USDM: [
+      { date: "2024-01-03", supplyApy: 0.08 }
+    ]
+  };
+
+  const rows = buildStablecoinYieldComparisonData(marketSeries, ["DJED", "USDC", "USDM"]);
+
+  assert.equal(rows.length, 4);
+  assert.deepEqual(rows.map((r) => r.date), ["2024-01-01", "2024-01-02", "2024-01-03", "2024-01-04"]);
+
+  // 2024-01-01
+  assert.equal(rows[0].djedSupplyApy, 0.05);
+  assert.equal(rows[0].usdcSupplyApy, null);
+  assert.equal(rows[0].usdmSupplyApy, null);
+
+  // 2024-01-02
+  assert.equal(rows[1].djedSupplyApy, 0.06);
+  assert.equal(rows[1].usdcSupplyApy, 0.04);
+  assert.equal(rows[1].usdmSupplyApy, null);
+
+  // 2024-01-03
+  assert.equal(rows[2].djedSupplyApy, 0.07);
+  assert.equal(rows[2].usdcSupplyApy, 0.045);
+  assert.equal(rows[2].usdmSupplyApy, 0.08);
+
+  // 2024-01-04
+  assert.equal(rows[3].djedSupplyApy, null);
+  assert.equal(rows[3].usdcSupplyApy, 0.048);
+  assert.equal(rows[3].usdmSupplyApy, null);
+});
+
+test("buildStablecoinYieldComparisonData handles missing or empty market series gracefully", () => {
+  const rows = buildStablecoinYieldComparisonData({}, ["DJED", "USDC"]);
+  assert.deepEqual(rows, []);
+
+  const nullRows = buildStablecoinYieldComparisonData(null);
+  assert.deepEqual(nullRows, []);
 });

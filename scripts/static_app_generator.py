@@ -697,6 +697,7 @@ HTML_TEMPLATE = r"""<!doctype html>
     <section id="overview" class="view active"></section>
     <section id="protocolDebtFlows" class="view"></section>
     <section id="protocolInterestFlows" class="view"></section>
+    <section id="protocolStablecoinYields" class="view"></section>
     <section id="revenue" class="view"></section>
     <section id="liquidations" class="view"></section>
     <section id="exposure" class="view"></section>
@@ -749,6 +750,7 @@ HTML_TEMPLATE = r"""<!doctype html>
         ["overview", "Liquidity"],
         ["protocolDebtFlows", "Debt flows"],
         ["protocolInterestFlows", "Interest flows"],
+        ["protocolStablecoinYields", "USD stablecoin yields"],
         ["revenue", "Revenue"],
         ["liquidations", "Liquidations"],
         ["exposure", "Exposure"],
@@ -1387,10 +1389,47 @@ HTML_TEMPLATE = r"""<!doctype html>
         "explanation": "Measures market breadth during peak repayment co-occurrence days where multiple markets experienced repayments >= 2.0x their 30-day active median.",
         "formulaHtml": '<div class="formula-card"><span class="formula-func">max</span><sub>date</sub> <span class="formula-num">Concurrent Spike Markets</span></div>',
         "formulaText": "max_date(Concurrent Spike Markets)"
+    },
+    "Top USD stablecoin yield": {
+        "description": "Highest current supply APR among USD-pegged stablecoin markets.",
+        "explanation": "Identifies the highest annualized supply rate currently earned by liquidity providers among all active USD stablecoin pools (DJED, iUSD, wanUSDC, wanUSDT, wanDAI, USDM, USDA, wanPYUSD, USDCx).",
+        "formulaHtml": '<div class="formula-card"><span class="formula-func">max</span><sub>USD stablecoins</sub><span class="formula-paren">(</span><span class="formula-num">Supply APR</span><span class="formula-paren">)</span></div>',
+        "formulaText": "max(Supply APR across USD stablecoin markets)"
+    },
+    "Supply-weighted USD stablecoin yield": {
+        "description": "Supply-weighted average annualized supply rate across all USD stablecoin markets.",
+        "explanation": "Weights each USD stablecoin\'s current supply APY by its total supplied USD balance to reflect the effective average yield earned across all stablecoin capital in the protocol.",
+        "formulaHtml": '<div class="formula-card"><div class="formula-frac"><span class="formula-num">&sum; (Supply APR &times; Supply<sub>USD</sub>)</span><span class="formula-den">&sum; Supply<sub>USD</sub></span></div></div>',
+        "formulaText": "sum(Supply APR * Supply USD) / sum(Supply USD)"
+    },
+    "USD stablecoin supply": {
+        "description": "Total USD value of assets supplied across all USD stablecoin lending pools.",
+        "explanation": "Aggregates total liquidity supplied by lenders across all USD-pegged stablecoins (DJED, iUSD, wanUSDC, wanUSDT, wanDAI, USDM, USDA, wanPYUSD, USDCx).",
+        "formulaHtml": '<div class="formula-card">&sum;<sub>USD stablecoins</sub> <span class="formula-num">Supply<sub>USD</sub></span></div>',
+        "formulaText": "sum(Supply USD for all USD stablecoin markets)"
+    },
+    "USD stablecoin borrow": {
+        "description": "Total USD value of active debt across all USD stablecoin lending pools.",
+        "explanation": "Aggregates total outstanding borrowed capital across all USD-pegged stablecoin markets.",
+        "formulaHtml": '<div class="formula-card">&sum;<sub>USD stablecoins</sub> <span class="formula-num">Borrow<sub>USD</sub></span></div>',
+        "formulaText": "sum(Borrow USD for all USD stablecoin markets)"
+    },
+    "USD stablecoin utilization": {
+        "description": "Aggregate capital utilization rate across USD stablecoin markets.",
+        "explanation": "Ratio of total borrowed USD capital to total supplied USD capital across all USD stablecoin lending pools.",
+        "formulaHtml": '<div class="formula-card"><div class="formula-frac"><span class="formula-num">&sum; Borrow<sub>USD</sub></span><span class="formula-den">&sum; Supply<sub>USD</sub></span></div></div>',
+        "formulaText": "sum(Borrow USD) / sum(Supply USD)"
+    },
+    "Active USD stablecoins": {
+        "description": "Count of USD stablecoin markets with observable active supply or borrow liquidity.",
+        "explanation": "Number of distinct USD-pegged stablecoin lending pools available in the protocol.",
+        "formulaHtml": '<div class="formula-card"><span class="formula-func">count</span><span class="formula-paren">(</span><span class="formula-num">Distinct USD stablecoins</span><span class="formula-paren">)</span></div>',
+        "formulaText": "count(distinct USD stablecoin markets)"
     }
 });
 
     const chartQuestions = Object.freeze({
+      protocolStablecoinYields: "How do lending yields (Supply APR) compare across USD-pegged stablecoins over time?",
       protocolCapital: "Is protocol capital expanding, and is borrowing reducing the liquidity left available?",
       protocolUtilization: "When has borrowing consumed the largest share of supplied capital?",
       protocolDebtRepayment: "When did protocol repayment activity accelerate, fade, or stop?",
@@ -1676,6 +1715,7 @@ HTML_TEMPLATE = r"""<!doctype html>
         overview: renderOverview,
         protocolDebtFlows: renderProtocolDebtFlows,
         protocolInterestFlows: renderProtocolInterestFlows,
+        protocolStablecoinYields: renderProtocolStablecoinYields,
         revenue: renderRevenue,
         liquidations: renderLiquidations,
         exposure: renderCurrentExposure,
@@ -2034,6 +2074,100 @@ HTML_TEMPLATE = r"""<!doctype html>
         ${interactiveChartPanel("Protocol interest repayment distribution", "protocolInterestRepaymentDistribution")}
       `);
       drawProtocolInterestCharts();
+    }
+
+    function renderProtocolStablecoinYields() {
+      const stablecoinMarkets = USD_STABLECOIN_CONFIG.map((config) => {
+        const direct = bundle.markets?.find((m) => String(m.id).toUpperCase() === config.id.toUpperCase());
+        const supplyInUsd = Number(direct?.supply ?? 0);
+        const borrowInUsd = Number(direct?.borrow ?? 0);
+        const liquidityInUsd = Number(direct?.liquidity ?? 0);
+        const supplyApy = Number(direct?.supplyAPY ?? 0);
+        const borrowApr = Number(direct?.borrowAPR ?? 0);
+        const utilization = supplyInUsd > 0 ? borrowInUsd / supplyInUsd : 0;
+        return {
+          id: config.id,
+          label: direct?.displayName || config.label,
+          color: config.color,
+          supplyInUsd,
+          borrowInUsd,
+          liquidityInUsd,
+          supplyApy,
+          borrowApr,
+          utilization,
+          isActive: supplyInUsd > 0 || borrowInUsd > 0
+        };
+      });
+
+      const totalSupplyUsd = stablecoinMarkets.reduce((sum, m) => sum + m.supplyInUsd, 0);
+      const totalBorrowUsd = stablecoinMarkets.reduce((sum, m) => sum + m.borrowInUsd, 0);
+      const aggregateUtilization = totalSupplyUsd > 0 ? totalBorrowUsd / totalSupplyUsd : 0;
+      const supplyWeightedYield = totalSupplyUsd > 0
+        ? stablecoinMarkets.reduce((sum, m) => sum + m.supplyApy * m.supplyInUsd, 0) / totalSupplyUsd
+        : 0;
+      const topYieldMarket = stablecoinMarkets.reduce((best, m) => (m.supplyApy > (best?.supplyApy ?? -1) ? m : best), stablecoinMarkets[0]);
+      const activeCount = stablecoinMarkets.filter((m) => m.isActive).length;
+
+      const sortedForTable = [...stablecoinMarkets].sort((a, b) => b.supplyApy - a.supplyApy || b.supplyInUsd - a.supplyInUsd);
+
+      setHtml("protocolStablecoinYields", `
+        <div class="hero">
+          <h2>USD stablecoin yields</h2>
+          <p>How do lending supply rates compare across USD-pegged stablecoin markets over time?</p>
+        </div>
+        <div class="kpis">
+          ${kpi("Top USD stablecoin yield", pct(topYieldMarket?.supplyApy ?? 0), `${topYieldMarket?.label || topYieldMarket?.id} · Highest current supply APR`)}
+          ${kpi("Supply-weighted USD stablecoin yield", pct(supplyWeightedYield), "Weighted by active supplied capital")}
+          ${kpi("USD stablecoin supply", usd(totalSupplyUsd), "Total USD value supplied across USD stablecoins")}
+          ${kpi("USD stablecoin borrow", usd(totalBorrowUsd), "Total USD value borrowed across USD stablecoins")}
+          ${kpi("USD stablecoin utilization", pct(aggregateUtilization), "Aggregate USD stablecoin capital utilization")}
+          ${kpi("Active USD stablecoins", integer(activeCount), "Observable USD-pegged lending pools")}
+        </div>
+        ${chartSection("Supply yield comparison", "How have supply APRs moved relative to one another across USD stablecoins as market demand and liquidity shifted?")}
+        ${interactiveChartPanel("USD stablecoin supply APR over time", "protocolStablecoinYields")}
+        <div class="panel" style="margin-top:24px">
+          <div class="chart-heading">
+            <div class="chart-heading-copy">
+              <h2><span>USD stablecoin market comparison</span></h2>
+              <p>Current lending rates, capital scale, and pool utilization across all USD-pegged stablecoin markets.</p>
+            </div>
+          </div>
+          <div class="table-wrap">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>Asset</th>
+                  <th style="text-align:right">Supply APR</th>
+                  <th style="text-align:right">Borrow APR</th>
+                  <th style="text-align:right">Utilization</th>
+                  <th style="text-align:right">Supplied (USD)</th>
+                  <th style="text-align:right">Borrowed (USD)</th>
+                  <th style="text-align:right">Available Liquidity (USD)</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${sortedForTable.map((m) => `
+                  <tr>
+                    <td>
+                      <span style="display:inline-flex;align-items:center;gap:8px">
+                        <span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:${esc(m.color)}"></span>
+                        <strong>${esc(m.label)}</strong>
+                      </span>
+                    </td>
+                    <td style="text-align:right;color:var(--mint);font-weight:600">${esc(pct(m.supplyApy))}</td>
+                    <td style="text-align:right;color:var(--amber)">${esc(pct(m.borrowApr))}</td>
+                    <td style="text-align:right">${esc(pct(m.utilization))}</td>
+                    <td style="text-align:right">${esc(usd(m.supplyInUsd))}</td>
+                    <td style="text-align:right">${esc(usd(m.borrowInUsd))}</td>
+                    <td style="text-align:right">${esc(usd(m.liquidityInUsd))}</td>
+                  </tr>
+                `).join("")}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      `);
+      drawProtocolStablecoinYieldsCharts();
     }
 
     function renderProtocolParticipation() {
@@ -2920,7 +3054,11 @@ HTML_TEMPLATE = r"""<!doctype html>
     }
 
     function protocolChartIds() {
-      return ["protocolParticipationLoans", "protocolParticipationKeys", "protocolHealthHistoryCounts", "protocolHealthHistoryDebt", "protocolCapital", "protocolUtilization", "protocolDebtRolling", "protocolDebtCoverage", "protocolDebtDaily", "protocolDebtRepayment", "protocolRepaymentDrySpells", "protocolDebtCumulative", "protocolDebtCumulativeGap", "protocolDebtGap", "protocolDebtRepaymentDistribution", "protocolInterestRolling", "protocolInterestCoverage", "protocolInterestDaily", "protocolInterestRepayment", "protocolInterestDrySpells", "protocolInterestRepaymentDistribution", "protocolInterestCumulative", "protocolInterestCumulativeGap", "protocolInterestGap", "protocolLqPrice", "protocolLqStaking", "protocolLqTreasury"];
+      return ["protocolStablecoinYields", "protocolParticipationLoans", "protocolParticipationKeys", "protocolHealthHistoryCounts", "protocolHealthHistoryDebt", "protocolCapital", "protocolUtilization", "protocolDebtRolling", "protocolDebtCoverage", "protocolDebtDaily", "protocolDebtRepayment", "protocolRepaymentDrySpells", "protocolDebtCumulative", "protocolDebtCumulativeGap", "protocolDebtGap", "protocolDebtRepaymentDistribution", "protocolInterestRolling", "protocolInterestCoverage", "protocolInterestDaily", "protocolInterestRepayment", "protocolInterestDrySpells", "protocolInterestRepaymentDistribution", "protocolInterestCumulative", "protocolInterestCumulativeGap", "protocolInterestGap", "protocolLqPrice", "protocolLqStaking", "protocolLqTreasury"];
+    }
+
+    function drawProtocolStablecoinYieldsCharts(chartId = null, resetRange = false) {
+      drawProtocolTimeChart("protocolStablecoinYields", resetRange);
     }
 
     function drawProtocolDebtCharts(chartId = null, resetRange = false) {
@@ -3061,6 +3199,18 @@ HTML_TEMPLATE = r"""<!doctype html>
       if (!container) return;
       let rows = chartBundleState().protocolRows;
       const options = { chartId, period: chartPeriods[chartId], resetRange };
+      if (chartId === "protocolStablecoinYields") {
+        const yieldRows = buildStablecoinYieldComparisonData(bundle.marketSeries);
+        const series = USD_STABLECOIN_CONFIG.map((config) => {
+          const market = bundle.marketById?.[config.id] || bundle.marketById?.[config.id.toUpperCase()];
+          return {
+            key: `${config.id.toLowerCase()}SupplyApy`,
+            label: market?.displayName || config.label,
+            color: config.color
+          };
+        });
+        lineChart(container, yieldRows, series, pct, { ...options, valueMode: "ratio" });
+      }
       if (chartId === "protocolParticipationLoans") lineChart(container, loanSnapshotRows("health", "protocol"), [{ key: "activeDebtLoanCount", label: "Active-debt positions", color: colors.blue, type: "line", points: true, dash: "5 4" }], integer, { ...options, valueMode: "stock" });
       if (chartId === "protocolParticipationKeys") lineChart(container, loanSnapshotRows("participation", "protocol"), [{ key: "distinctActiveDebtObservedKeyCount", label: "Distinct observed keys with active debt", color: colors.mint, type: "line", points: true, dash: "5 4" }], integer, { ...options, valueMode: "stock" });
       if (chartId === "protocolLqPrice") lineChart(container, deep?.lqToken?.series || [], [["lqPriceInUsd", "LQ Price (USD)", colors.mint]], usdPrice, { ...options, valueMode: "stock" });
@@ -4818,11 +4968,11 @@ HTML_TEMPLATE = r"""<!doctype html>
       }).format(numeric);
       return `${formatted}${symbol ? ` ${symbol}` : ""}`;
     }
-    function pct(value) { const numeric = displayNumber(value); return numeric === null ? "n/a" : `${(numeric * 100).toFixed(1)}%`; }
-    function signedPct(value) { const numeric = displayNumber(value); return numeric === null ? "n/a" : `${numeric > 0 ? "+" : ""}${(numeric * 100).toFixed(1)} pp`; }
+    function pct(value, decimals = 2) { const numeric = displayNumber(value); const d = typeof decimals === "number" && !Number.isNaN(decimals) ? decimals : 2; return numeric === null ? "n/a" : `${(numeric * 100).toFixed(d)}%`; }
+    function signedPct(value, decimals = 2) { const numeric = displayNumber(value); const d = typeof decimals === "number" && !Number.isNaN(decimals) ? decimals : 2; return numeric === null ? "n/a" : `${numeric > 0 ? "+" : ""}${(numeric * 100).toFixed(d)} pp`; }
     function ratio(value) { const numeric = displayNumber(value); return numeric === null ? "n/a" : `${numeric.toFixed(2)}x`; }
     function integer(value) { const numeric = displayNumber(value); return numeric === null ? "n/a" : new Intl.NumberFormat("en-US", { maximumFractionDigits: 0 }).format(numeric); }
-    function number(value, decimals = 2) { const numeric = displayNumber(value); return numeric === null ? "n/a" : numeric.toFixed(decimals); }
+    function number(value, decimals = 2) { const numeric = displayNumber(value); const d = typeof decimals === "number" && !Number.isNaN(decimals) ? decimals : 2; return numeric === null ? "n/a" : numeric.toFixed(d); }
     function displayNumber(value) {
       if (value === null || value === undefined || value === "") return null;
       const numeric = Number(value);
