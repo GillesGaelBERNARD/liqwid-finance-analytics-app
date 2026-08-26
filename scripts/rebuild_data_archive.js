@@ -17,7 +17,7 @@ async function rebuildDataArchive(dataRoot, archiveName = "liqwid-data.zip") {
         if (entry.path === "liqwid-portable-manifest.csv") continue;
         const targetFile = path.join(root, entry.path);
         const fileExists = fs.existsSync(targetFile);
-        if (!fileExists || fs.readFileSync(targetFile, "utf-8") !== entry.text) {
+        if (!fileExists) {
           fs.mkdirSync(path.dirname(targetFile), { recursive: true });
           fs.writeFileSync(targetFile, entry.text, "utf-8");
           unpackedCount++;

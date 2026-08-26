@@ -482,12 +482,14 @@ async function appendCurrentLoanSnapshotHistory({ store, fetchedAt, marketIds, a
   const existing = {
     participation: csvToRows(await store.readText("computed/loan-participation-history.csv", "")),
     health: csvToRows(await store.readText("computed/loan-health-history.csv", "")),
+    pol: csvToRows(await store.readText("computed/loan-pol-history.csv", "")),
     reconciliation: csvToRows(await store.readText("computed/loan-reconciliation-history.csv", ""))
   };
   const observation = buildLoanSnapshotHistory({ timestamp: fetchedAt, marketIds, allLoans, activeLoans, markets });
   const history = appendLoanSnapshotHistory(existing, observation);
   await store.writeText("computed/loan-participation-history.csv", rowsToCsv(history.participation));
   await store.writeText("computed/loan-health-history.csv", rowsToCsv(history.health));
+  await store.writeText("computed/loan-pol-history.csv", rowsToCsv(history.pol || []));
   await store.writeText("computed/loan-reconciliation-history.csv", rowsToCsv(history.reconciliation || []));
   return history;
 }

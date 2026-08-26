@@ -23,31 +23,6 @@ def build_static_app(data_root, output_path=None):
     output_path.parent.mkdir(parents=True, exist_ok=True)
     output_path.write_text(html, encoding="utf-8")
     return output_path
-import json
-import base64
-import hashlib
-import re
-from pathlib import Path
-
-
-def build_static_app(data_root, output_path=None):
-    data_root = Path(data_root)
-    output_path = Path(output_path) if output_path else data_root / "liqwid-analysis-app.html"
-    payload = json.dumps({"bundle": None, "deep": None}, separators=(",", ":")).replace("</", "<\\/")
-    browser_runtime = build_browser_runtime().replace("</", "<\\/")
-    viewer_build = hashlib.sha256(f"{browser_runtime}\0{HTML_TEMPLATE}".encode("utf-8")).hexdigest()[:12]
-    logo_path = Path(__file__).resolve().parents[1] / "public" / "assets" / "liqwid-logo.png"
-    logo_uri = "data:image/png;base64," + base64.b64encode(logo_path.read_bytes()).decode("ascii")
-    html = (
-        HTML_TEMPLATE
-        .replace("__LIQWID_PAYLOAD__", payload)
-        .replace("__LIQWID_BROWSER_DATA__", browser_runtime)
-        .replace("__LIQWID_VIEWER_BUILD__", viewer_build)
-        .replace("__LIQWID_LOGO__", logo_uri)
-    )
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-    output_path.write_text(html, encoding="utf-8")
-    return output_path
 
 
 def build_browser_runtime():
@@ -705,6 +680,7 @@ HTML_TEMPLATE = r"""<!doctype html>
     <section id="protocolParticipation" class="view"></section>
     <section id="protocolLqToken" class="view"></section>
     <section id="protocolParameters" class="view"></section>
+    <section id="protocolPol" class="view"></section>
     <section id="marketOverview" class="view"></section>
     <section id="marketRepayments" class="view"></section>
     <section id="marketInterest" class="view"></section>
@@ -712,6 +688,7 @@ HTML_TEMPLATE = r"""<!doctype html>
     <section id="marketHealth" class="view"></section>
     <section id="marketParticipation" class="view"></section>
     <section id="marketParameters" class="view"></section>
+    <section id="marketPol" class="view"></section>
   </main>
   <input id="dataArchiveFileInput" class="screen-reader-only" type="file" accept=".zip,application/zip" aria-label="Open an existing Liqwid data archive">
   <dialog id="fullHistoryConfirmDialog" class="fetch-confirm-dialog" aria-labelledby="fullHistoryDialogTitle">
@@ -757,7 +734,8 @@ HTML_TEMPLATE = r"""<!doctype html>
         ["impact", "Market impact"],
         ["protocolParticipation", "Participation and concentration"],
         ["protocolLqToken", "LQ token & staking"],
-        ["protocolParameters", "Risk & Parameters"]
+        ["protocolParameters", "Risk & Parameters"],
+        ["protocolPol", "Protocol-Owned Liquidity (POL)"]
       ]],
       ["markets", "Market analytics", [
         ["marketOverview", "Liquidity & Rates"],
@@ -766,23 +744,118 @@ HTML_TEMPLATE = r"""<!doctype html>
         ["marketRevenue", "Revenue"],
         ["marketHealth", "Health"],
         ["marketParticipation", "Participation and concentration"],
-        ["marketParameters", "Parameters History"]
+        ["marketParameters", "Parameters History"],
+        ["marketPol", "Protocol-Owned Liquidity (POL)"]
       ]]
     ];
     const views = analyticsScopes.flatMap(([, , scopeViews]) => scopeViews);
     const chartTimeframes = [["week", "Week"], ["month", "Month"], ["quarter", "3 months"], ["ytd", "YTD"], ["year", "Year"], ["all", "All"]];
     const APP_KPI_METADATA = Object.freeze({
+    "Active POL positions": {
+        "description": "Count of active borrowing markets utilized for Protocol-Owned Liquidity.",
+        "explanation": "Number of distinct stablecoin markets currently carrying active POL loan balances.",
+        "formulaHtml": '<div class="formula-card"><span class="formula-func">count</span><span class="formula-paren">(</span><span class="formula-num">Active POL Markets</span><span class="formula-paren">)</span></div>',
+        "formulaText": "count(Active POL Markets)"
+    },
+    "Total POL debt": {
+        "description": "Total USD borrow debt across all Protocol-Owned Liquidity (POL) positions.",
+        "explanation": "Sum of outstanding borrow balances across all active protocol/team-owned liquidity loans (DJED, USDM, wanUSDC, iUSD), converted to USD at current market prices.",
+        "formulaHtml": '<div class="formula-card">&sum;<sub>POL loans</sub> <span class="formula-num">Debt<sub>USD</sub></span></div>',
+        "formulaText": "sum(POL Loan Debt USD)"
+    },
+    "POL share of protocol borrow": {
+        "description": "Percentage of total protocol borrow represented by Protocol-Owned Liquidity (POL) positions.",
+        "explanation": "Share of all active outstanding borrow obligations across the entire protocol attributable to governance-managed POL loans.",
+        "formulaHtml": '<div class="formula-card"><div class="formula-frac"><span class="formula-num">&sum; POL Debt<sub>USD</sub></span><span class="formula-den">Total Protocol Borrow<sub>USD</sub></span></div></div>',
+        "formulaText": "sum(POL Debt USD) / Total Protocol Borrow USD"
+    },
+    "Locked POL collateral": {
+        "description": "Total locked qPOL tokens and market value backing POL loans.",
+        "explanation": "Total quantity and USD valuation of qPOL tokens deposited as collateral in the Plutus loan validator for protocol infrastructure financing.",
+        "formulaHtml": '<div class="formula-card">&sum;<sub>POL loans</sub> <span class="formula-num">Collateral Tokens &times; Price<sub>USD</sub></span></div>',
+        "formulaText": "sum(POL Collateral qTokens * Price USD)"
+    },
+    "Weighted average borrow APY": {
+        "description": "Debt-weighted average borrow APY paid by POL positions.",
+        "explanation": "Average interest rate paid annually by the protocol on its POL borrows, weighted by each market's outstanding POL debt balance.",
+        "formulaHtml": '<div class="formula-card"><div class="formula-frac"><span class="formula-num">&sum; (Debt<sub>i</sub> &times; APY<sub>i</sub>)</span><span class="formula-den">&sum; Debt<sub>i</sub></span></div></div>',
+        "formulaText": "sum(Debt_i * APY_i) / sum(Debt_i)"
+    },
+    "POL active debt": {
+        "description": "Total active borrow balance held by Protocol-Owned Liquidity loans.",
+        "explanation": "Sum of all active POL loan balances, backed by qPOL under governance-weighted liquidation immunity.",
+        "formulaHtml": '<div class="formula-card">&sum;<sub>POL</sub> <span class="formula-num">Debt<sub>USD</sub></span></div>',
+        "formulaText": "sum(POL Debt USD)"
+    },
+    "POL collateral value": {
+        "description": "Total USD market value of qPOL collateral backing POL loans.",
+        "explanation": "Current market valuation of all qPOL tokens locked to back POL borrow positions.",
+        "formulaHtml": '<div class="formula-card">&sum;<sub>POL</sub> <span class="formula-num">Collateral<sub>USD</sub></span></div>',
+        "formulaText": "sum(POL Collateral USD)"
+    },
+    "Liquidation status": {
+        "description": "On-chain liquidation immunity status of Protocol-Owned Liquidity loans.",
+        "explanation": "Indicates that the Plutus smart contracts enforce a 100x collateral weight and 0% liquidation penalty for qPOL, rendering POL positions immune from third-party liquidations.",
+        "formulaHtml": '<div class="formula-card"><span class="formula-text">Immune: collateralWeight=100, liquidationPenalty=0%</span></div>',
+        "formulaText": "Immune (collateralWeight = 100, penalty = 0%)"
+    },
+    "POL share of market borrow": {
+        "description": "Percentage of this market's total active borrow represented by Protocol-Owned Liquidity (POL).",
+        "explanation": "Share of this market's total outstanding borrow obligations attributable to the protocol team's governance-managed POL loan.",
+        "formulaHtml": '<div class="formula-card"><div class="formula-frac"><span class="formula-num">Market POL Debt<sub>USD</sub></span><span class="formula-den">Market Total Borrow<sub>USD</sub></span></div></div>',
+        "formulaText": "Market POL Debt USD / Market Total Borrow USD"
+    },
+    "Market POL debt": {
+        "description": "Total USD borrow debt obligation owed by this market's Protocol-Owned Liquidity (POL) position.",
+        "explanation": "Outstanding borrow principal and accrued interest owed by the team/protocol development financing loan in this specific market.",
+        "formulaHtml": '<div class="formula-card"><span class="formula-num">POL Loan Adjusted Debt<sub>USD</sub></span></div>',
+        "formulaText": "POL Loan Adjusted Debt USD"
+    },
+    "Locked qPOL collateral": {
+        "description": "Quantity and USD market value of locked qPOL tokens deposited as collateral for this market's POL loan.",
+        "explanation": "Amount of qPOL tokens locked in the Plutus loan validator contract backing this market's protocol liquidity position.",
+        "formulaHtml": '<div class="formula-card"><span class="formula-num">qPOL Token Count</span> &times; <span class="formula-num">qPOL Price<sub>USD</sub></span></div>',
+        "formulaText": "qPOL Token Count * qPOL Price USD"
+    },
+    "Nominal LTV vs Health Factor": {
+        "description": "Nominal loan-to-value ratio compared to effective on-chain smart contract Health Factor.",
+        "explanation": "Nominal LTV is unweighted debt divided by nominal collateral value. Health Factor applies the 100x collateral weight multiplier defined in Liqwid market governance.",
+        "formulaHtml": '<div class="formula-card"><span class="formula-text">LTV:</span> <div class="formula-frac"><span class="formula-num">Debt</span><span class="formula-den">Collateral</span></div> &middot; <span class="formula-text">HF:</span> <div class="formula-frac"><span class="formula-num">Collateral &times; 100</span><span class="formula-den">Debt</span></div></div>',
+        "formulaText": "Nominal LTV = Debt / Collateral, Health Factor = (Collateral * 100) / Debt"
+    },
+    "Nominal Health Factor": {
+        "description": "Unweighted nominal Health Factor without governance collateral multiplier.",
+        "explanation": "Ratio of deposited collateral market value to outstanding borrow debt without applying governance multiplier weighting.",
+        "formulaHtml": '<div class="formula-card"><div class="formula-frac"><span class="formula-num">Collateral</span><span class="formula-den">Debt</span></div></div>',
+        "formulaText": "Collateral / Debt"
+    },
+    "Annual interest yield paid": {
+        "description": "Projected annual interest cash flow paid across Protocol-Owned Liquidity (POL) positions at current borrow rates (not historical interest paid).",
+        "explanation": "Forward-looking annual interest run-rate calculated as current outstanding POL debt multiplied by the current market borrow APY for each position (summed across all 4 positions at protocol level, or for the selected market). Reflects the current annualized financing cost flowing directly into supplier deposit yields and protocol reserves.",
+        "formulaHtml": '<div class="formula-card">&sum;<sub>POL loans</sub> <span class="formula-num">Current Debt<sub>USD</sub></span> &times; <span class="formula-num">Current Borrow APY</span></div>',
+        "formulaText": "sum(Current POL Debt USD * Current Borrow APY)",
+        "note": "Projection at current snapshot borrow rates, not cumulative past interest."
+    },
+    "Annual interest yield paid (at current rates)": {
+        "description": "Projected annual interest cash flow paid across Protocol-Owned Liquidity (POL) positions at current borrow rates (not historical interest paid).",
+        "explanation": "Forward-looking annual interest run-rate calculated as current outstanding POL debt multiplied by the current market borrow APY for each position (summed across all 4 positions at protocol level, or for the selected market). Reflects the current annualized financing cost flowing directly into supplier deposit yields and protocol reserves.",
+        "formulaHtml": '<div class="formula-card">&sum;<sub>POL loans</sub> <span class="formula-num">Current Debt<sub>USD</sub></span> &times; <span class="formula-num">Current Borrow APY</span></div>',
+        "formulaText": "sum(Current POL Debt USD * Current Borrow APY)",
+        "note": "Projection at current snapshot borrow rates, not cumulative past interest."
+    },
     "Active-debt positions": {
         "description": "Count of active loan positions with non-zero borrow balance.",
         "explanation": "Number of active user borrowing positions currently holding non-zero debt in the snapshot.",
         "formulaHtml": '<div class="formula-card"><span class="formula-func">count</span><span class="formula-paren">(</span><span class="formula-num">Loans with Debt &gt; $0</span><span class="formula-paren">)</span></div>',
-        "formulaText": "count(Loans with Debt > 0)"
+        "formulaText": "count(Loans with Debt > 0)",
+        "note": "Excludes governance-protected POL loans."
     },
     "Active-loan debt": {
         "description": "Total USD borrow debt held by active loan positions.",
         "explanation": "Sum of all outstanding borrow balances across active user loan positions, converted to USD at current asset prices.",
         "formulaHtml": '<div class="formula-card">&sum; <span class="formula-num">Loan Debt<sub>USD</sub></span></div>',
-        "formulaText": "sum(Loan Debt USD)"
+        "formulaText": "sum(Loan Debt USD)",
+        "note": "Excludes governance-protected POL loans."
     },
     "Annualized run rate": {
         "description": "Annualized DAO revenue pace based on the latest 90 consecutive complete daily allocations.",
@@ -794,7 +867,8 @@ HTML_TEMPLATE = r"""<!doctype html>
         "description": "Total USD debt where outstanding borrow exceeds total collateral value.",
         "explanation": "Uncollateralized shortfall where an active loan's debt balance exceeds its collateral value (Debt > Collateral). Features two key components: Gross Debt (total borrow balance of undercollateralized loans) and Net Shortfall (uncollateralized loss exposure: Debt - Collateral).",
         "formulaHtml": '<div class="formula-card"><div style="margin-bottom:4px"><strong>Gross Debt:</strong> &sum;<sub>Debt<sub>i</sub> &gt; Collateral<sub>i</sub></sub> <span class="formula-num">Debt<sub>i</sub></span></div><div><strong>Net Shortfall:</strong> &sum;<sub>Debt<sub>i</sub> &gt; Collateral<sub>i</sub></sub> <span class="formula-paren">(</span><span class="formula-num">Debt<sub>i</sub></span> &minus; <span class="formula-num">Collateral<sub>i</sub></span><span class="formula-paren">)</span></div></div>',
-        "formulaText": "Gross = sum(Debt where Debt > Collateral); Net Shortfall = sum(max(0, Debt - Collateral))"
+        "formulaText": "Gross = sum(Debt where Debt > Collateral); Net Shortfall = sum(max(0, Debt - Collateral))",
+        "note": "Excludes governance-protected POL loans."
     },
     "Bad debt in silo": {
         "description": "Total USD debt in this silo where loan borrow exceeds collateral value.",
@@ -806,7 +880,8 @@ HTML_TEMPLATE = r"""<!doctype html>
         "description": "Count of active loans where borrow exceeds collateral value.",
         "explanation": "Number of undercollateralized user loan positions currently in bad debt state (Debt > Collateral).",
         "formulaHtml": '<div class="formula-card"><span class="formula-func">count</span><span class="formula-paren">(</span><span class="formula-num">Loans where Debt &gt; Collateral</span><span class="formula-paren">)</span></div>',
-        "formulaText": "count(Loans where Debt > Collateral)"
+        "formulaText": "count(Loans where Debt > Collateral)",
+        "note": "Excludes governance-protected POL loans."
     },
     "Batched Market Borrow": {
         "description": "Official on-chain aggregate market borrow balance from the 4-hour batch cycle state.",
@@ -836,7 +911,8 @@ HTML_TEMPLATE = r"""<!doctype html>
         "description": "Market asset account with the largest undercollateralized debt shortfall.",
         "explanation": "Identifies the borrowed token market carrying the largest dollar amount of bad debt. Bad debt occurs when an active loan position's debt balance exceeds its collateral value (Debt > Collateral). Shows both gross debt (total borrow balance of underwater loans in this market) and net shortfall (uncollateralized deficit: Debt - Collateral).",
         "formulaHtml": '<div class="formula-card"><div style="margin-bottom:4px"><strong>Market Selection:</strong> <span class="formula-func">max</span><sub>i</sub> <span class="formula-paren">(</span>&sum;<sub>loans &in; i, Debt &gt; Collateral</sub> <span class="formula-num">Debt</span><span class="formula-paren">)</span></div><div style="font-size:.76rem;color:#8fa9bf"><strong>Net Shortfall:</strong> &sum;<sub>loans &in; i</sub> <span class="formula-paren">(</span><span class="formula-num">Debt</span> &minus; <span class="formula-num">Collateral</span><span class="formula-paren">)</span></div></div>',
-        "formulaText": "max_i(Gross Bad Debt USD_i); Net Shortfall_i = sum(max(0, Debt - Collateral))"
+        "formulaText": "max_i(Gross Bad Debt USD_i); Net Shortfall_i = sum(max(0, Debt - Collateral))",
+        "note": "Excludes governance-protected POL loans."
     },
     "Change vs prior 90 days": {
         "description": "Percentage change in metric compared to previous 90-day period.",
@@ -848,7 +924,8 @@ HTML_TEMPLATE = r"""<!doctype html>
         "description": "Collateral token type protecting the largest bad-debt position.",
         "explanation": "Identifies the primary collateral asset backing positions that entered an undercollateralized state (Debt > Collateral). Shows the gross debt and net shortfall associated with that collateral asset type.",
         "formulaHtml": '<div class="formula-card"><span class="formula-num">Collateral Asset of max<sub>i</sub> (Bad Debt<sub>USD, i</sub>)</span></div>',
-        "formulaText": "Collateral Asset linked to Max Bad Debt"
+        "formulaText": "Collateral Asset linked to Max Bad Debt",
+        "note": "Excludes governance-protected POL loans."
     },
     "Collateral coverage ratio": {
         "description": "Ratio of total silo collateral value to total silo outstanding debt.",
@@ -860,7 +937,8 @@ HTML_TEMPLATE = r"""<!doctype html>
         "description": "Total USD debt in positions with Health Factor <= 1.10.",
         "explanation": "Sum of outstanding debt held by active loans with Health Factor (HF) <= 1.10, indicating borrowing within 10% of liquidation threshold. HF = (Collateral * LiqThreshold) / Borrow.",
         "formulaHtml": '<div class="formula-card">&sum;<sub>HF &le; 1.10</sub> <span class="formula-num">Debt<sub>USD</sub></span> &nbsp; where &nbsp; <span class="formula-num">HF</span> = <div class="formula-frac"><span class="formula-num">Collateral &times; LiqThreshold</span><span class="formula-den">Borrow</span></div></div>',
-        "formulaText": "sum(Debt where HF <= 1.10)"
+        "formulaText": "sum(Debt where HF <= 1.10)",
+        "note": "Excludes governance-protected POL loans."
     },
     "Current days without liquidations": {
         "description": "Consecutive days elapsed since last recorded liquidation.",
@@ -988,6 +1066,12 @@ HTML_TEMPLATE = r"""<!doctype html>
         "formulaHtml": '<div class="formula-card">&sum;<sub>latest calendar-year complete days</sub> <span class="formula-paren">(</span><span class="formula-num">loanOriginationFeesInUsd</span> + <span class="formula-num">loanOriginationFeesMinAdaInUsd</span><span class="formula-paren">)</span></div>',
         "formulaText": "sum(Latest calendar-year complete days: loanOriginationFeesInUsd + loanOriginationFeesMinAdaInUsd)"
     },
+    "Top revenue market": {
+        "description": "Market generating the largest share of year-to-date collected protocol revenue.",
+        "explanation": "Identifies the market with the highest sum of attributed retained-interest revenue and direct loan origination fees across complete calendar year-to-date days, and computes its percentage share of protocol YTD collected revenue.",
+        "formulaHtml": '<div class="formula-card"><span class="formula-func">argmax</span><sub>market</sub> <span class="formula-paren">(</span><span class="formula-num">Attributed Interest Revenue<sub>YTD</sub></span> + <span class="formula-num">Origination Fees<sub>YTD</sub></span><span class="formula-paren">)</span></div>',
+        "formulaText": "argmax_market(Attributed Interest Revenue YTD + Origination Fees YTD)"
+    },
     "Collected revenue": {
         "description": "Cumulative repayment-timed retained-interest revenue and upfront origination fees.",
         "explanation": "Sums the official overview field for retained revenue collected when borrowers repay interest, plus base and minimum-ADA origination fees. The repayment-time interest field combines treasury and LQ-staker recipients because the API does not expose that split. Liquidation profit, supplier earnings, staking rewards, and POL accrual are excluded.",
@@ -1041,32 +1125,35 @@ HTML_TEMPLATE = r"""<!doctype html>
         "explanation": "Total USD debt in active loans where Health Factor (HF) is below 1.00. These loans are undercollateralized or subject to immediate liquidation.",
         "formulaHtml": '<div class="formula-card">&sum;<sub>HF &lt; 1.00</sub> <span class="formula-num">Debt<sub>USD</sub></span></div>',
         "formulaText": "sum(Debt where HF < 1.00)",
-        "note": "Part of the eventual debt at HF < 1.0 might be due to the undercollateralized POL position used to finance the protocol."
+        "note": "Excludes governance-protected POL loans."
     },
     "Debt at HF <= 1.25": {
         "description": "Total USD debt near liquidation thresholds.",
         "explanation": "Total USD debt held in active loans with Health Factor (HF) <= 1.25, representing positions close to liquidation threshold.",
         "formulaHtml": '<div class="formula-card">&sum;<sub>HF &le; 1.25</sub> <span class="formula-num">Debt<sub>USD</sub></span></div>',
-        "formulaText": "sum(Debt where HF <= 1.25)"
+        "formulaText": "sum(Debt where HF <= 1.25)",
+        "note": "Excludes governance-protected POL loans."
     },
     "Debt at critical health": {
         "description": "Total USD debt in loans with Health Factor <= 1.10.",
         "explanation": "Sum of outstanding debt held by active loans with Health Factor (HF) <= 1.10, indicating borrowing within 10% of liquidation threshold.",
         "formulaHtml": '<div class="formula-card">&sum;<sub>HF &le; 1.10</sub> <span class="formula-num">Debt<sub>USD</sub></span></div>',
-        "formulaText": "sum(Debt where HF <= 1.10)"
+        "formulaText": "sum(Debt where HF <= 1.10)",
+        "note": "Excludes governance-protected POL loans."
     },
     "Debt below HF 1.0": {
         "description": "Total USD debt in undercollateralized loans.",
         "explanation": "Sum of outstanding debt in loans with Health Factor (HF) < 1.00, subject to immediate liquidation.",
         "formulaHtml": '<div class="formula-card">&sum;<sub>HF &lt; 1.00</sub> <span class="formula-num">Debt<sub>USD</sub></span></div>',
         "formulaText": "sum(Debt where HF < 1.00)",
-        "note": "Part of the eventual debt at HF < 1.0 might be due to the undercollateralized POL position used to finance the protocol."
+        "note": "Excludes governance-protected POL loans."
     },
     "Debt near liquidation": {
         "description": "Total USD debt in loans with health factor <= 1.25.",
         "explanation": "Sum of outstanding debt in loans with Health Factor (HF) <= 1.25, close to liquidation threshold.",
         "formulaHtml": '<div class="formula-card">&sum;<sub>HF &le; 1.25</sub> <span class="formula-num">Debt<sub>USD</sub></span></div>',
-        "formulaText": "sum(Debt where HF <= 1.25)"
+        "formulaText": "sum(Debt where HF <= 1.25)",
+        "note": "Excludes governance-protected POL loans."
     },
     "Full-period liquidation profit": {
         "description": "Net protocol revenue earned from liquidation penalties across observable history.",
@@ -1174,13 +1261,15 @@ HTML_TEMPLATE = r"""<!doctype html>
         "description": "Market with largest uncollateralized debt shortfall.",
         "explanation": "Identifies the market asset carrying the highest dollar amount of bad debt. Bad debt occurs on active loans where borrow balance exceeds collateral value (Debt > Collateral). Features both Gross Bad Debt (total borrow in underwater loans) and Net Shortfall (uncollateralized deficit: Debt - Collateral).",
         "formulaHtml": '<div class="formula-card"><div style="margin-bottom:4px"><strong>Market Selection:</strong> <span class="formula-func">max</span><sub>i</sub> <span class="formula-paren">(</span>&sum;<sub>loans &in; i, Debt &gt; Collateral</sub> <span class="formula-num">Debt</span><span class="formula-paren">)</span></div><div style="font-size:.76rem;color:#8fa9bf"><strong>Net Shortfall:</strong> &sum; <span class="formula-paren">(</span>Debt &minus; Collateral<span class="formula-paren">)</span></div></div>',
-        "formulaText": "max_i(Gross Bad Debt USD_i); Net Shortfall = sum(max(0, Debt - Collateral))"
+        "formulaText": "max_i(Gross Bad Debt USD_i); Net Shortfall = sum(max(0, Debt - Collateral))",
+        "note": "Excludes governance-protected POL loans."
     },
     "Highest debt at risk (HF < 1.0)": {
         "description": "Market with highest liquidatable debt balance.",
         "explanation": "Identifies market pool carrying the largest dollar amount of HF < 1.00 debt. Health Factor evaluates total collateral value against borrowed debt adjusted by liquidation thresholds: HF = (Collateral * LiqThreshold) / Borrow.",
         "formulaHtml": '<div class="formula-card"><div style="margin-bottom:4px"><span class="formula-func">max</span><sub>i</sub> &sum;<sub>loans &in; i, HF &lt; 1.00</sub> <span class="formula-num">Debt<sub>USD</sub></span></div><div style="font-size:.76rem;color:#8fa9bf">where <span class="formula-num">HF</span> = <div class="formula-frac"><span class="formula-num">Collateral &times; LiqThreshold</span><span class="formula-den">Borrow</span></div> &lt; 1.00</div></div>',
-        "formulaText": "max_i(sum(Debt_USD where HF < 1.00)); HF = (Collateral * LiqThreshold) / Borrow"
+        "formulaText": "max_i(sum(Debt_USD where HF < 1.00)); HF = (Collateral * LiqThreshold) / Borrow",
+        "note": "Excludes governance-protected POL loans."
     },
     "Highest utilization pressure": {
         "description": "Market pool currently experiencing the highest utilization stress.",
@@ -1216,13 +1305,15 @@ HTML_TEMPLATE = r"""<!doctype html>
         "description": "Largest collateral pool backing critical health (HF <= 1.10) loans.",
         "explanation": "Identifies the collateral asset pool backing the highest total dollar amount of debt in critical health (HF <= 1.10).",
         "formulaHtml": '<div class="formula-card"><span class="formula-func">max</span><sub>asset</sub> <span class="formula-num">Critical Debt<sub>USD, asset</sub></span></div>',
-        "formulaText": "max_asset(Critical Collateral Debt USD)"
+        "formulaText": "max_asset(Critical Collateral Debt USD)",
+        "note": "Excludes governance-protected POL loans."
     },
     "Largest near-liquidation collateral": {
         "description": "Largest collateral pool backing near-liquidation (HF <= 1.25) loans.",
         "explanation": "Identifies the collateral asset pool backing the highest total dollar amount of debt near liquidation (HF <= 1.25).",
         "formulaHtml": '<div class="formula-card"><span class="formula-func">max</span><sub>asset</sub> <span class="formula-num">Near-Liquidation Debt<sub>USD, asset</sub></span></div>',
-        "formulaText": "max_asset(Near Liquidation Collateral Debt USD)"
+        "formulaText": "max_asset(Near Liquidation Collateral Debt USD)",
+        "note": "Excludes governance-protected POL loans."
     },
     "Liquidity": {
         "description": "Available unborrowed liquid pool reserves.",
@@ -1258,13 +1349,15 @@ HTML_TEMPLATE = r"""<!doctype html>
         "description": "Lowest health factor observed across all active loans.",
         "explanation": "Minimum Health Factor among active borrowing positions. HF = (Collateral * LiqThreshold) / Debt. Health factor < 1.00 indicates a liquidatable position.",
         "formulaHtml": '<div class="formula-card"><span class="formula-func">min</span><sub>i</sub> <span class="formula-paren">(</span><span class="formula-num">Health Factor<sub>i</sub></span><span class="formula-paren">)</span> &nbsp; where &nbsp; <span class="formula-num">HF</span> = <div class="formula-frac"><span class="formula-num">Collateral &times; LiqThreshold</span><span class="formula-den">Borrow</span></div></div>',
-        "formulaText": "min_i(Health Factor_i); HF = (Collateral * LiqThreshold) / Borrow"
+        "formulaText": "min_i(Health Factor_i); HF = (Collateral * LiqThreshold) / Borrow",
+        "note": "Excludes governance-protected POL loans."
     },
     "Minimum health factor": {
         "description": "Lowest health factor observed across all active loans.",
         "explanation": "Minimum Health Factor among active borrowing positions. HF = (Collateral * LiqThreshold) / Debt. Health factor < 1.00 indicates a liquidatable position.",
         "formulaHtml": '<div class="formula-card"><span class="formula-func">min</span><sub>i</sub> <span class="formula-paren">(</span><span class="formula-num">Health Factor<sub>i</sub></span><span class="formula-paren">)</span> &nbsp; where &nbsp; <span class="formula-num">HF</span> = <div class="formula-frac"><span class="formula-num">Collateral &times; LiqThreshold</span><span class="formula-den">Borrow</span></div></div>',
-        "formulaText": "min_i(Health Factor_i); HF = (Collateral * LiqThreshold) / Borrow"
+        "formulaText": "min_i(Health Factor_i); HF = (Collateral * LiqThreshold) / Borrow",
+        "note": "Excludes governance-protected POL loans."
     },
     "Observed keys with active debt": {
         "description": "Count of distinct wallet addresses holding active borrow debt.",
@@ -1294,7 +1387,8 @@ HTML_TEMPLATE = r"""<!doctype html>
         "description": "Total USD shortfall of undercollateralized positions.",
         "explanation": "Total protocol loss exposure from loans where debt balance exceeds collateral value (Debt > Collateral). Features both Gross Debt (total borrow in underwater loans) and Net Shortfall (uncollateralized deficit: Debt - Collateral).",
         "formulaHtml": '<div class="formula-card"><div style="margin-bottom:4px"><strong>Gross Debt:</strong> &sum;<sub>Debt<sub>i</sub> &gt; Collateral<sub>i</sub></sub> <span class="formula-num">Debt<sub>i</sub></span></div><div><strong>Net Shortfall:</strong> &sum;<sub>Debt<sub>i</sub> &gt; Collateral<sub>i</sub></sub> <span class="formula-paren">(</span><span class="formula-num">Debt<sub>i</sub></span> &minus; <span class="formula-num">Collateral<sub>i</sub></span><span class="formula-paren">)</span></div></div>',
-        "formulaText": "Gross = sum(Debt where Debt > Collateral); Net Shortfall = sum(max(0, Debt - Collateral))"
+        "formulaText": "Gross = sum(Debt where Debt > Collateral); Net Shortfall = sum(max(0, Debt - Collateral))",
+        "note": "Excludes governance-protected POL loans."
     },
     "Supply": {
         "description": "Total USD value of assets supplied across protocol pools.",
@@ -1431,6 +1525,12 @@ HTML_TEMPLATE = r"""<!doctype html>
 });
 
     const chartQuestions = Object.freeze({
+      protocolPolDebtHistory: "How has total protocol-owned liquidity debt and locked collateral value evolved across observations?",
+      protocolPolMarketBreakdownHistory: "How is protocol-owned debt distributed across individual stablecoin markets over time?",
+      protocolPolMarketComparison: "How does active borrow compare to locked qPOL collateral across each protocol-owned market?",
+      protocolPolInterestContribution: "What is the projected annual interest yield paid by each POL position at current borrow rates, and what is its contribution to the protocol total?",
+      protocolPolHealthComparison: "How does nominal LTV compare to the smart contract health factor under 100x collateral weighting?",
+      protocolPolBorrowShare: "What share of each market's total borrow is protocol-owned, and what borrow rate is paid?",
       protocolStablecoinYields: "How do lending yields (Supply APR) compare across USD-pegged stablecoins over time?",
       protocolCapital: "Is protocol capital expanding, and is borrowing reducing the liquidity left available?",
       protocolUtilization: "When has borrowing consumed the largest share of supplied capital?",
@@ -1472,6 +1572,7 @@ HTML_TEMPLATE = r"""<!doctype html>
       impactCollateralizedSupplyConcentrationComparison: "In which markets do the largest observed keys account for represented collateralized supply most quickly?",
       protocolCollectedRevenueDaily: "When was retained interest or origination revenue actually collected?",
       protocolCollectedRevenueMonthly: "How is collected retained-interest and origination revenue changing month to month?",
+      protocolMarketRevenueContributionYtd: "Which individual markets generate the largest share of year-to-date collected revenue, and what drives their total?",
       protocolDaoRevenueAllocationDaily: "Which daily interest and origination components drive DAO revenue?",
       protocolDaoRevenueAllocationMonthly: "How is DAO revenue changing in level and composition month to month?",
       protocolStakerRevenueAllocationDaily: "Which daily interest and origination components drive LQ-staker revenue?",
@@ -1533,6 +1634,12 @@ HTML_TEMPLATE = r"""<!doctype html>
       marketHealthHistoryCounts: "Are this market's active-debt positions moving into safer or riskier bands?",
       marketParticipationLoans: "Is this market's saved active-debt position count broadening or contracting?",
       marketParticipationKeys: "Is this market's active debt spread across more observed keys or fewer?",
+      marketPolBorrowComposition: "How much of this market's borrow is protocol-owned liquidity versus organic user borrowing?",
+      marketPolHealthComparison: "How does this market's nominal LTV compare to the smart contract health factor under 100x collateral weighting?",
+      marketPolDebtHistory: "How have this market's protocol-owned debt obligations and locked collateral valuation evolved across snapshot observations?",
+      marketPolBorrowShareHistory: "What share of this market's total active borrow has been protocol-owned over time?",
+      marketPolYieldHistory: "How have the projected annual interest yield and borrow APY for this market's POL position changed across observations?",
+      marketPolHealthHistory: "How have nominal LTV and effective smart contract health factor for this market's POL position evolved over time?",
       marketKeyDependence: "How much of this market's official borrow maps to its largest keys versus unmapped debt?",
       marketBorrowConcentration: "How quickly do the largest observed keys account for this market's official borrow?",
       marketCollateralizedSupplyConcentration: "How quickly do the largest observed keys account for represented collateralized supply?",
@@ -1615,10 +1722,15 @@ HTML_TEMPLATE = r"""<!doctype html>
     }
 
     function activateView(viewId) {
+      const matchingScope = analyticsScopes.find(([, , scopeViews]) => scopeViews.some(([id]) => id === viewId));
+      if (matchingScope) {
+        activeScope = matchingScope[0];
+        activeViewsByScope[activeScope] = viewId;
+      }
       activeView = viewId;
       document.querySelectorAll(".view").forEach((view) => view.classList.toggle("active", view.id === activeView));
-      renderActiveView();
       renderTabs();
+      renderActiveView();
       document.querySelector(`[data-view="${activeView}"]`)?.focus();
       window.scrollTo({ top: document.querySelector("main")?.offsetTop || 0, behavior: "auto" });
     }
@@ -1725,13 +1837,15 @@ HTML_TEMPLATE = r"""<!doctype html>
         protocolParticipation: renderProtocolParticipation,
         protocolLqToken: renderProtocolLqToken,
         protocolParameters: renderProtocolParameters,
+        protocolPol: renderProtocolPol,
         marketOverview: renderMarketOverview,
         marketRepayments: renderMarketRepayments,
         marketInterest: renderMarketInterest,
         marketRevenue: renderMarketRevenue,
         marketHealth: renderMarketHealth,
         marketParticipation: renderMarketParticipation,
-        marketParameters: renderMarketParameters
+        marketParameters: renderMarketParameters,
+        marketPol: renderMarketPol
       };
       renderers[activeView]?.();
       renderedViews.add(activeView);
@@ -2190,8 +2304,8 @@ HTML_TEMPLATE = r"""<!doctype html>
         ${interactiveChartPanel("Active-debt positions over saved observations", "protocolParticipationLoans", { defaultPeriod: "all" })}
         ${interactiveChartPanel("Distinct observed keys with active debt", "protocolParticipationKeys", { defaultPeriod: "all" })}
         ${chartSection("Health-factor history", "Is active debt shifting toward stronger or weaker health-factor bands?")}
-        ${interactiveChartPanel("Active-debt loan count by health-factor band", "protocolHealthHistoryCounts", { defaultPeriod: "all" })}
-        ${interactiveChartPanel("Active debt by health-factor band", "protocolHealthHistoryDebt", { defaultPeriod: "all" })}
+        ${interactiveChartPanel("Active-debt loan count by health-factor band", "protocolHealthHistoryCounts", { defaultPeriod: "all", help: "Tracks active-debt loan count across health-factor bands over recorded observations. Excludes governance-protected POL loans." })}
+        ${interactiveChartPanel("Active debt by health-factor band", "protocolHealthHistoryDebt", { defaultPeriod: "all", help: "Tracks active debt volume across health-factor bands over recorded observations. Excludes governance-protected POL loans." })}
         ${chartSection("Cross-market observed-key concentration", "Which markets depend most heavily on their largest observed borrowing and collateral keys?")}
         ${chartSection("Market dependence on observed keys", "Which markets rely most on their largest observed keys? Differences between loan detail sums and batched market borrow can stem from Liqwid's 4-hour batch cycle lag, snapshot timing differences, or unmapped positions omitted by the API. Unmapped borrow remains visible as a hatched share of total market borrow.")}
         ${loanCoverageNotice(marketDependence)}
@@ -2307,6 +2421,96 @@ HTML_TEMPLATE = r"""<!doctype html>
       drawProtocolParameterCharts();
     }
 
+    function renderProtocolPol() {
+      const pol = deep.pol || {};
+      const summary = pol.summary || {};
+      const positions = (pol.positions || []).map((pos) => ({
+        market: pos.marketDisplayName || pos.marketId,
+        debtInUsd: pos.debtInUsd,
+        lockedCollateral: `${(Number(pos.collateralTokens || 0) / 1e6).toFixed(2)}M qPOL`,
+        collateralInUsd: pos.collateralInUsd,
+        nominalLtv: pos.nominalLTV,
+        nominalHealthFactor: pos.nominalHealthFactor ?? (pos.debtInUsd > 0 ? pos.collateralInUsd / pos.debtInUsd : 0),
+        protocolHealthFactor: pos.healthFactor,
+        borrowApy: pos.borrowAPY,
+        annualInterestInUsd: pos.annualInterestCostInUsd,
+        liquidationStatus: "Protected (0% Penalty)"
+      }));
+
+      setHtml("protocolPol", `
+        <div class="hero">
+          <h2>Protocol-Owned Liquidity (POL)</h2>
+          <p>Tracking the Liqwid DAO and core development infrastructure financing loans, backed by locked qPOL collateral.</p>
+          <div class="parameter-effective"><strong>Governance-Protected Positions</strong><span aria-hidden="true">&middot;</span><span>100x Collateral Weight &middot; 0% Liquidation Penalty</span></div>
+        </div>
+        <p class="note" style="margin: 0 0 1rem 0; font-size: 0.85rem; color: #94a3b8;">
+          <em><strong>Historical API Disclosure Note:</strong> Prior to August 25, 2026, individual Protocol-Owned Liquidity (POL) loan positions and collateral details were not included in the official Liqwid GraphQL loans API endpoint (although POL loans were already active on-chain). Historical loan-level tracking begins with the first API disclosure on August 25, 2026.</em>
+        </p>
+        <div class="kpis">
+          ${kpi("Total POL debt", usd(summary.totalDebtInUsd), `${integer(summary.loanCount)} active stablecoin loans`, "Sum of all active loan balances across the 4 protocol-owned liquidity financing positions.")}
+          ${kpi("Annual interest yield paid (at current rates)", usd(summary.totalAnnualInterestCostInUsd), `Projected at current rates · ${pct(summary.weightedAverageAPY)} weighted APY`, "Total forward-looking annualized interest payments generated across all active Protocol-Owned Liquidity (POL) positions based on current debt balances and instantaneous borrow APYs.")}
+          ${kpi("POL share of protocol borrow", pct(summary.protocolBorrowShare), `${usd(summary.totalDebtInUsd)} of ${usd(summary.totalProtocolBorrowInUsd || (summary.protocolBorrowShare > 0 ? summary.totalDebtInUsd / summary.protocolBorrowShare : summary.totalDebtInUsd))} total borrow`, "Share of total protocol borrow represented by Protocol-Owned Liquidity.")}
+          ${kpi("Locked POL collateral", `${(Number(summary.totalCollateralTokens || 0) / 1e6).toFixed(2)}M qPOL`, `${usd(summary.totalCollateralInUsd)} market value`, "Total qPOL tokens locked in the Plutus loan validator as backing for the POL borrow positions.")}
+          ${kpi("Weighted average borrow APY", pct(summary.weightedAverageAPY), `${usd(summary.totalAnnualInterestCostInUsd)} est. annual interest`, "Debt-weighted borrow APY paid by the POL positions into the liquidity pools and DAO reserves.")}
+          ${kpi("Active POL positions", `${integer(summary.loanCount)} markets`, "DJED · USDM · wanUSDC · iUSD", "The four active stablecoin borrowing markets utilized for protocol development and ecosystem liquidity.")}
+        </div>
+
+        <section class="summary-group" aria-labelledby="polGovernanceHeading">
+          <div class="summary-heading">
+            <h3 id="polGovernanceHeading">Governance & Liquidation Protection Mechanics</h3>
+            <p>Why POL loans remain protected from liquidation even with nominal undercollateralization.</p>
+          </div>
+          <div class="card-grid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 1rem; margin-top: 1rem;">
+            <div class="panel" style="padding: 1.25rem; background: var(--panel2); border-radius: 8px; border: 1px solid var(--line);">
+              <h4 style="margin: 0 0 0.5rem 0; color: var(--accent);">100x Collateral Weight</h4>
+              <p style="margin: 0; font-size: 0.9rem; color: #bcd2e8; line-height: 1.5;">Liqwid market parameters assign a <code>collateralWeight: 100</code> (10,000%) to qPOL collateral. The Plutus smart contract calculates health factor as <code>(Collateral USD &times; 100) / Debt USD</code>, resulting in effective health factors between 39 and 81.</p>
+            </div>
+            <div class="panel" style="padding: 1.25rem; background: var(--panel2); border-radius: 8px; border: 1px solid var(--line);">
+              <h4 style="margin: 0 0 0.5rem 0; color: var(--accent);">0% Liquidation Penalty</h4>
+              <p style="margin: 0; font-size: 0.9rem; color: #bcd2e8; line-height: 1.5;">The liquidation penalty and liquidator profitability parameters are set to <code>0.00%</code>. Liquidators have no financial incentive or contract authorization to liquidate these protocol positions.</p>
+            </div>
+            <div class="panel" style="padding: 1.25rem; background: var(--panel2); border-radius: 8px; border: 1px solid var(--line);">
+              <h4 style="margin: 0 0 0.5rem 0; color: var(--accent);">Borrower Public Key</h4>
+              <p style="margin: 0; font-size: 0.9rem; color: #bcd2e8; line-height: 1.5;">All four positions belong to the dedicated protocol team key: <code style="word-break: break-all;">7ac5878231522baf2972231d1a587e20a0d814c164fa7fea28ee459f</code>.</p>
+            </div>
+            <div class="panel" style="padding: 1.25rem; background: var(--panel2); border-radius: 8px; border: 1px solid var(--line);">
+              <h4 style="margin: 0 0 0.5rem 0; color: var(--accent);">Economic Role</h4>
+              <p style="margin: 0; font-size: 0.9rem; color: #bcd2e8; line-height: 1.5;">POL borrows generate continuous borrow interest payments (projected at ${usd(summary.totalAnnualInterestCostInUsd)}/year at current rates) that directly flow into supplier deposit yields and protocol treasury reserves.</p>
+            </div>
+          </div>
+        </section>
+
+        ${chartSection("Current POL position dynamics", "How do borrow obligations, locked collateral backing, pool borrow dominance, and interest cash flows compare across the four markets?")}
+        ${interactiveBreakdownPanel("Current POL debt and locked collateral by market", "protocolPolMarketComparison", { help: "Compares current outstanding borrow debt against locked qPOL collateral market value across the 4 POL borrowing markets." })}
+        ${interactiveBreakdownPanel("Annual interest yield paid and contribution by market (at current rates)", "protocolPolInterestContribution", { help: "Compares projected annual interest cash flows in USD across POL positions, calculated from current debt balances and current borrow APY rates (run-rate projection, not historical interest paid). Shows each market's projected dollar amount and relative contribution share to total protocol POL interest." })}
+        ${interactiveBreakdownPanel("Nominal LTV versus governance health factor", "protocolPolHealthComparison", { help: "Shows the nominal loan-to-value ratio alongside unweighted Nominal Health Factor (Collateral / Debt) and effective on-chain Health Factor enabled by the 100x collateral weight multiplier." })}
+        ${interactiveBreakdownPanel("POL share of pool borrow and borrow APY", "protocolPolBorrowShare", { help: "Shows what fraction of total market borrowing is protocol-owned, alongside the borrow APY paid by each position." })}
+
+        ${chartSection("Historical POL trajectory", "How have protocol-owned debt obligations and locked collateral changed across snapshot observations?")}
+        ${interactiveChartPanel("POL debt and collateral valuation history", "protocolPolDebtHistory", { defaultPeriod: "all", help: "Tracks historical aggregate POL borrow obligations in USD and locked qPOL collateral valuation across recorded snapshot observations." })}
+        ${interactiveChartPanel("POL stablecoin borrow breakdown over time", "protocolPolMarketBreakdownHistory", { defaultPeriod: "all", help: "Tracks the historical outstanding debt balance across each individual stablecoin market (DJED, USDM, wanUSDC, iUSD)." })}
+
+        ${dataTablesSection([
+          {
+            title: "Active Protocol-Owned Liquidity (POL) positions",
+            content: scrollTable(positions, [
+              "market",
+              "debtInUsd",
+              "lockedCollateral",
+              "collateralInUsd",
+              "nominalLtv",
+              "nominalHealthFactor",
+              "protocolHealthFactor",
+              "borrowApy",
+              "annualInterestInUsd",
+              "liquidationStatus"
+            ])
+          }
+        ])}
+      `);
+      drawProtocolPolCharts();
+    }
+
     function renderRevenue() {
       const revenue = deep.revenue || {};
       const summary = revenue.summary || {};
@@ -2318,6 +2522,22 @@ HTML_TEMPLATE = r"""<!doctype html>
         summary.cumulativeAllocationToDate
       );
       const runRatePeriod = periodLabel(latestRunRate.windowStartDate, latestRunRate.windowEndDate);
+      const topMarket = summary.topRevenueMarket
+        || deep.marketRevenue?.topYtdMarket
+        || (deep.marketSummaries || []).reduce((best, m) => {
+          const rev = m.marketRevenue || {};
+          const totalRev = rev.ytdAttributedCollectedMarketRevenueInUsd ?? ((rev.ytdDirectOriginationRevenueInUsd ?? 0) + (rev.ytdAttributedCollectedInterestRevenueInUsd ?? 0));
+          return totalRev > (best?.totalRevenueInUsd || 0) ? {
+            marketId: m.marketId,
+            marketDisplayName: m.displayName || m.symbol || m.marketId,
+            totalRevenueInUsd: totalRev,
+            revenueShare: (summary.ytdCollectedRevenueInUsd > 0) ? totalRev / summary.ytdCollectedRevenueInUsd : 0
+          } : best;
+        }, null);
+      const topMarketName = topMarket?.marketDisplayName || topMarket?.marketId || "None";
+      const topMarketNote = topMarket && topMarket.totalRevenueInUsd > 0
+        ? `${usd(topMarket.totalRevenueInUsd)} · ${pct(topMarket.revenueShare)} of YTD total`
+        : "No YTD revenue observed";
       setHtml("revenue", `
         <div class="hero">
           <h2>Protocol revenue</h2>
@@ -2327,6 +2547,7 @@ HTML_TEMPLATE = r"""<!doctype html>
           ${kpi("YTD collected revenue", usd(summary.ytdCollectedRevenueInUsd), "Revenue from repaid interest + loan origination fees")}
           ${kpi("Revenue from repaid interest", usd(summary.ytdCollectedInterestRevenueInUsd), "Retained share of borrowers' repaid interest")}
           ${kpi("Loan origination fees", usd(summary.ytdCollectedOriginationRevenueInUsd), "Base fee + minimum-ADA fee")}
+          ${kpi("Top revenue market", topMarketName, topMarketNote)}
         `)}
         ${metricPeriodGroup("All-time collected revenue", collectionPeriod, `${integer(summary.completeDays)} complete days`, `
           ${kpi("Collected revenue", usd(summary.collectedRevenueInUsd), "Treasury + LQ stakers; repayment-time recipient split unavailable")}
@@ -2336,6 +2557,7 @@ HTML_TEMPLATE = r"""<!doctype html>
         ${chartSection("Collected revenue", "When did retained interest and origination revenue reach the protocol and its stakers?")}
         ${interactiveChartPanel("Daily collected revenue", "protocolCollectedRevenueDaily", { defaultPeriod: "all", help: "Repayment-timed retained-interest revenue plus both origination-fee components. Liquidation profit is shown only in the Liquidations tab." })}
         ${interactiveChartPanel("Monthly collected revenue", "protocolCollectedRevenueMonthly", { defaultPeriod: "all", help: "Daily collected revenue grouped by UTC calendar month. The current partial month remains visible." })}
+        ${interactiveBreakdownPanel("Market YTD revenue contribution", "protocolMarketRevenueContributionYtd", { help: "Contribution of each market to year-to-date collected revenue, sorted from highest to lowest. Bars stack retained interest revenue collected and upfront loan origination fees." })}
         ${metricPeriodGroup("Cumulative accrued DAO allocation", allocationPeriod, `${integer(summary.completeAllocationDays)} complete days`, `
           ${kpi("DAO / treasury revenue", usd(summary.allocatedProtocolRevenueInUsd))}
           ${kpi("DAO interest allocation", usd(summary.allocatedProtocolInterestRevenueInUsd))}
@@ -2452,6 +2674,20 @@ HTML_TEMPLATE = r"""<!doctype html>
           </div>
         </section>
 
+        ${Number(summary.polDebtInUsd || 0) > 0 ? `
+        <section class="summary-group" aria-labelledby="polObligationsExposureHeading">
+          <div class="summary-heading">
+            <h3 id="polObligationsExposureHeading">Protocol-Owned Liquidity (POL) Obligations</h3>
+            <p>Non-liquidatable protocol financing positions backed by locked qPOL under governance-weighted liquidation immunity.</p>
+          </div>
+          <div class="kpis">
+            ${kpi("POL active debt", usd(summary.polDebtInUsd), `${pct(summary.polShareOfTotalDebt)} of total protocol debt`)}
+            ${kpi("POL collateral value", usd(summary.polCollateralInUsd), `${integer(summary.polLoanCount)} active positions`)}
+            ${kpi("Liquidation status", "Protected (0% Penalty)", "Collateral weight: 100x · Immune from liquidation")}
+          </div>
+        </section>
+        ` : ""}
+
         <section class="summary-group" aria-labelledby="assetHighlightsHeading">
           <div class="summary-heading">
             <h3 id="assetHighlightsHeading">Asset highlights</h3>
@@ -2508,8 +2744,9 @@ HTML_TEMPLATE = r"""<!doctype html>
         </section>
 
         ${chartSection("Health-factor debt tranches", "How is active protocol debt distributed across health-factor tranches?")}
-        ${interactiveChartPanel("Active debt by health-factor band over time", "exposureHealthHistoryDebt", { defaultPeriod: "all" })}
-        ${interactiveChartPanel("Evolution of bad debt over time", "exposureBadDebtHistory", { defaultPeriod: "all", help: "Gross bad debt is total active debt in underwater loans (debt > collateral). Net shortfall is the uncollateralized deficit remaining after subtracting collateral value (Debt - Collateral)." })}
+        <p class="note" style="margin: -0.5rem 0 1rem 0; font-size: 0.85rem; color: #94a3b8;"><em>Note: Protocol-Owned Liquidity (POL) positions totaling $3.19M are non-liquidatable (0% liquidation penalty, 100x collateral weight) and are excluded from borrower credit-risk tranches. Track them separately in the <a href="#protocolPol" onclick="activateView('protocolPol')" style="color: var(--accent); text-decoration: underline;">Protocol-Owned Liquidity (POL)</a> tab.</em></p>
+        ${interactiveChartPanel("Active debt by health-factor band over time", "exposureHealthHistoryDebt", { defaultPeriod: "all", help: "Tracks active protocol debt across health-factor bands over recorded observations. Excludes governance-protected POL loans." })}
+        ${interactiveChartPanel("Evolution of bad debt over time", "exposureBadDebtHistory", { defaultPeriod: "all", help: "Gross bad debt is total active debt in underwater loans (debt > collateral). Net shortfall is the uncollateralized deficit remaining after subtracting collateral value (Debt - Collateral). Excludes governance-protected POL loans." })}
 
         ${chartSection("Alerts and recent change", "Which markets combine high utilization with the fastest recent deterioration?")}
         ${interactiveBreakdownPanel("Utilization level versus 7-day change", "exposureMarketPressure", { help: "Further right means higher current utilization; higher means utilization is rising. Point area is current borrow and color moves from light mint to dark red as the triage score increases." })}
@@ -2517,10 +2754,10 @@ HTML_TEMPLATE = r"""<!doctype html>
 
         ${chartSection("Liquidation pressure by borrowed market and collateral", "Where is debt nearest liquidation, and which independent collateral declines would expose the most debt?")}
         <div class="chart-stack">
-          ${interactiveBreakdownPanel("Active debt by borrowed market and health factor", "exposureBorrowedMarkets")}
-          ${interactiveBreakdownPanel("Protocol debt by collateral and health factor", "exposureCollateralBands", { help: "Markets are ordered by debt at HF <= 1.25, keeping the largest imminent collateral exposures visible." })}
+          ${interactiveBreakdownPanel("Active debt by borrowed market and health factor", "exposureBorrowedMarkets", { help: "Distribution of active debt across health-factor bands by borrowed market. Excludes governance-protected POL loans." })}
+          ${interactiveBreakdownPanel("Protocol debt by collateral and health factor", "exposureCollateralBands", { help: "Markets are ordered by debt at HF <= 1.25, keeping the largest imminent collateral exposures visible. Excludes governance-protected POL loans." })}
         </div>
-        ${interactiveBreakdownPanel("Debt exposed after an independent collateral price decline", "exposureCollateralShock", { help: "10%, 20%, 30%, and 40% shocks are applied one collateral at a time. Darker cells contain more debt whose scenario HF is at or below 1.00." })}
+        ${interactiveBreakdownPanel("Debt exposed after an independent collateral price decline", "exposureCollateralShock", { help: "10%, 20%, 30%, and 40% shocks are applied one collateral at a time. Darker cells contain more debt whose scenario HF is at or below 1.00. Excludes governance-protected POL loans." })}
         ${interactiveBreakdownPanel("Currently liquidatable active debt by borrowed market", "exposureLiquidatableDebt", { help: "This is the current official liquidatable filter valued in USD. An empty state means no matching current rows, not proof that future liquidation risk is zero." })}
         ${interactiveBreakdownPanel("Currently liquidatable active-debt loans by borrowed market", "exposureLiquidatableMarkets", { help: "This is the current official liquidatable filter. An empty state means no matching current rows, not proof that future liquidation risk is zero." })}
 
@@ -2725,8 +2962,14 @@ HTML_TEMPLATE = r"""<!doctype html>
 
     function renderMarketHealth() {
       const market = currentMarketSummary();
+      const mId = market.symbol || market.marketId;
+      const pos = (deep?.pol?.positions || []).find((p) => p.marketId.toUpperCase() === String(mId).toUpperCase() || p.marketId.toUpperCase() === String(market.marketId).toUpperCase());
+
       setHtml("marketHealth", `
         <div class="hero"><h2>${esc(market.displayName || market.marketId)} health</h2><p>How much debt is near liquidation now, and how have health-factor tranches changed over time?</p></div>
+        ${pos ? `
+        <p class="note" style="margin: 0 0 1rem 0; font-size: 0.85rem; color: #94a3b8;"><em>Note: Protocol-Owned Liquidity (POL) positions (${usd(pos.debtInUsd)} in this market) are governance-protected (100x collateral weight, 0% liquidation penalty) and are excluded from health-factor tranches, near-liquidation metrics (HF &lt; 1.0, HF &le; 1.10, HF &le; 1.25), bad debt, and minimum health factor calculations. To inspect POL debt, collateral backing, and liquidation protections, see the <a href="#marketPol" onclick="activateView('marketPol')" style="color: var(--accent); text-decoration: underline;">Protocol-Owned Liquidity (POL) tab</a>.</em></p>
+        ` : ""}
         <div class="kpis">
           ${kpi("Active-debt positions", integer(market.activeDebtLoanCount))}
           ${kpi("Active-loan debt", usd(market.activeLoanDebtInUsd))}
@@ -2741,11 +2984,25 @@ HTML_TEMPLATE = r"""<!doctype html>
           ${kpi("Sum of bad debt", usd(market.activeLoanBadDebtInUsd), `${usd(market.activeLoanBadDebtShortfallInUsd)} net shortfall (gross debt in underwater positions)`)}
           ${kpi("Minimum health factor", ratio(market.activeLoanMinHealthFactor))}
         </div>
+        ${pos ? `
+        <section class="summary-group" aria-labelledby="marketPolHealthHeading">
+          <div class="summary-heading">
+            <h3 id="marketPolHealthHeading">Protocol-Owned Liquidity (POL) Position</h3>
+            <p>Governance-protected protocol financing position in this market, backed by locked qPOL collateral and excluded from organic borrower health stats above.</p>
+          </div>
+          <div class="kpis">
+            ${kpi("Market POL debt", usd(pos.debtInUsd), `${pct(pos.marketBorrowShare)} of market borrow`, "Outstanding borrow debt obligation owed by the protocol team financing position.")}
+            ${kpi("Locked qPOL collateral", `${(Number(pos.collateralTokens || 0) / 1e6).toFixed(2)}M qPOL`, `${usd(pos.collateralInUsd)} market value`, "Quantity of locked qPOL tokens held in the Plutus validator as backing for this market's POL borrow.")}
+            ${kpi("Nominal LTV vs Health Factor", `${pct(pos.nominalLTV)} LTV`, `HF ${number(pos.healthFactor, 2)} (100x weight)`, "Nominal loan-to-value ratio compared to the effective on-chain smart contract Health Factor enabled by the 100x collateral weight multiplier.")}
+            ${kpi("Liquidation status", "Protected (0% Penalty)", "Collateral weight: 100x · Immune from liquidation", "Governance parameters protect this position with a 100x collateral weight multiplier and 0% liquidation penalty.")}
+          </div>
+        </section>
+        ` : ""}
         ${chartSection("Loan health", "How is current debt distributed across health-factor bands?")}
-        ${interactiveBreakdownPanel("Current health-factor debt tranches", "marketHealthBuckets")}
+        ${interactiveBreakdownPanel("Current health-factor debt tranches", "marketHealthBuckets", { help: "Shows current active debt distribution across health-factor bands for this market. Excludes governance-protected POL loans." })}
         ${chartSection("Health-factor tranches over time", "Is active debt moving toward stronger or weaker health-factor bands across saved observations?")}
-        ${interactiveChartPanel("Active debt by health-factor band over time", "marketHealthHistoryDebt", { defaultPeriod: "all" })}
-        ${interactiveChartPanel("Active-debt position count by health-factor band", "marketHealthHistoryCounts", { defaultPeriod: "all" })}
+        ${interactiveChartPanel("Active debt by health-factor band over time", "marketHealthHistoryDebt", { defaultPeriod: "all", help: "Tracks active market debt across health-factor bands over recorded observations. Excludes governance-protected POL loans." })}
+        ${interactiveChartPanel("Active-debt position count by health-factor band", "marketHealthHistoryCounts", { defaultPeriod: "all", help: "Tracks active-debt position count across health-factor bands over recorded observations. Excludes governance-protected POL loans." })}
       `);
       drawMarketCharts();
     }
@@ -2853,6 +3110,144 @@ HTML_TEMPLATE = r"""<!doctype html>
       drawMarketParameterCharts();
     }
 
+    function renderMarketPol() {
+      const market = currentMarketSummary();
+      const mId = market.symbol || market.marketId;
+      const pos = (deep?.pol?.positions || []).find((p) => p.marketId.toUpperCase() === String(mId).toUpperCase() || p.marketId.toUpperCase() === String(market.marketId).toUpperCase());
+
+      if (!pos) {
+        const allPolPositions = deep?.pol?.positions || [];
+        const totalPolDebt = deep?.pol?.totalPolDebtInUsd || 0;
+        setHtml("marketPol", `
+          <div class="hero">
+            <h2>${esc(market.displayName || market.marketId)} Protocol-Owned Liquidity (POL)</h2>
+            <p>No active Protocol-Owned Liquidity (POL) financing loan is deployed in the ${esc(market.displayName || market.marketId)} market.</p>
+            <div class="parameter-effective"><strong>No Active POL Debt in this Market</strong><span aria-hidden="true">&middot;</span><span>POL financing is active in ${allPolPositions.length} USD stablecoin markets</span></div>
+          </div>
+          <p class="note" style="margin: 0 0 1rem 0; font-size: 0.85rem; color: #94a3b8;">
+            <em><strong>Historical API Disclosure Note:</strong> Prior to August 25, 2026, individual Protocol-Owned Liquidity (POL) loan positions and collateral details were not included in the official Liqwid GraphQL loans API endpoint (although POL loans were active on-chain). Historical loan-level tracking begins with the first API disclosure on August 25, 2026.</em>
+          </p>
+          <div class="kpis">
+            ${kpi("Market POL debt", "$0.00", "0.00% of market borrow", "No protocol-owned liquidity financing debt is currently borrowed from this market.")}
+            ${kpi("Locked qPOL collateral", "0 qPOL", "$0.00 collateral value", "No qPOL collateral is locked for this market.")}
+            ${kpi("Nominal LTV vs Health Factor", "None", "No POL position", "Health factor and LTV are not applicable as there is no POL loan in this market.")}
+            ${kpi("Annual interest yield paid (at current rates)", "$0.00", "0.00% borrow APY", "No POL interest payments are flowing into this market.")}
+          </div>
+
+          <section class="summary-group" aria-labelledby="marketPolEmptySummaryHeading">
+            <div class="summary-heading">
+              <h3 id="marketPolEmptySummaryHeading">Active Protocol-Wide POL Allocations</h3>
+              <p>Protocol-Owned Liquidity is currently active across ${allPolPositions.length} stablecoin markets (${allPolPositions.map((p) => esc(p.marketDisplayName || p.marketId)).join(", ")}), supporting protocol development and deep liquidity with ${usd(totalPolDebt)} in total financing.</p>
+            </div>
+            <div class="card-grid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 1rem; margin-top: 1rem;">
+              ${allPolPositions.map((p) => `
+                <div class="panel" style="padding: 1.25rem; background: var(--panel2); border-radius: 8px; border: 1px solid var(--line);">
+                  <h4 style="margin: 0 0 0.5rem 0; color: var(--accent); display: flex; justify-content: space-between; align-items: center;">
+                    <span>${esc(p.marketDisplayName || p.marketId)}</span>
+                    <button type="button" class="btn-action" style="font-size: 0.75rem; padding: 0.2rem 0.5rem;" onclick="selectMarket('${esc(p.marketId)}'); activateView('marketPol');">View POL</button>
+                  </h4>
+                  <p style="margin: 0; font-size: 0.85rem; color: #bcd2e8; line-height: 1.5;">
+                    POL Debt: <strong>${usd(p.debtInUsd)}</strong> (${pct(p.marketBorrowShare)} of pool)<br>
+                    Locked Collateral: <strong>${(Number(p.collateralTokens || 0) / 1e6).toFixed(2)}M qPOL</strong> (${usd(p.collateralInUsd)})<br>
+                    Borrow APY: <strong>${pct(p.borrowAPY)}</strong> &middot; Projected Annual Yield: <strong>${usd(p.annualInterestCostInUsd)}</strong>
+                  </p>
+                </div>
+              `).join("")}
+            </div>
+          </section>
+        `);
+        return;
+      }
+
+      const organicDebt = Math.max(0, (pos.marketTotalBorrowInUsd || pos.debtInUsd) - pos.debtInUsd);
+
+      setHtml("marketPol", `
+        <div class="hero">
+          <h2>${esc(pos.marketDisplayName || mId)} Protocol-Owned Liquidity (POL)</h2>
+          <p>Tracking the protocol core development and ecosystem liquidity financing loan in ${esc(pos.marketDisplayName || mId)}, backed by locked qPOL collateral.</p>
+          <div class="parameter-effective"><strong>Governance-Protected Position</strong><span aria-hidden="true">&middot;</span><span>100x Collateral Weight &middot; 0% Liquidation Penalty</span></div>
+        </div>
+        <p class="note" style="margin: 0 0 1rem 0; font-size: 0.85rem; color: #94a3b8;">
+          <em><strong>Historical API Disclosure Note:</strong> Prior to August 25, 2026, individual Protocol-Owned Liquidity (POL) loan positions and collateral details were not included in the official Liqwid GraphQL loans API endpoint (although POL loans were already active on-chain). Historical loan-level tracking begins with the first API disclosure on August 25, 2026.</em>
+        </p>
+        <div class="kpis">
+          ${kpi("Market POL debt", usd(pos.debtInUsd), `${pct(pos.marketBorrowShare)} of total ${pos.marketDisplayName || mId} borrow`, "Outstanding borrow debt obligation owed by the protocol team financing position.")}
+          ${kpi("Locked qPOL collateral", `${(Number(pos.collateralTokens || 0) / 1e6).toFixed(2)}M qPOL`, `${usd(pos.collateralInUsd)} market value`, "Quantity of locked qPOL tokens held in the Plutus validator as backing for this market's POL borrow.")}
+          ${kpi("Nominal LTV vs Health Factor", `${pct(pos.nominalLTV)} LTV`, `HF ${number(pos.healthFactor, 2)} (100x weight)`, "Nominal loan-to-value ratio compared to the effective on-chain smart contract Health Factor enabled by the 100x collateral weight multiplier.")}
+          ${kpi("Annual interest yield paid (at current rates)", usd(pos.annualInterestCostInUsd), `Projected at current ${pct(pos.borrowAPY)} borrow APY`, "Annualized interest payments generated by this POL position directly into this market's supplier yields and DAO reserves at current borrow rates.")}
+        </div>
+
+        <section class="summary-group" aria-labelledby="marketPolGovernanceHeading">
+          <div class="summary-heading">
+            <h3 id="marketPolGovernanceHeading">Governance & Liquidation Protection Mechanics</h3>
+            <p>Why this POL loan remains protected from liquidation despite nominal undercollateralization.</p>
+          </div>
+          <div class="card-grid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 1rem; margin-top: 1rem;">
+            <div class="panel" style="padding: 1.25rem; background: var(--panel2); border-radius: 8px; border: 1px solid var(--line);">
+              <h4 style="margin: 0 0 0.5rem 0; color: var(--accent);">100x Collateral Weight</h4>
+              <p style="margin: 0; font-size: 0.9rem; color: #bcd2e8; line-height: 1.5;">Liqwid market parameters assign a <code>collateralWeight: 100</code> (10,000%) to qPOL collateral. Effective smart contract health factor is <strong>${number(pos.healthFactor, 2)}</strong>.</p>
+            </div>
+            <div class="panel" style="padding: 1.25rem; background: var(--panel2); border-radius: 8px; border: 1px solid var(--line);">
+              <h4 style="margin: 0 0 0.5rem 0; color: var(--accent);">0% Liquidation Penalty</h4>
+              <p style="margin: 0; font-size: 0.9rem; color: #bcd2e8; line-height: 1.5;">The liquidation penalty and liquidator profit are set to <code>0.00%</code>. Liquidators have no financial incentive or contract authorization to liquidate this loan.</p>
+            </div>
+            <div class="panel" style="padding: 1.25rem; background: var(--panel2); border-radius: 8px; border: 1px solid var(--line);">
+              <h4 style="margin: 0 0 0.5rem 0; color: var(--accent);">Borrower Public Key</h4>
+              <p style="margin: 0; font-size: 0.9rem; color: #bcd2e8; line-height: 1.5;">Dedicated protocol team key: <code style="word-break: break-all;">${pos.publicKey}</code>.</p>
+            </div>
+            <div class="panel" style="padding: 1.25rem; background: var(--panel2); border-radius: 8px; border: 1px solid var(--line);">
+              <h4 style="margin: 0 0 0.5rem 0; color: var(--accent);">Pool Borrow Share</h4>
+              <p style="margin: 0; font-size: 0.9rem; color: #bcd2e8; line-height: 1.5;">POL represents <strong>${pct(pos.marketBorrowShare)}</strong> (${usd(pos.debtInUsd)}) of total pool borrow (${usd(pos.marketTotalBorrowInUsd)}). Organic borrower debt is ${usd(organicDebt)}.</p>
+            </div>
+          </div>
+        </section>
+
+        ${chartSection("Market borrow composition and risk backing", "How is borrow debt divided between protocol financing and organic market participants?")}
+        ${interactiveBreakdownPanel("Market borrow composition: POL versus organic users", "marketPolBorrowComposition", { help: "Comparison of protocol-owned liquidity financing debt against organic user borrowing in this market." })}
+        ${interactiveBreakdownPanel("Nominal LTV versus governance health factor", "marketPolHealthComparison", { help: "Shows the nominal loan-to-value ratio alongside unweighted Nominal Health Factor (Collateral / Debt) and effective on-chain Health Factor resulting from the 100x collateral weight multiplier." })}
+
+        ${chartSection("Historical POL trajectory", "How have this market's protocol-owned debt obligations, locked collateral backing, pool share, and borrowing costs evolved over time?")}
+        ${interactiveChartPanel("POL debt and collateral valuation history", "marketPolDebtHistory", { defaultPeriod: "all", help: "Tracks historical borrow debt obligations in USD and locked qPOL collateral valuation for this market across recorded snapshot observations." })}
+        ${interactiveChartPanel("POL share of market borrow over time", "marketPolBorrowShareHistory", { defaultPeriod: "all", help: "Tracks the share of this market's total active borrow represented by Protocol-Owned Liquidity versus organic users across recorded snapshot observations." })}
+        ${interactiveChartPanel("POL projected annual interest yield & borrow APY over time", "marketPolYieldHistory", { defaultPeriod: "all", help: "Tracks the projected annualized interest yield generated by this market's POL position and the borrow APY rate paid across recorded snapshot observations." })}
+        ${interactiveChartPanel("Nominal LTV and smart contract health factor over time", "marketPolHealthHistory", { defaultPeriod: "all", help: "Tracks the nominal loan-to-value ratio alongside the effective on-chain smart contract Health Factor (with 100x collateral weighting) across recorded snapshot observations." })}
+
+        ${dataTablesSection([
+          {
+            title: `${pos.marketDisplayName || mId} POL loan position details`,
+            content: scrollTable([
+              {
+                positionId: pos.id,
+                market: pos.marketDisplayName || mId,
+                debtInUsd: pos.debtInUsd,
+                lockedCollateral: `${(Number(pos.collateralTokens || 0) / 1e6).toFixed(2)}M qPOL`,
+                collateralInUsd: pos.collateralInUsd,
+                nominalLtv: pos.nominalLTV,
+                nominalHealthFactor: pos.nominalHealthFactor ?? (pos.debtInUsd > 0 ? pos.collateralInUsd / pos.debtInUsd : 0),
+                protocolHealthFactor: pos.healthFactor,
+                borrowApy: pos.borrowAPY,
+                annualInterestInUsd: pos.annualInterestCostInUsd,
+                liquidationStatus: "Protected (0% Penalty)"
+              }
+            ], [
+              "positionId",
+              "market",
+              "debtInUsd",
+              "lockedCollateral",
+              "collateralInUsd",
+              "nominalLtv",
+              "nominalHealthFactor",
+              "protocolHealthFactor",
+              "borrowApy",
+              "annualInterestInUsd",
+              "liquidationStatus"
+            ])
+          }
+        ])}
+      `);
+      drawMarketPolCharts();
+    }
+
     function renderImpact() {
       const stress = deep.marketStress || {};
       const loans = deep.loanState || {};
@@ -2901,6 +3296,7 @@ HTML_TEMPLATE = r"""<!doctype html>
 
       setHtml("impact", `
         <div class="hero"><h2>Protocol market impact</h2><p>Which markets contribute most to protocol-wide debt, interest, repayments, positive gaps, and stress?</p></div>
+        <p class="note" style="margin: 0 0 1rem 0; font-size: 0.85rem; color: #94a3b8;"><em>Note: Market risk indicator matrix and debt-at-risk metrics assess liquidatable borrower debt and exclude non-liquidatable Protocol-Owned Liquidity (POL) loans. See the <a href="#protocolPol" onclick="activateView('protocolPol')" style="color: var(--accent); text-decoration: underline;">POL tab</a> for protocol financing.</em></p>
         <div class="kpis">
           ${kpi("Highest utilization pressure", pressureMarketName, pressureNote)}
           ${kpi("Highest debt at risk (HF < 1.0)", debtAtRiskMarketName, debtAtRiskNote)}
@@ -2908,7 +3304,7 @@ HTML_TEMPLATE = r"""<!doctype html>
           ${kpi("Highest 30d liquidation volume", liqVolMarketName, liqVolNote)}
         </div>
         ${chartSection("Current market impact", "Which markets combine utilization, liquidity, weak interest coverage, borrow growth, and loan-health pressure?")}
-        ${interactiveBreakdownPanel("Market risk indicator matrix", "impactRiskRanking", { help: "Lighter cells are lower; darker cells are higher." })}
+        ${interactiveBreakdownPanel("Market risk indicator matrix", "impactRiskRanking", { help: "Lighter cells are lower; darker cells are higher. Loan-health pressure and debt-at-risk metrics exclude governance-protected POL loans." })}
         ${interactiveBreakdownPanel("Market size, utilization, and coverage map", "impactMarketMap", { help: "Borrow uses a logarithmic X axis; bubble size is current supply and color is recent interest coverage." })}
         ${chartSection("Impact through time", "Which markets have gained or lost influence over protocol stress, interest, gaps, and repayment activity?")}
         ${interactiveChartPanel("Interest-accrual contributions", "impactInterestContributions")}
@@ -2920,7 +3316,7 @@ HTML_TEMPLATE = r"""<!doctype html>
         ${chartSection("Current contribution snapshot", "Which markets account for today's debt and the latest 30-day flow mix?")}
         ${interactiveBreakdownPanel("Current contribution shares by market", "impactCurrentContributions", { help: "Outstanding debt uses the latest borrow snapshot. Flow and positive-gap bars use trailing 30-day totals. Every bar has its own 100% denominator." })}
         ${chartSection("Cross-market risk snapshot", "Where is active debt closest to liquidation right now?")}
-        ${interactiveBreakdownPanel("Active-debt state by market", "impactLoanState")}
+        ${interactiveBreakdownPanel("Active-debt state by market", "impactLoanState", { help: "Shows active-debt distribution across health-factor tranches by market. Excludes governance-protected POL loans." })}
         ${dataTablesSection([
           { title: "Historical contributors", content: table(stress.topStressMarketsFullPeriod || [], ["marketId", "averageStressContributionShare", "peakStressContributionShare", "peakStressDate"]) },
           { title: "Loan-health impact", content: table(loans.byMarket || [], ["marketId", "debtInUsd", "debtShare", "minHealthFactor", "debtAtOrBelow125InUsd", "loanHealthPressure"]) }
@@ -3040,7 +3436,7 @@ HTML_TEMPLATE = r"""<!doctype html>
 
     function loanSnapshotRows(kind, scope, marketId = "") {
       return (deep.loanSnapshotHistory?.[kind] || []).filter((row) =>
-        row.scope === scope && (scope === "protocol" || row.marketId === marketId)
+        row.scope === scope && (scope === "protocol" || String(row.marketId).toUpperCase() === String(marketId).toUpperCase())
       );
     }
 
@@ -3196,11 +3592,154 @@ HTML_TEMPLATE = r"""<!doctype html>
       }
     }
 
+    function drawProtocolPolCharts(chartId = null, resetRange = false) {
+      const pol = deep?.pol || {};
+      const summary = pol.summary || {};
+      const positions = pol.positions || [];
+
+      if (!chartId || chartId === "protocolPolMarketComparison") {
+        const container = document.querySelector("#protocolPolMarketComparison");
+        if (container) {
+          renderInteractiveCategoryChart(container, {
+            chartId: "protocolPolMarketComparison",
+            rows: positions.map((p) => ({
+              marketName: p.marketDisplayName || p.marketId,
+              debtInUsd: p.debtInUsd,
+              collateralInUsd: p.collateralInUsd
+            })),
+            categoryKey: "marketName",
+            series: [
+              { key: "debtInUsd", label: "Outstanding Borrow Debt", color: colors.amber },
+              { key: "collateralInUsd", label: "Locked Collateral Value", color: colors.mint }
+            ],
+            mode: "grouped",
+            valueFormatter: usdCompact
+          });
+        }
+      }
+
+      if (!chartId || chartId === "protocolPolInterestContribution") {
+        const container = document.querySelector("#protocolPolInterestContribution");
+        if (container) {
+          const totalInterest = Number(summary.totalAnnualInterestCostInUsd || positions.reduce((sum, p) => sum + Number(p.annualInterestCostInUsd || 0), 0));
+          const rows = positions.map((p) => {
+            const annualInterest = Number(p.annualInterestCostInUsd || (Number(p.debtInUsd || 0) * Number(p.borrowAPY || 0)));
+            const share = totalInterest > 0 ? (annualInterest / totalInterest) : 0;
+            return {
+              marketName: p.marketDisplayName || p.marketId,
+              annualInterestInUsd: annualInterest,
+              interestContributionShare: share,
+              debtInUsd: p.debtInUsd,
+              borrowApy: p.borrowAPY
+            };
+          }).sort((a, b) => b.annualInterestInUsd - a.annualInterestInUsd || a.marketName.localeCompare(b.marketName));
+
+          renderInteractiveCategoryChart(container, {
+            chartId: "protocolPolInterestContribution",
+            rows,
+            categoryKey: "marketName",
+            series: [
+              { key: "annualInterestInUsd", label: "Annual Interest Yield Paid (Current Rates)", color: colors.amber }
+            ],
+            mode: "grouped",
+            sortKey: "annualInterestInUsd",
+            allowXScaleToggle: true,
+            valueFormatter: usdCompact
+          });
+        }
+      }
+
+      if (!chartId || chartId === "protocolPolHealthComparison") {
+        const container = document.querySelector("#protocolPolHealthComparison");
+        if (container) {
+          renderInteractiveCategoryChart(container, {
+            chartId: "protocolPolHealthComparison",
+            rows: positions.map((p) => ({
+              marketName: p.marketDisplayName || p.marketId,
+              nominalLtv: p.nominalLTV,
+              nominalHealthFactor: p.nominalHealthFactor ?? (p.debtInUsd > 0 ? p.collateralInUsd / p.debtInUsd : 0),
+              healthFactor: p.healthFactor
+            })),
+            categoryKey: "marketName",
+            series: [
+              { key: "nominalLtv", label: "Nominal LTV (Debt / Collateral)", color: colors.amber },
+              { key: "nominalHealthFactor", label: "Nominal Health Factor (Collateral / Debt)", color: colors.purple },
+              { key: "healthFactor", label: "Protocol Smart Contract Health Factor (100x)", color: colors.blue }
+            ],
+            mode: "grouped",
+            allowXScaleToggle: true,
+            xScale: "symlog",
+            valueFormatter: (v, k) => k === "nominalLtv" ? pct(v) : number(v, 2)
+          });
+        }
+      }
+
+      if (!chartId || chartId === "protocolPolBorrowShare") {
+        const container = document.querySelector("#protocolPolBorrowShare");
+        if (container) {
+          renderInteractiveCategoryChart(container, {
+            chartId: "protocolPolBorrowShare",
+            rows: positions.map((p) => ({
+              marketName: p.marketDisplayName || p.marketId,
+              marketBorrowShare: p.marketBorrowShare,
+              borrowApy: p.borrowAPY
+            })),
+            categoryKey: "marketName",
+            series: [
+              { key: "marketBorrowShare", label: "POL Share of Pool Borrow", color: colors.mint },
+              { key: "borrowApy", label: "Borrow APY (Interest Rate Paid)", color: colors.purple }
+            ],
+            mode: "grouped",
+            valueFormatter: pct
+          });
+        }
+      }
+
+      if (!chartId || chartId === "protocolPolDebtHistory") {
+        drawProtocolTimeChart("protocolPolDebtHistory", resetRange);
+      }
+      if (!chartId || chartId === "protocolPolMarketBreakdownHistory") {
+        drawProtocolTimeChart("protocolPolMarketBreakdownHistory", resetRange);
+      }
+    }
+
     function drawProtocolTimeChart(chartId, resetRange = false) {
       const container = document.querySelector(`#${chartId}`);
       if (!container) return;
       let rows = chartBundleState().protocolRows;
       const options = { chartId, period: chartPeriods[chartId], resetRange };
+      if (chartId === "protocolPolDebtHistory") {
+        const pol = deep?.pol || {};
+        const summary = pol.summary || {};
+        const polRows = pol.history?.length ? pol.history : [{
+          date: todayDateKey(),
+          timestamp: new Date().toISOString(),
+          totalDebtInUsd: summary.totalDebtInUsd,
+          totalCollateralInUsd: summary.totalCollateralInUsd
+        }];
+        lineChart(container, polRows, [
+          { key: "totalDebtInUsd", label: "Total POL Debt", color: colors.amber, type: "line", points: true },
+          { key: "totalCollateralInUsd", label: "Locked qPOL Collateral Value", color: colors.mint, type: "line", points: true }
+        ], usdCompact, { ...options, valueMode: "stock" });
+      }
+      if (chartId === "protocolPolMarketBreakdownHistory") {
+        const pol = deep?.pol || {};
+        const positions = pol.positions || [];
+        const polRows = pol.history?.length ? pol.history : [{
+          date: todayDateKey(),
+          timestamp: new Date().toISOString(),
+          djedDebtInUsd: positions.find((p) => p.marketId === "DJED")?.debtInUsd || 0,
+          usdmDebtInUsd: positions.find((p) => p.marketId === "USDM")?.debtInUsd || 0,
+          usdcDebtInUsd: positions.find((p) => p.marketId === "USDC" || p.marketId === "wanUSDC")?.debtInUsd || 0,
+          iusdDebtInUsd: positions.find((p) => p.marketId === "IUSD")?.debtInUsd || 0
+        }];
+        lineChart(container, polRows, [
+          { key: "djedDebtInUsd", label: "DJED POL Debt", color: colors.blue, type: "line", points: true },
+          { key: "usdmDebtInUsd", label: "USDM POL Debt", color: colors.mint, type: "line", points: true },
+          { key: "usdcDebtInUsd", label: "wanUSDC POL Debt", color: colors.purple, type: "line", points: true },
+          { key: "iusdDebtInUsd", label: "iUSD POL Debt", color: colors.amber, type: "line", points: true }
+        ], usdCompact, { ...options, valueMode: "stock" });
+      }
       if (chartId === "protocolStablecoinYields") {
         const yieldRows = buildStablecoinYieldComparisonData(bundle.marketSeries);
         const series = USD_STABLECOIN_CONFIG.map((config) => {
@@ -3363,6 +3902,7 @@ HTML_TEMPLATE = r"""<!doctype html>
     function drawRevenueCharts() {
       drawProtocolTimeChart("protocolCollectedRevenueDaily");
       drawProtocolTimeChart("protocolCollectedRevenueMonthly");
+      drawMarketRevenueContributionYtd();
       drawProtocolTimeChart("protocolRevenueRunRate");
       drawProtocolTimeChart("protocolDaoRevenueAllocationMonthly");
       drawProtocolTimeChart("protocolDaoRevenueAllocationDaily");
@@ -3370,8 +3910,50 @@ HTML_TEMPLATE = r"""<!doctype html>
       drawProtocolTimeChart("protocolStakerRevenueAllocationDaily");
     }
 
+    function drawMarketRevenueContributionYtd() {
+      const container = document.querySelector("#protocolMarketRevenueContributionYtd");
+      if (!container) return;
+      const contributions = (deep.revenue?.marketYtdContributions && deep.revenue.marketYtdContributions.length)
+        ? deep.revenue.marketYtdContributions
+        : (deep.marketRevenue?.ytdMarketContributions && deep.marketRevenue.ytdMarketContributions.length)
+          ? deep.marketRevenue.ytdMarketContributions
+          : (deep.marketSummaries || []).map((m) => {
+            const rev = m.marketRevenue || {};
+            const directOrigination = rev.ytdDirectOriginationRevenueInUsd ?? m.ytdCollectedOriginationRevenueInUsd ?? 0;
+            const attributedInterest = rev.ytdAttributedCollectedInterestRevenueInUsd ?? 0;
+            const totalRevenue = rev.ytdAttributedCollectedMarketRevenueInUsd ?? (directOrigination + attributedInterest);
+            return {
+              marketId: m.marketId,
+              marketDisplayName: m.displayName || m.symbol || m.marketId,
+              directOriginationRevenueInUsd: directOrigination,
+              attributedCollectedInterestRevenueInUsd: attributedInterest,
+              totalRevenueInUsd: totalRevenue,
+              revenueShare: (deep.revenue?.summary?.ytdCollectedRevenueInUsd > 0)
+                ? totalRevenue / deep.revenue.summary.ytdCollectedRevenueInUsd
+                : 0
+            };
+          }).sort((a, b) => b.totalRevenueInUsd - a.totalRevenueInUsd || a.marketDisplayName.localeCompare(b.marketDisplayName));
+
+      const positiveRows = contributions.filter((r) => Number(r.totalRevenueInUsd) > 0);
+      const rows = positiveRows.length ? positiveRows : contributions;
+
+      renderInteractiveCategoryChart(container, {
+        chartId: "protocolMarketRevenueContributionYtd",
+        rows,
+        categoryKey: "marketDisplayName",
+        series: [
+          { key: "attributedCollectedInterestRevenueInUsd", label: "Retained interest revenue", color: colors.blue },
+          { key: "directOriginationRevenueInUsd", label: "Loan origination fees", color: colors.amber }
+        ],
+        mode: "stacked",
+        allowXScaleToggle: true,
+        sortKey: "totalRevenueInUsd",
+        valueFormatter: usdCompact
+      });
+    }
+
     function marketChartIds() {
-      return ["marketParticipationLoans", "marketParticipationKeys", "marketHealthHistoryCounts", "marketHealthHistoryDebt", "marketCapital", "marketUtilization", "marketDebtRepayment", "marketDebtCoverageOperandsAsset", "marketDebtCoverageOperandsUsd", "marketDebtCoverage", "marketDebtGapAsset", "marketDebtGap", "marketDebtCumulativeGapAsset", "marketDebtCumulativeGap", "marketRepaymentEvents", "marketRepaymentDrySpells", "marketDebtRepaymentDistribution", "marketInterestDaily", "marketInterestCoverageOperandsAsset", "marketInterestCoverageOperandsUsd", "marketInterestCumulative", "marketInterestCumulativeGapAsset", "marketInterestCumulativeGap", "marketInterestGapAsset", "marketInterestGap", "marketInterestCoverage", "marketInterestDrySpells", "marketInterestRepaymentDistribution", "marketRates", "marketLiquidityPressure", "marketAttributedCollectedRevenueDaily", "marketAttributedCollectedRevenueMonthly", "marketAccruedInterestAllocationDaily", "marketAccruedInterestAllocationMonthly", "marketProjectedAnnualizedInterestIncome", "marketInterestRepaymentActivityMonthly"];
+      return ["marketParticipationLoans", "marketParticipationKeys", "marketHealthHistoryCounts", "marketHealthHistoryDebt", "marketCapital", "marketUtilization", "marketDebtRepayment", "marketDebtCoverageOperandsAsset", "marketDebtCoverageOperandsUsd", "marketDebtCoverage", "marketDebtGapAsset", "marketDebtGap", "marketDebtCumulativeGapAsset", "marketDebtCumulativeGap", "marketRepaymentEvents", "marketRepaymentDrySpells", "marketDebtRepaymentDistribution", "marketInterestDaily", "marketInterestCoverageOperandsAsset", "marketInterestCoverageOperandsUsd", "marketInterestCumulative", "marketInterestCumulativeGapAsset", "marketInterestCumulativeGap", "marketInterestGapAsset", "marketInterestGap", "marketInterestCoverage", "marketInterestDrySpells", "marketInterestRepaymentDistribution", "marketRates", "marketLiquidityPressure", "marketAttributedCollectedRevenueDaily", "marketAttributedCollectedRevenueMonthly", "marketAccruedInterestAllocationDaily", "marketAccruedInterestAllocationMonthly", "marketProjectedAnnualizedInterestIncome", "marketInterestRepaymentActivityMonthly", "marketPolDebtHistory", "marketPolBorrowShareHistory", "marketPolYieldHistory", "marketPolHealthHistory"];
     }
 
     function drawMarketCharts(chartId = null, resetRange = false) {
@@ -3379,7 +3961,80 @@ HTML_TEMPLATE = r"""<!doctype html>
       if (!chartId || chartId === "marketKeyDependence") drawMarketKeyDependence();
       if (!chartId || chartId === "marketBorrowConcentration") drawMarketBorrowConcentration();
       if (!chartId || chartId === "marketCollateralizedSupplyConcentration") drawMarketCollateralizedSupplyConcentration();
+      if (!chartId || chartId.startsWith("marketPol")) drawMarketPolCharts(chartId, resetRange);
       if (!chartId) drawMarketHealthChart();
+    }
+
+    function drawMarketPolCharts(chartId = null, resetRange = false) {
+      const market = currentMarketSummary();
+      const mId = market?.symbol || market?.marketId;
+      const pos = (deep?.pol?.positions || []).find((p) => p.marketId.toUpperCase() === String(mId).toUpperCase() || p.marketId.toUpperCase() === String(market?.marketId).toUpperCase());
+      const hasHistory = loanSnapshotRows("pol", "market", market?.marketId).some((r) => r.debtInUsd > 0 || r.collateralInUsd > 0);
+      if (!pos && !hasHistory) return;
+
+      if (!chartId || chartId === "marketPolBorrowComposition") {
+        const compContainer = document.querySelector("#marketPolBorrowComposition");
+        if (compContainer) {
+          const organicDebt = Math.max(0, (pos?.marketTotalBorrowInUsd || pos?.debtInUsd || 0) - (pos?.debtInUsd || 0));
+          renderInteractiveCategoryChart(compContainer, {
+            chartId: "marketPolBorrowComposition",
+            rows: [
+              {
+                segment: pos?.marketDisplayName || mId,
+                polDebtInUsd: pos?.debtInUsd || 0,
+                organicDebtInUsd: organicDebt
+              }
+            ],
+            categoryKey: "segment",
+            series: [
+              { key: "polDebtInUsd", label: "Protocol-Owned Liquidity (POL)", color: colors.amber },
+              { key: "organicDebtInUsd", label: "Organic User Borrowing", color: colors.blue }
+            ],
+            mode: "stacked",
+            valueFormatter: usdCompact
+          });
+        }
+      }
+
+      if (!chartId || chartId === "marketPolHealthComparison") {
+        const healthContainer = document.querySelector("#marketPolHealthComparison");
+        if (healthContainer) {
+          renderInteractiveCategoryChart(healthContainer, {
+            chartId: "marketPolHealthComparison",
+            rows: [
+              {
+                segment: pos?.marketDisplayName || mId,
+                nominalLtv: pos?.nominalLTV || 0,
+                nominalHealthFactor: pos?.nominalHealthFactor ?? (pos?.debtInUsd > 0 ? (pos?.collateralInUsd || 0) / pos.debtInUsd : 0),
+                healthFactor: pos?.healthFactor || 0
+              }
+            ],
+            categoryKey: "segment",
+            series: [
+              { key: "nominalLtv", label: "Nominal LTV (Debt / Collateral)", color: colors.amber },
+              { key: "nominalHealthFactor", label: "Nominal Health Factor (Collateral / Debt)", color: colors.purple },
+              { key: "healthFactor", label: "Effective Health Factor (100x Multiplier)", color: colors.mint }
+            ],
+            mode: "grouped",
+            allowXScaleToggle: true,
+            xScale: "symlog",
+            valueFormatter: (v, k) => k === "nominalLtv" ? pct(v) : number(v, 2)
+          });
+        }
+      }
+
+      if (!chartId || chartId === "marketPolDebtHistory") {
+        drawMarketTimeChart("marketPolDebtHistory", resetRange);
+      }
+      if (!chartId || chartId === "marketPolBorrowShareHistory") {
+        drawMarketTimeChart("marketPolBorrowShareHistory", resetRange);
+      }
+      if (!chartId || chartId === "marketPolYieldHistory") {
+        drawMarketTimeChart("marketPolYieldHistory", resetRange);
+      }
+      if (!chartId || chartId === "marketPolHealthHistory") {
+        drawMarketTimeChart("marketPolHealthHistory", resetRange);
+      }
     }
 
     function drawMarketParameterCharts(chartId = null, resetRange = false) {
@@ -3518,6 +4173,49 @@ HTML_TEMPLATE = r"""<!doctype html>
       const revenueRows = currentMarketRevenue()?.daily || [];
       const options = { chartId, period: chartPeriods[chartId], resetRange };
       const nativeAmount = (value) => assetAmount(value, market.symbol || market.marketId);
+      if (chartId === "marketPolDebtHistory" || chartId === "marketPolBorrowShareHistory" || chartId === "marketPolYieldHistory" || chartId === "marketPolHealthHistory") {
+        const mId = market?.symbol || market?.marketId;
+        const pos = (deep?.pol?.positions || []).find((p) => p.marketId.toUpperCase() === String(mId).toUpperCase() || p.marketId.toUpperCase() === String(market?.marketId).toUpperCase());
+        const rawPolRows = loanSnapshotRows("pol", "market", market.marketId);
+        const polRows = rawPolRows.length ? rawPolRows : (pos ? [{
+          date: todayDateKey(),
+          timestamp: new Date().toISOString(),
+          debtInUsd: pos.debtInUsd,
+          collateralInUsd: pos.collateralInUsd,
+          collateralTokens: pos.collateralTokens,
+          borrowApy: pos.borrowAPY,
+          annualInterestCostInUsd: pos.annualInterestCostInUsd,
+          nominalLtv: pos.nominalLTV,
+          healthFactor: pos.healthFactor,
+          marketBorrowShare: pos.marketBorrowShare,
+          loanCount: 1
+        }] : []);
+
+        if (chartId === "marketPolDebtHistory") {
+          lineChart(container, polRows, [
+            { key: "debtInUsd", label: "POL Borrow Debt", color: colors.amber, type: "line", points: true },
+            { key: "collateralInUsd", label: "Locked qPOL Collateral Value", color: colors.mint, type: "line", points: true }
+          ], usdCompact, { ...options, valueMode: "stock" });
+        }
+        if (chartId === "marketPolBorrowShareHistory") {
+          lineChart(container, polRows, [
+            { key: "marketBorrowShare", label: "POL Share of Pool Borrow", color: colors.blue, type: "line", points: true }
+          ], pct, { ...options, valueMode: "ratio", fixedYDomain: { min: 0, max: 1 } });
+        }
+        if (chartId === "marketPolYieldHistory") {
+          lineChart(container, polRows, [
+            { key: "annualInterestCostInUsd", label: "Projected Annual Interest Yield", color: colors.amber, type: "line", points: true, yAxis: "left" },
+            { key: "borrowApy", label: "Borrow APY", color: colors.blue, type: "line", points: true, yAxis: "right" }
+          ], (v, k) => k === "borrowApy" ? pct(v) : usdCompact(v), { ...options, valueMode: "stock", hideYScaleToggle: true });
+        }
+        if (chartId === "marketPolHealthHistory") {
+          lineChart(container, polRows, [
+            { key: "nominalLtv", label: "Nominal LTV (Debt / Collateral)", color: colors.amber, type: "line", points: true, yAxis: "left" },
+            { key: "healthFactor", label: "Effective Health Factor (100x Multiplier)", color: colors.mint, type: "line", points: true, yAxis: "right" }
+          ], (v, k) => k === "nominalLtv" ? pct(v) : number(v, 2), { ...options, valueMode: "stock", hideYScaleToggle: true });
+        }
+        return;
+      }
       if (chartId === "marketParticipationLoans") lineChart(container, loanSnapshotRows("health", "market", market.marketId), [{ key: "activeDebtLoanCount", label: "Active-debt positions", color: colors.blue, type: "line", points: true, dash: "5 4" }], integer, { ...options, valueMode: "stock" });
       if (chartId === "marketParticipationKeys") lineChart(container, loanSnapshotRows("participation", "market", market.marketId), [{ key: "distinctActiveDebtObservedKeyCount", label: "Distinct observed keys with active debt", color: colors.mint, type: "line", points: true, dash: "5 4" }], integer, { ...options, valueMode: "stock" });
       if (chartId === "marketHealthHistoryCounts") lineChart(container, loanSnapshotRows("health", "market", market.marketId), historicalHealthSeries("LoanCount"), integer, { ...options, valueMode: "stock" });

@@ -96,13 +96,14 @@ test("zero-data refresh fetches every required surface and writes reloadable CSV
     "metadata/market-params-cursors.csv",
     "computed/loan-participation-history.csv",
     "computed/loan-health-history.csv",
+    "computed/loan-pol-history.csv",
     "computed/loan-reconciliation-history.csv"
   ]) {
     assert.ok(store.listPaths().includes(path), `missing ${path}`);
   }
   assert.deepEqual(
     store.listPaths().filter((path) => path.startsWith("computed/")),
-    ["computed/loan-health-history.csv", "computed/loan-participation-history.csv", "computed/loan-reconciliation-history.csv"]
+    ["computed/loan-health-history.csv", "computed/loan-participation-history.csv", "computed/loan-pol-history.csv", "computed/loan-reconciliation-history.csv"]
   );
   assert.deepEqual(
     store.listPaths().filter((path) => /^clean\/current-.*-loans\.csv$/.test(path)),

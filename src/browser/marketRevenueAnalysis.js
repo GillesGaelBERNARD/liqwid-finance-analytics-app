@@ -45,7 +45,15 @@ export function buildMarketRevenueAnalysis(input = {}) {
     byMarket[marketId].summary = summarizeMarketRevenue(byMarket[marketId].daily);
   }
 
-  return { byMarket, protocolReconciliation };
+  const protocolYtdRevenue = protocolYtdCollectedRevenue(input.protocolRevenueDaily || [], generatedDate);
+  const ytdContributions = buildMarketYtdRevenueContributions(byMarket, protocolYtdRevenue);
+
+  return {
+    byMarket,
+    protocolReconciliation,
+    ytdMarketContributions: ytdContributions.contributions,
+    topYtdMarket: ytdContributions.topMarket
+  };
 }
 
 function buildMarketRevenueDay(marketId, source, parameters) {
@@ -283,4 +291,65 @@ function marketRevenueClamp(value, minimum, maximum) {
 
 function marketRevenueRounded(value) {
   return Math.round(value * 1e12) / 1e12;
+}
+
+export function buildMarketYtdRevenueContributions(byMarket = {}, protocolYtdCollectedRevenueInUsd = null) {
+  const markets = Object.values(byMarket || {});
+  const rawRows = markets.map((entry) => {
+    const summary = entry?.summary || {};
+    const directOrigination = marketRevenueNumber(summary.ytdDirectOriginationRevenueInUsd);
+    const attributedInterest = marketRevenueNumber(summary.ytdAttributedCollectedInterestRevenueInUsd);
+    const totalRevenue = marketRevenueOptionalNumber(summary.ytdAttributedCollectedMarketRevenueInUsd)
+      ?? (directOrigination + attributedInterest);
+    return {
+      marketId: String(entry?.marketId || ""),
+      marketDisplayName: String(entry?.marketDisplayName || entry?.marketId || ""),
+      directOriginationRevenueInUsd: directOrigination,
+      attributedCollectedInterestRevenueInUsd: attributedInterest,
+      totalRevenueInUsd: totalRevenue,
+      ytdAttributionComplete: summary.ytdAttributionComplete === true
+    };
+  });
+
+  const sumMarketTotals = rawRows.reduce((sum, row) => sum + row.totalRevenueInUsd, 0);
+  const totalProtocolYtd = marketRevenueOptionalNumber(protocolYtdCollectedRevenueInUsd) ?? sumMarketTotals;
+
+  const sorted = rawRows
+    .map((row) => ({
+      ...row,
+      revenueShare: totalProtocolYtd > 0 ? row.totalRevenueInUsd / totalProtocolYtd : 0
+    }))
+    .sort((a, b) => b.totalRevenueInUsd - a.totalRevenueInUsd || a.marketDisplayName.localeCompare(b.marketDisplayName));
+
+  const top = sorted.find((r) => r.totalRevenueInUsd > 0) || null;
+
+  return {
+    contributions: sorted,
+    topMarket: top ? {
+      marketId: top.marketId,
+      marketDisplayName: top.marketDisplayName,
+      totalRevenueInUsd: top.totalRevenueInUsd,
+      attributedCollectedInterestRevenueInUsd: top.attributedCollectedInterestRevenueInUsd,
+      directOriginationRevenueInUsd: top.directOriginationRevenueInUsd,
+      revenueShare: top.revenueShare
+    } : null
+  };
+}
+
+function protocolYtdCollectedRevenue(protocolRows, generatedDate) {
+  const source = [...(Array.isArray(protocolRows) ? protocolRows : [])]
+    .filter((row) => row?.date && row.isComplete !== false && !row.fetchError)
+    .filter((row) => !generatedDate || String(row.date) < generatedDate)
+    .sort((left, right) => String(left.date).localeCompare(String(right.date)));
+  const latestDate = source.at(-1)?.date ?? null;
+  if (!latestDate) return null;
+  const ytdStart = `${String(latestDate).slice(0, 4)}-01-01`;
+  const ytdRows = source.filter((row) => row.date >= ytdStart && row.date <= latestDate);
+  if (!ytdRows.length) return null;
+  return ytdRows.reduce((sum, row) => (
+    sum
+    + marketRevenueNumber(row.revenueFromRepaidInterestInUsd)
+    + marketRevenueNumber(row.loanOriginationFeesInUsd)
+    + marketRevenueNumber(row.loanOriginationFeesMinAdaInUsd)
+  ), 0);
 }

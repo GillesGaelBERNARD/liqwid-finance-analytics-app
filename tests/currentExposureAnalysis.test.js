@@ -5,6 +5,8 @@ import {
   buildConcentrationComparisonSeries,
   buildCurrentExposureAnalysis,
   classifyLoanRowCoverage,
+  isPolLoan,
+  LIQWID_POL_PUBLIC_KEY,
   summarizeLoanRowCoverageNotices
 } from "../src/browser/currentExposureAnalysis.js";
 
@@ -364,5 +366,65 @@ test("isolated silos are dynamically discovered and segmented with ring-fenced m
   assert.equal(strikeSilo.activeLoanCount, 1);
   assert.equal(strikeSilo.coverageRatio, 2_000 / 200);
 });
+
+test("POL loans are identified, excluded from organic bad debt, and labeled in concentration analysis", () => {
+  const customBundle = {
+    markets: [
+      { id: "ADA", displayName: "ADA", supply: 10_000, borrow: 5_000, parameters: { borrowCap: 0.95 } },
+      { id: "DJED", displayName: "DJED", supply: 5_000, borrow: 3_000, parameters: { borrowCap: 0.95 } }
+    ],
+    marketSeriesById: {}
+  };
+
+  const polLoan = {
+    id: "pol-loan-1",
+    marketId: "DJED",
+    publicKey: LIQWID_POL_PUBLIC_KEY,
+    amount: 2_000,
+    healthFactor: 39.28,
+    collateral: 800,
+    collaterals: [{ id: "qpol-col", qTokenName: "qPOL", amount: 800, market: { id: "POL", displayName: "POL" } }]
+  };
+
+  const organicLoan = {
+    id: "user-loan-1",
+    marketId: "ADA",
+    publicKey: "user-key-1",
+    amount: 100,
+    healthFactor: 1.5,
+    collateral: 200,
+    collaterals: [collateral("ADA", 200)]
+  };
+
+  assert.equal(isPolLoan(polLoan), true);
+  assert.equal(isPolLoan(organicLoan), false);
+
+  const customLoans = [polLoan, organicLoan];
+  const exposure = buildCurrentExposureAnalysis({ bundle: customBundle, activeLoans: customLoans, collateralLoans: customLoans });
+
+  // POL should not trigger organic bad debt despite nominal shortfall (2000 debt > 800 collateral)
+  assert.equal(exposure.summary.badDebtInUsd, 0);
+  assert.equal(exposure.summary.badDebtShortfallInUsd, 0);
+  assert.equal(exposure.summary.badDebtLoanCount, 0);
+  assert.equal(exposure.summary.polDebtInUsd, 2_000);
+  assert.equal(exposure.summary.polCollateralInUsd, 800);
+  assert.equal(exposure.summary.polLoanCount, 1);
+
+  // Key 1 (the POL key) should be labeled as Liqwid POL (Team/Protocol)
+  const polKeyRow = exposure.borrowerConcentration.observedKeyExposure?.rows?.find((r) => r.isPolKey);
+  assert.ok(polKeyRow);
+  assert.equal(polKeyRow.observedKeyLabel, "Liqwid POL (Team/Protocol)");
+  assert.equal(polKeyRow.totalDebtInUsd, 2_000);
+
+  // Collateral risk and price decline shock scenarios must strictly exclude POL loans
+  const shockCollaterals = exposure.collateralRisk.shockScenarios.map((s) => s.collateralMarketId);
+  assert.equal(shockCollaterals.includes("POL"), false, "POL collateral must be excluded from shock scenarios");
+  const collateralMarketIds = exposure.collateralRisk.byCollateral.map((c) => c.marketId);
+  assert.equal(collateralMarketIds.includes("POL"), false, "POL collateral must be excluded from collateral risk byCollateral");
+  const totalAttributedCollateralDebt = exposure.collateralRisk.byCollateral.reduce((sum, c) => sum + c.attributedDebtInUsd, 0);
+  assert.equal(totalAttributedCollateralDebt, 100, "Collateral risk total attributed debt must reflect only organic loans ($100)");
+});
+
+
 
 

@@ -58,10 +58,10 @@ const DEFAULT_METRIC_METADATA = {
   },
   loanHealthPressure: {
     label: "Loan-health pressure",
-    description: "Weighted share of active market debt close to liquidation.",
-    explanation: "Evaluates active loan health factors (HF) in the market. Assigns 100% weight to debt with HF ≤ 1.10, 30% weight to debt in the 1.10 < HF ≤ 1.25 range, and 5% weight to debt in the 1.25 < HF ≤ 1.50 range. High values indicate significant debt near liquidation thresholds.",
-    formulaHtml: `<div class="formula-card"><div class="formula-frac"><span class="formula-num">Debt<sub>HF &le; 1.10</sub> + 0.30 &times; Debt<sub>1.10 &lt; HF &le; 1.25</sub> + 0.05 &times; Debt<sub>1.25 &lt; HF &le; 1.50</sub></span><span class="formula-den">Total Market Borrow Debt</span></div></div>`,
-    formulaText: "(Debt_HF<=1.10 + 0.30 * Debt_1.10<HF<=1.25 + 0.05 * Debt_1.25<HF<=1.50) / Total Market Debt",
+    description: "Weighted share of active organic market debt close to liquidation. Excludes governance-protected POL loans.",
+    explanation: "Evaluates active loan health factors (HF) in the market, excluding governance-protected POL loans. Assigns 100% weight to organic debt with HF ≤ 1.10, 30% weight to debt in the 1.10 < HF ≤ 1.25 range, and 5% weight to debt in the 1.25 < HF ≤ 1.50 range, divided by total organic market debt.",
+    formulaHtml: `<div class="formula-card"><div class="formula-frac"><span class="formula-num">Organic Debt<sub>HF &le; 1.10</sub> + 0.30 &times; Organic Debt<sub>1.10 &lt; HF &le; 1.25</sub> + 0.05 &times; Organic Debt<sub>1.25 &lt; HF &le; 1.50</sub></span><span class="formula-den">Total Organic Market Debt</span></div><div style="font-size:0.75rem;color:#8fa9bf;margin-top:4px"><em>Excludes governance-protected POL loans.</em></div></div>`,
+    formulaText: "(OrganicDebt_HF<=1.10 + 0.30 * OrganicDebt_1.10<HF<=1.25 + 0.05 * OrganicDebt_1.25<HF<=1.50) / Total Organic Market Debt (Excludes governance-protected POL loans)",
     stressRange: "Range: 0.0% to 100.0% (Higher = High Liquidation Vulnerability)"
   }
 };

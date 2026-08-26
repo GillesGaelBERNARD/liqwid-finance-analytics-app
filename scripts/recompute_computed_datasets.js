@@ -76,12 +76,12 @@ async function recomputeComputedDatasets(dataRoot) {
       const marketsPagePath = path.join(folderPath, "markets", "page-0000.json");
       if (fs.existsSync(marketsPagePath)) {
         const mContent = JSON.parse(fs.readFileSync(marketsPagePath, "utf-8"));
-        markets = mContent.payload?.markets?.results || mContent.payload?.results || mContent.results || [];
+        markets = mContent.payload?.liqwid?.data?.markets?.results || mContent.payload?.markets?.results || mContent.payload?.results || mContent.results || [];
       } else {
         const globalMarketsPath = path.join(dataRoot, "raw", "api", "markets-current.json");
         if (fs.existsSync(globalMarketsPath)) {
           const gContent = JSON.parse(fs.readFileSync(globalMarketsPath, "utf-8"));
-          markets = gContent.payload?.markets?.results || gContent.payload?.results || gContent.results || [];
+          markets = gContent.payload?.liqwid?.data?.markets?.results || gContent.payload?.markets?.results || gContent.payload?.results || gContent.results || [];
         }
       }
 
@@ -106,10 +106,12 @@ async function recomputeComputedDatasets(dataRoot) {
 
   const partCsvPath = path.join(computedDir, "loan-participation-history.csv");
   const healthCsvPath = path.join(computedDir, "loan-health-history.csv");
+  const polCsvPath = path.join(computedDir, "loan-pol-history.csv");
   const reconCsvPath = path.join(computedDir, "loan-reconciliation-history.csv");
 
   fs.writeFileSync(partCsvPath, rowsToCsv(masterHistory.participation), "utf-8");
   fs.writeFileSync(healthCsvPath, rowsToCsv(masterHistory.health), "utf-8");
+  fs.writeFileSync(polCsvPath, rowsToCsv(masterHistory.pol || []), "utf-8");
   fs.writeFileSync(reconCsvPath, rowsToCsv(masterHistory.reconciliation || []), "utf-8");
 
   if (lqStatsHistory.length) {
@@ -130,6 +132,7 @@ async function recomputeComputedDatasets(dataRoot) {
   console.log(`Successfully re-computed datasets:`);
   console.log(`  Participation rows: ${masterHistory.participation.length} -> ${partCsvPath}`);
   console.log(`  Health rows: ${masterHistory.health.length} -> ${healthCsvPath}`);
+  console.log(`  POL rows: ${(masterHistory.pol || []).length} -> ${polCsvPath}`);
   console.log(`  Reconciliation rows: ${(masterHistory.reconciliation || []).length} -> ${reconCsvPath}`);
   console.log(`  LQ stats history observations: ${lqStatsHistory.length} -> ${existingHistoryPath}`);
 }

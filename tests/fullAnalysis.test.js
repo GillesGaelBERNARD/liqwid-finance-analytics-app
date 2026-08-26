@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { buildAnalysisBundle } from "../src/browser/dataWorkflow.js";
-import { aggregateDailyProtocolFeeAllocations, buildArchiveAudit, buildCompleteAnalysis, buildLqTokenAnalysis, buildProtocolRevenueRunRateSeries, deriveLoanPopulations } from "../src/browser/fullAnalysis.js";
+import { aggregateDailyProtocolFeeAllocations, buildArchiveAudit, buildCompleteAnalysis, buildLqTokenAnalysis, buildPolAnalysisContext, buildProtocolRevenueRunRateSeries, deriveLoanPopulations } from "../src/browser/fullAnalysis.js";
 
 function history(date, overrides = {}) {
   return {
@@ -318,6 +318,11 @@ test("complete analysis exposes reconciled market collections and parameter-deri
   assert.equal(analysis.marketRevenue.byMarket.A.summary.ytdAttributedCollectedMarketRevenueInUsd, 19);
   assert.equal(analysis.marketRevenue.byMarket.A.summary.ytdAccruedProtocolInterestRevenueInUsd, 10);
   assert.equal(analysis.marketSummaries.find((row) => row.marketId === "A").retainedInterestRevenueAvailable, true);
+  assert.ok(analysis.revenue.summary.topRevenueMarket);
+  assert.equal(analysis.revenue.summary.topRevenueMarket.marketId, "A");
+  assert.equal(analysis.revenue.summary.topRevenueMarket.totalRevenueInUsd, 19);
+  assert.ok(Array.isArray(analysis.revenue.marketYtdContributions));
+  assert.equal(analysis.revenue.marketYtdContributions[0].marketId, "A");
 });
 
 test("complete analysis is rebuilt exclusively from the current refresh generation", () => {
@@ -442,6 +447,8 @@ test("complete analysis is rebuilt exclusively from the current refresh generati
   assert.equal(analysis.revenue.dailyAllocation[1].isComplete, false);
   assert.equal(analysis.revenue.dailyAllocation[0].allocatedProtocolInterestRevenueInUsd, 4);
   assert.equal(analysis.revenue.dailyAllocation[0].allocatedHoldersOriginationRevenueInUsd, 1);
+  assert.equal(analysis.revenue.summary.topRevenueMarket, null);
+  assert.ok(Array.isArray(analysis.revenue.marketYtdContributions));
   assert.equal("currentParameterProtocolInterestShare" in analysis.marketSummaries[0], false);
   assert.equal("estimatedProtocolRevenue90dInUsd" in analysis.marketSummaries[0], false);
   assert.equal(analysis.marketSummaries[0].activeDebtLoanCount, 1);
@@ -737,3 +744,186 @@ test("buildLqTokenAnalysis returns null lqPriceInUsd and stakedLqAmount for date
   assert.equal(analysis.series[1].lqPriceInUsd, 0.25);
   assert.equal(analysis.series[1].stakedLqAmount, 3000000);
 });
+
+test("buildPolAnalysisContext aggregates active POL positions with governance rules", () => {
+  const activeLoans = [
+    {
+      id: "pol-djed",
+      marketId: "DJED",
+      publicKey: "7ac5878231522baf2972231d1a587e20a0d814c164fa7fea28ee459f",
+      amount: 2000000,
+      collateral: 800000,
+      healthFactor: 39.28,
+      APY: 0.30,
+      collaterals: [{ id: "qpol", qTokenName: "qPOL", qTokenAmount: 3670000, amount: 800000, market: { id: "POL", displayName: "POL" } }]
+    },
+    {
+      id: "pol-usdm",
+      marketId: "USDM",
+      publicKey: "7ac5878231522baf2972231d1a587e20a0d814c164fa7fea28ee459f",
+      amount: 900000,
+      collateral: 500000,
+      healthFactor: 58.40,
+      APY: 0.25,
+      collaterals: [{ id: "qpol", qTokenName: "qPOL", qTokenAmount: 2500000, amount: 500000, market: { id: "POL", displayName: "POL" } }]
+    },
+    {
+      id: "user-loan",
+      marketId: "ADA",
+      publicKey: "user-123",
+      amount: 100000,
+      collateral: 200000,
+      healthFactor: 1.5,
+      APY: 0.05,
+      collaterals: [{ id: "qada", qTokenName: "qADA", qTokenAmount: 200000, amount: 200000, market: { id: "ADA", displayName: "ADA" } }]
+    }
+  ];
+
+  const markets = [
+    { id: "DJED", displayName: "DJED", borrow: 2000000, borrowAPY: 0.30 },
+    { id: "USDM", displayName: "USDM", borrow: 900000, borrowAPY: 0.25 },
+    { id: "ADA", displayName: "ADA", borrow: 100000, borrowAPY: 0.05 }
+  ];
+
+  const pol = buildPolAnalysisContext({ activeLoans, markets });
+
+  assert.equal(pol.summary.loanCount, 2);
+  assert.equal(pol.summary.totalDebtInUsd, 2900000);
+  assert.equal(pol.summary.totalCollateralInUsd, 1300000);
+  assert.equal(pol.summary.totalCollateralTokens, 6170000);
+  assert.equal(pol.summary.totalProtocolBorrowInUsd, 3000000);
+  assert.equal(pol.summary.protocolBorrowShare, 2900000 / 3000000);
+  assert.equal(pol.positions.length, 2);
+  assert.equal(pol.positions[0].marketId, "DJED");
+  assert.equal(pol.positions[0].nominalLTV, 2000000 / 800000);
+  assert.equal(pol.positions[0].nominalHealthFactor, 800000 / 2000000);
+  assert.equal(pol.positions[0].canBeLiquidated, false);
+  assert.equal(pol.positions[0].governanceProtection.collateralWeight, 100);
+  assert.equal(pol.governanceRules.liquidationPenalty, 0);
+});
+
+test("loanHealthPressure and loanState market rows strictly exclude governance-protected POL loans", () => {
+  const polLoan = {
+    id: "pol-djed-loan",
+    marketId: "DJED",
+    publicKey: "7ac5878231522baf2972231d1a587e20a0d814c164fa7fea28ee459f",
+    amount: 2000000,
+    debtInUsd: 2000000,
+    collateral: 800000,
+    healthFactor: 39.28,
+    collaterals: [{ id: "qpol", qTokenName: "qPOL", qTokenAmount: 3670000, amount: 800000, market: { id: "POL", displayName: "POL" } }]
+  };
+
+  const organicDjedLoan = {
+    id: "organic-djed-1",
+    marketId: "DJED",
+    publicKey: "user-abc",
+    amount: 1000,
+    debtInUsd: 1000,
+    collateral: 1100,
+    healthFactor: 1.05, // HF <= 1.10 -> 100% weight
+    collaterals: [{ id: "qada-1", qTokenName: "qADA", amount: 1100, market: { id: "ADA", displayName: "ADA" } }]
+  };
+
+  const bundle = buildAnalysisBundle({
+    markets: [{ id: "DJED", displayName: "DJED", assetPrice: 1.0, borrow: 2001000, borrowInUsd: 2001000, supply: 5000000, supplyInUsd: 5000000 }],
+    marketSeriesById: { "DJED": [history("2026-01-01", { marketId: "DJED", borrow: 2001000, borrowInUsd: 2001000 })] },
+    dataRoot: "liqwid",
+    startDate: "2026-01-01",
+    endDate: "2026-01-01"
+  });
+
+  const analysis = buildCompleteAnalysis({
+    bundle,
+    allLoans: [polLoan, organicDjedLoan],
+    activeLoans: [polLoan, organicDjedLoan],
+    collateralLoans: [polLoan, organicDjedLoan],
+    liquidatableLoans: [],
+    monthlyLiquidations: [],
+    dailyLiquidations: [],
+    rates: []
+  });
+
+  const djedLoanRow = analysis.loanState.byMarket.find((m) => m.marketId === "DJED");
+  assert.ok(djedLoanRow, "DJED loan row must exist");
+  assert.equal(djedLoanRow.debtInUsd, 2001000);
+  assert.equal(djedLoanRow.organicDebtInUsd, 1000);
+  assert.equal(djedLoanRow.polDebtInUsd, 2000000);
+  assert.equal(djedLoanRow.minHealthFactor, 1.05);
+  // Loan health pressure: organic HF 1.05 gets 1.0 weight -> 1000 / 1000 = 1.0 (100%), excluding POL's 2M debt
+  assert.equal(djedLoanRow.loanHealthPressure, 1.0);
+
+  // In stress context currentMarketStress
+  const djedStressRow = analysis.marketStress.currentMarketStress.find((m) => m.marketId === "DJED");
+  assert.ok(djedStressRow, "DJED stress loan row must exist");
+  assert.equal(djedStressRow.loanHealthPressure, 1.0);
+});
+
+test("buildCompleteAnalysis populates POL historical trajectory across all snapshot observations", () => {
+  const polLoan = {
+    id: "pol-djed",
+    marketId: "DJED",
+    publicKey: "7ac5878231522baf2972231d1a587e20a0d814c164fa7fea28ee459f",
+    amount: 2000000,
+    collateral: 800000,
+    healthFactor: 39.28,
+    APY: 0.30,
+    collaterals: [{ id: "qpol", qTokenName: "qPOL", qTokenAmount: 3670000, amount: 800000, market: { id: "POL", displayName: "POL" } }]
+  };
+
+  const polHistoryRows = [
+    {
+      timestamp: "2026-07-16T15:49:00.420Z", scope: "protocol", marketId: "",
+      totalDebtInUsd: 0, totalCollateralInUsd: 0, djedDebtInUsd: 0, usdmDebtInUsd: 0, usdcDebtInUsd: 0, iusdDebtInUsd: 0, loanCount: 0
+    },
+    {
+      timestamp: "2026-08-25T15:41:36.303Z", scope: "protocol", marketId: "",
+      totalDebtInUsd: 3022393, totalCollateralInUsd: 2981277, djedDebtInUsd: 2022574, usdmDebtInUsd: 929437, usdcDebtInUsd: 0, iusdDebtInUsd: 70381, loanCount: 3
+    },
+    {
+      timestamp: "2026-08-26T07:53:55.334Z", scope: "protocol", marketId: "",
+      totalDebtInUsd: 3189927, totalCollateralInUsd: 1506924, djedDebtInUsd: 2029470, usdmDebtInUsd: 929893, usdcDebtInUsd: 160039, iusdDebtInUsd: 70524, loanCount: 4
+    }
+  ];
+
+  const market = { id: "DJED", displayName: "DJED", symbol: "DJED", supply: 3000000, borrow: 2029470, liquidity: 970530, borrowAPY: 0.30 };
+  const djedHistory = [history("2026-08-26", { marketId: "DJED", marketDisplayName: "DJED", borrowInUsd: 2029470, supplyInUsd: 3000000 })];
+  const bundle = buildAnalysisBundle({
+    markets: [market],
+    marketSeriesById: { DJED: djedHistory },
+    dataRoot: "liqwid",
+    startDate: "2026-08-26",
+    endDate: "2026-08-26",
+    apiTotals: { supplyInUsd: 3000000, borrowInUsd: 2029470, liquidityInUsd: 970530 }
+  });
+
+  const analysis = buildCompleteAnalysis({
+    bundle,
+    allLoans: [polLoan],
+    activeLoans: [polLoan],
+    collateralLoans: [polLoan],
+    liquidatableLoans: [],
+    monthlyLiquidations: [],
+    dailyLiquidations: [],
+    loanSnapshotHistory: {
+      participation: [],
+      health: [],
+      pol: polHistoryRows,
+      reconciliation: []
+    }
+  });
+
+  assert.ok(analysis.pol, "POL context must exist");
+  assert.equal(analysis.pol.history.length, 3, "POL history must retain all 3 historical observations");
+  assert.equal(analysis.pol.history[0].date, "2026-07-16");
+  assert.equal(analysis.pol.history[0].totalDebtInUsd, 0);
+  assert.equal(analysis.pol.history[1].date, "2026-08-25");
+  assert.equal(analysis.pol.history[1].totalDebtInUsd, 3022393);
+  assert.equal(analysis.pol.history[2].date, "2026-08-26");
+  assert.equal(analysis.pol.history[2].totalDebtInUsd, 3189927);
+  assert.equal(analysis.pol.history[2].usdcDebtInUsd, 160039);
+  assert.equal(analysis.loanSnapshotHistory.pol.length, 3, "loanSnapshotHistory.pol must be preserved on output");
+});
+
+
+

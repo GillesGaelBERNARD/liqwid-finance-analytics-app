@@ -6,8 +6,7 @@ An open-source, client-side web application and data pipeline for monitoring and
 
 ## Features
 
-- **Protocol & Market Dynamics Analytics**: Explore TVL, utilization rate, borrow/supply APYs, active debt, debt and interest accrual vs repayment flows, risk metrics across all active markets, and more.
-- **USD Stablecoin Yields Comparison**: Compare historical supply APRs and yields across USD-pegged stablecoin markets (DJED, USDC, USDM, USDA, PYUSD, IUSD, etc.), with supply-weighted protocol yield aggregations, top stablecoin yield indicators, and multi-market time series overlays.
+- **Protocol & Market Dynamics Analytics**: Explore TVL, utilization rate, borrow/supply APYs, active debt, debt and interest accrual vs repayment flows, risk metrics across all active markets, POL backed DAO loan positions, markets participants concentration, and more.
 - **Client-Side & Offline Ready**: Runs directly in any web browser without needing a backend server or persistent daemon.
 - **Portable Data Store & Zip Archive**: Bundles raw historical fetches, cleaned daily histories, and computed market datasets in a portable ZIP archive (`liqwid-data.zip`) and CSV manifest (`liqwid-portable-manifest.csv`).
 - **On-Demand Data Ingestion**: Does **not** perform always-on or continuous background data ingestion. New protocol observations are queried on-demand from the official Liqwid v2 GraphQL API only when triggered by the user clicking **"Fetch new data"**.
@@ -37,6 +36,7 @@ An open-source, client-side web application and data pipeline for monitoring and
 ## Getting Started
 
 ### Prerequisites
+
 - Node.js >= 20
 - Python 3.10+ (for data scripts and app bundler)
 
@@ -53,6 +53,7 @@ An open-source, client-side web application and data pipeline for monitoring and
 ### Rebuilding the Application Bundle
 
 To rebuild the single-file HTML application (`data/liqwid/liqwid-analysis-app.html`):
+
 ```bash
 npm run build:app
 ```
@@ -61,12 +62,15 @@ npm run build:app
 
 To fetch every market from the earliest configured date, preserve the new raw API
 captures, and fully regenerate clean and computed outputs:
+
 ```bash
 npm run refresh:data
 node scripts/recompute_computed_datasets.js data/liqwid
 ```
+
 If a full replay is interrupted by endpoint rate limiting, preserve the last
 successful local baseline and complete only its missing/current observations with:
+
 ```bash
 node scripts/refresh_official_data.js data/liqwid --resume
 ```
@@ -74,6 +78,7 @@ node scripts/refresh_official_data.js data/liqwid --resume
 ### Running Tests
 
 Run the full automated test suite:
+
 ```bash
 npm test
 ```
@@ -81,6 +86,7 @@ npm test
 ### Rebuilding Data Archive
 
 To re-generate the portable `.zip` data archive (`liqwid-data.zip`) and its CSV manifest (`liqwid-portable-manifest.csv`) from local data:
+
 ```bash
 npm run rebuild:data-archive
 ```
@@ -89,6 +95,21 @@ npm run rebuild:data-archive
 
 All protocol data is sourced from the official Liqwid v2 GraphQL endpoint:
 `https://v2.api.liqwid.finance/graphql`
+
+## Protocol-Owned Liquidity (POL) & Data Notice
+
+### Treatment Across Analytics & Risk Metrics
+
+Protocol-Owned Liquidity (POL) positions represent protocol core development and ecosystem liquidity financing loans backed by locked qPOL collateral. Under Liqwid smart contract parameters, these positions carry a **100x collateral weight multiplier** (`collateralWeight: 100`) and a **0% liquidation penalty**, protecting them from liquidation.
+
+Depending on the context, POL loans are selectively integrated or excluded:
+
+- **Included**: In aggregate borrow totals, pool utilization, deposit interest yields (where POL borrowing costs directly fund supplier earnings and protocol reserves), and dedicated Protocol & Market POL dashboards.
+- **Excluded**: From borrower credit-risk tranches, health-factor distributions, near-liquidation metrics (HF &lt; 1.0, HF &le; 1.10, HF &le; 1.25), bad debt metrics, and minimum health factor tracking, since they represent governance-protected financing rather than user default risk.
+
+### Historical API Data Availability Disclaimer
+
+Prior to **August 25, 2026**, individual Protocol-Owned Liquidity (POL) loan positions and collateral details were not always returned by the official Liqwid GraphQL loans API endpoint (although POL loans were already active on-chain). Consequently, historical loan-level breakdowns, collateral valuations, and POL-specific time series here begin with the API disclosure on August 25, 2026.
 
 ## License & Attribution
 
@@ -102,4 +123,3 @@ If you clone, adapt, or build upon this codebase or dataset, please cite the sou
 Gilles-Gael Bernard. Liqwid Finance Analytics App.
 Repository: https://github.com/GillesGaelBERNARD/liqwid-finance-analytics-app
 ```
-

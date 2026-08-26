@@ -2,7 +2,7 @@ import { addDays, filterRowsByDate } from "../shared/dates.js";
 import { numberOrZero, summarizeMarket } from "../shared/metrics.js";
 import { buildMarketStressChartData } from "./chartData.js";
 import { csvToRows, safeMarketFileId } from "./dataWorkflow.js";
-import { buildCurrentExposureAnalysis } from "./currentExposureAnalysis.js";
+import { buildCurrentExposureAnalysis, isPolLoan, LIQWID_POL_PUBLIC_KEY } from "./currentExposureAnalysis.js";
 import { buildDataStatus } from "./dataStatus.js";
 import { buildLoanSnapshotHistory, LOAN_HEALTH_BUCKETS } from "./loanSnapshotHistory.js";
 import { buildMarketParametersAnalysis } from "./marketParameterHistory.js";
@@ -35,6 +35,7 @@ export async function buildCompleteAnalysisFromStore(store, bundle) {
     loanSnapshotHistory: {
       participation: csvToRows(await store.readText("computed/loan-participation-history.csv", "")),
       health: csvToRows(await store.readText("computed/loan-health-history.csv", "")),
+      pol: normalizePolRows(csvToRows(await store.readText("computed/loan-pol-history.csv", ""))),
       reconciliation: normalizeReconciliationRows(csvToRows(await store.readText("computed/loan-reconciliation-history.csv", "")))
     },
     marketParamsById
@@ -198,6 +199,33 @@ function normalizeReconciliationRows(rows) {
   }));
 }
 
+export function normalizePolRows(rows) {
+  return (Array.isArray(rows) ? rows : []).map((row) => ({
+    timestamp: row.timestamp,
+    scope: row.scope,
+    marketId: row.marketId || "",
+    debtInUsd: numberOrZero(row.debtInUsd),
+    collateralInUsd: numberOrZero(row.collateralInUsd),
+    collateralTokens: numberOrZero(row.collateralTokens),
+    borrowApy: numberOrZero(row.borrowApy),
+    annualInterestCostInUsd: numberOrZero(row.annualInterestCostInUsd),
+    nominalLtv: numberOrZero(row.nominalLtv),
+    healthFactor: finiteNumber(row.healthFactor),
+    marketBorrowShare: numberOrZero(row.marketBorrowShare),
+    loanCount: numberOrZero(row.loanCount ?? row.polLoanCount),
+    totalDebtInUsd: numberOrZero(row.totalDebtInUsd),
+    totalCollateralInUsd: numberOrZero(row.totalCollateralInUsd),
+    totalCollateralTokens: numberOrZero(row.totalCollateralTokens),
+    totalAnnualInterestCostInUsd: numberOrZero(row.totalAnnualInterestCostInUsd),
+    weightedAverageApy: numberOrZero(row.weightedAverageApy),
+    protocolBorrowShare: numberOrZero(row.protocolBorrowShare),
+    djedDebtInUsd: numberOrZero(row.djedDebtInUsd),
+    usdmDebtInUsd: numberOrZero(row.usdmDebtInUsd),
+    usdcDebtInUsd: numberOrZero(row.usdcDebtInUsd),
+    iusdDebtInUsd: numberOrZero(row.iusdDebtInUsd)
+  }));
+}
+
 export function deriveLoanPopulations(allLoanRows) {
   const sourceRows = Array.isArray(allLoanRows) ? allLoanRows : [];
   const hasSavedClassification = sourceRows.length > 0 && sourceRows.every((row) =>
@@ -241,7 +269,8 @@ export function buildCompleteAnalysis(input) {
     marketSummaries,
     input.dailyRevenue || [],
     input.dailyAllocatedFees || [],
-    input.monthlyFees || []
+    input.monthlyFees || [],
+    marketRevenue
   );
   attachMarketRevenue(marketSummaries, marketRevenue);
   const marketStress = buildStressContext(bundle, loanContext.loanState);
@@ -284,6 +313,15 @@ export function buildCompleteAnalysis(input) {
     protocolParameters
   });
 
+  const pol = buildPolAnalysisContext({
+    allLoans: input.allLoans || [],
+    activeLoans: input.activeLoans || [],
+    markets: bundle.markets || [],
+    bundle,
+    loanSnapshotHistory,
+    marketParamsById: input.marketParamsById || {}
+  });
+
   return {
     generatedAt: bundle.generatedAt || new Date().toISOString(),
     liveDataGeneratedAt: bundle.generatedAt || null,
@@ -299,6 +337,7 @@ export function buildCompleteAnalysis(input) {
     lqToken,
     marketParameters,
     protocolParameters,
+    pol,
     dataStatus
   };
 }
@@ -401,6 +440,7 @@ function activeDebtLoanSnapshotHistory(input, bundle) {
   );
   const health = sortRows(input.loanSnapshotHistory?.health || []);
   const reconciliation = sortRows(input.loanSnapshotHistory?.reconciliation || []);
+  const pol = sortRows(normalizePolRows(input.loanSnapshotHistory?.pol || []));
   let participation = sortRows((input.loanSnapshotHistory?.participation || []).filter((row) =>
     numericObservationField(row.activeDebtLoanCount)
       && numericObservationField(row.distinctActiveDebtObservedKeyCount)
@@ -417,7 +457,7 @@ function activeDebtLoanSnapshotHistory(input, bundle) {
       participation = snap.participation;
     }
   }
-  return { participation, health, reconciliation };
+  return { participation, health, reconciliation, pol };
 }
 
 function numericObservationField(value) {
@@ -498,10 +538,14 @@ function buildStressContext(bundle, loanState) {
 
 function buildLoanContext(activeLoans, liquidatableLoans) {
   const loans = activeLoans.map(normalizeLoan).filter((loan) => loan.debtInUsd > 0);
+  const organicLoans = loans.filter((loan) => !isPolLoan(loan));
+  const polLoans = loans.filter((loan) => isPolLoan(loan));
+
   const totalDebt = total(loans, "debtInUsd");
+  const totalOrganicDebt = total(organicLoans, "debtInUsd");
   const totalCollateral = total(loans, "collateralInUsd");
-  const health = loans.map((loan) => loan.healthFactor).filter(Number.isFinite).sort((a, b) => a - b);
-  const healthBuckets = healthBucketRows(loans, totalDebt);
+  const health = organicLoans.map((loan) => loan.healthFactor).filter(Number.isFinite).sort((a, b) => a - b);
+  const healthBuckets = healthBucketRows(organicLoans, totalOrganicDebt);
   const byMarket = [...groupBy(loans, "marketId")].map(([marketId, rows]) => loanMarketRow(marketId, rows, totalDebt))
     .sort((a, b) => b.loanHealthPressure - a.loanHealthPressure || b.debtInUsd - a.debtInUsd);
   const liquidatableActiveDebtByMarket = [...groupBy(liquidatableLoans.map(normalizeLoan), "marketId")].map(([marketId, rows]) => ({
@@ -510,29 +554,43 @@ function buildLoanContext(activeLoans, liquidatableLoans) {
     liquidatableDebtInUsd: total(rows, "debtInUsd"),
     liquidatableCollateralInUsd: total(rows, "collateralInUsd")
   })).sort((a, b) => b.liquidatableLoanCount - a.liquidatableLoanCount);
+
+  const organicBadDebtLoans = organicLoans.filter((loan) => (loan.debtInUsd || 0) > (loan.collateralInUsd || 0));
+  const organicBadDebtInUsd = total(organicBadDebtLoans, "debtInUsd");
+  const organicBadDebtCollateralInUsd = total(organicBadDebtLoans, "collateralInUsd");
+  const organicBadDebtShortfallInUsd = Math.max(0, organicBadDebtInUsd - organicBadDebtCollateralInUsd);
+
   const summary = loans.length ? {
-    activeDebtLoanCount: loans.length,
+    activeDebtLoanCount: organicLoans.length,
     liquidatableActiveDebtLoanCount: liquidatableLoans.length,
     totalActiveDebtInUsd: totalDebt,
+    totalOrganicDebtInUsd: totalOrganicDebt,
     totalActiveCollateralInUsd: totalCollateral,
     collateralCoverage: totalDebt ? totalCollateral / totalDebt : null,
     minHealthFactor: health[0] ?? null,
     p05HealthFactor: quantile(health, 0.05),
     p10HealthFactor: quantile(health, 0.10),
     medianHealthFactor: quantile(health, 0.50),
-    debtWeightedHealthFactor: weightedAverage(loans, "healthFactor", "debtInUsd"),
-    debtBelow100InUsd: Math.max(total(loans.filter((loan) => (Number.isFinite(loan.healthFactor) && loan.healthFactor < 1.0) || ((loan.debtInUsd || 0) > (loan.collateralInUsd || 0))), "debtInUsd"), total(loans.filter((loan) => (loan.debtInUsd || 0) > (loan.collateralInUsd || 0)), "debtInUsd")),
-    debtAtOrBelow110InUsd: total(loans.filter((loan) => (Number.isFinite(loan.healthFactor) && loan.healthFactor <= 1.10) || ((loan.debtInUsd || 0) > (loan.collateralInUsd || 0))), "debtInUsd"),
-    debtAtOrBelow125InUsd: total(loans.filter((loan) => (Number.isFinite(loan.healthFactor) && loan.healthFactor <= 1.25) || ((loan.debtInUsd || 0) > (loan.collateralInUsd || 0))), "debtInUsd"),
-    debtAtOrBelow150InUsd: total(loans.filter((loan) => (Number.isFinite(loan.healthFactor) && loan.healthFactor <= 1.50) || ((loan.debtInUsd || 0) > (loan.collateralInUsd || 0))), "debtInUsd")
+    debtWeightedHealthFactor: weightedAverage(organicLoans, "healthFactor", "debtInUsd"),
+    debtBelow100InUsd: Math.max(total(organicLoans.filter((loan) => (Number.isFinite(loan.healthFactor) && loan.healthFactor < 1.0) || ((loan.debtInUsd || 0) > (loan.collateralInUsd || 0))), "debtInUsd"), organicBadDebtInUsd),
+    debtAtOrBelow110InUsd: total(organicLoans.filter((loan) => (Number.isFinite(loan.healthFactor) && loan.healthFactor <= 1.10) || ((loan.debtInUsd || 0) > (loan.collateralInUsd || 0))), "debtInUsd"),
+    debtAtOrBelow125InUsd: total(organicLoans.filter((loan) => (Number.isFinite(loan.healthFactor) && loan.healthFactor <= 1.25) || ((loan.debtInUsd || 0) > (loan.collateralInUsd || 0))), "debtInUsd"),
+    debtAtOrBelow150InUsd: total(organicLoans.filter((loan) => (Number.isFinite(loan.healthFactor) && loan.healthFactor <= 1.50) || ((loan.debtInUsd || 0) > (loan.collateralInUsd || 0))), "debtInUsd"),
+    badDebtLoanCount: organicBadDebtLoans.length,
+    badDebtInUsd: organicBadDebtInUsd,
+    badDebtCollateralInUsd: organicBadDebtCollateralInUsd,
+    badDebtShortfallInUsd: organicBadDebtShortfallInUsd,
+    polDebtInUsd: total(polLoans, "debtInUsd"),
+    polCollateralInUsd: total(polLoans, "collateralInUsd"),
+    polLoanCount: polLoans.length
   } : { activeDebtLoanCount: 0, liquidatableActiveDebtLoanCount: liquidatableLoans.length };
-  summary.debtAtOrBelow125Share = totalDebt ? numberOrZero(summary.debtAtOrBelow125InUsd) / totalDebt : null;
-  summary.debtAtOrBelow150Share = totalDebt ? numberOrZero(summary.debtAtOrBelow150InUsd) / totalDebt : null;
-  const summaryTakeaway = loans.length
-    ? `Current active-debt data contains ${loans.length} loans and ${formatMoney(totalDebt)} of debt; the minimum health factor is ${formatNumber(summary.minHealthFactor)}.`
+  summary.debtAtOrBelow125Share = totalOrganicDebt ? numberOrZero(summary.debtAtOrBelow125InUsd) / totalOrganicDebt : null;
+  summary.debtAtOrBelow150Share = totalOrganicDebt ? numberOrZero(summary.debtAtOrBelow150InUsd) / totalOrganicDebt : null;
+  const summaryTakeaway = organicLoans.length
+    ? `Current active-debt data contains ${organicLoans.length} organic borrower loans and ${formatMoney(totalOrganicDebt)} of debt; the minimum health factor is ${formatNumber(summary.minHealthFactor)}.`
     : "No active-debt loans were returned by the current loan snapshot.";
   return {
-    activeDebtLoanCount: loans.length,
+    activeDebtLoanCount: organicLoans.length,
     activeDebtMinHealthFactor: health[0] ?? null,
     liquidatableActiveDebtLoanCount: liquidatableLoans.length,
     liquidatableActiveDebtByMarket,
@@ -606,7 +664,7 @@ function buildLiquidationContext(monthlyInput, dailyInput, loanContext) {
   };
 }
 
-function buildRevenueContext(bundle, marketSummaries, dailyInput, dailyAllocatedFeesInput, monthlyFeesInput) {
+function buildRevenueContext(bundle, marketSummaries, dailyInput, dailyAllocatedFeesInput, monthlyFeesInput, marketRevenue = null) {
   const daily = dailyInput.map((row) => {
     const collectedInterestRevenueInUsd = numberOrZero(row.revenueFromRepaidInterestInUsd);
     const collectedOriginationRevenueInUsd = numberOrZero(row.loanOriginationFeesInUsd) + numberOrZero(row.loanOriginationFeesMinAdaInUsd);
@@ -671,12 +729,16 @@ function buildRevenueContext(bundle, marketSummaries, dailyInput, dailyAllocated
   const runRate = latestRunRate?.annualizedRunRateInUsd ?? null;
   const change = recent90Total !== null && previous90Total > 0 ? recent90Total / previous90Total - 1 : null;
   const positiveOriginationDays = completeDays.filter((row) => row.observedOriginationFeeFlowInUsd > 0);
+  const marketYtdContributions = marketRevenue?.ytdMarketContributions || [];
+  const topYtdMarket = marketRevenue?.topYtdMarket || null;
+
   return {
     daily,
     monthlyCollectedRevenue,
     dailyAllocation,
     monthlyAllocation,
     annualizedRunRateSeries: runRateSeries,
+    marketYtdContributions,
     summary: {
       coverageFromDate: daily[0]?.date ?? null,
       coverageToDate: daily.at(-1)?.date ?? null,
@@ -703,6 +765,7 @@ function buildRevenueContext(bundle, marketSummaries, dailyInput, dailyAllocated
       ytdCollectedCoverageFromDate: ytdCollectedCompleteDays[0]?.date ?? null,
       ytdCollectedCoverageToDate: ytdCollectedCompleteDays.at(-1)?.date ?? null,
       ytdCollectedCompleteDays: ytdCollectedCompleteDays.length,
+      topRevenueMarket: topYtdMarket,
       latestPositiveOriginationFeeDate: positiveOriginationDays.at(-1)?.date ?? null,
       allocatedProtocolRevenueInUsd: completeAllocationDays.length ? total(completeAllocationDays, "allocatedProtocolRevenueInUsd") : null,
       allocatedProtocolInterestRevenueInUsd: completeAllocationDays.length ? total(completeAllocationDays, "allocatedProtocolInterestRevenueInUsd") : null,
@@ -980,8 +1043,12 @@ function dailyLiquidationCoverage(monthly, daily) {
 
 function normalizeLoan(loan) {
   return {
+    id: loan.id,
     marketId: loan.marketId || "Unknown",
     marketDisplayName: loan.marketDisplayName || loan.market?.displayName || loan.market?.symbol || loan.marketId || "Unknown",
+    publicKey: loan.publicKey || loan.observedKey || "",
+    observedKey: loan.publicKey || loan.observedKey || "",
+    collaterals: loan.collaterals || [],
     debtInUsd: numberOrZero(loan.debtInUsd ?? loan.amount),
     collateralInUsd: numberOrZero(loan.collateralInUsd ?? loan.collateral),
     healthFactor: finiteNumber(loan.healthFactor),
@@ -993,31 +1060,49 @@ function normalizeLoan(loan) {
 function loanMarketRow(marketId, rows, protocolDebt) {
   const marketDisplayName = rows[0]?.marketDisplayName || marketId;
   const debt = total(rows, "debtInUsd");
-  const health = rows.map((row) => row.healthFactor).filter(Number.isFinite).sort((a, b) => a - b);
-  const badDebtLoans = rows.filter((row) => (row.debtInUsd || 0) > (row.collateralInUsd || 0));
+  const collateralInUsd = total(rows, "collateralInUsd");
+
+  const organicRows = rows.filter((r) => !isPolLoan(r));
+  const polRows = rows.filter((r) => isPolLoan(r));
+
+  const organicDebt = total(organicRows, "debtInUsd");
+  const organicCollateral = total(organicRows, "collateralInUsd");
+
+  const health = organicRows.map((row) => row.healthFactor).filter(Number.isFinite).sort((a, b) => a - b);
+  const badDebtLoans = organicRows.filter((row) => (row.debtInUsd || 0) > (row.collateralInUsd || 0));
   const badDebtInUsd = total(badDebtLoans, "debtInUsd");
   const badDebtCollateralInUsd = total(badDebtLoans, "collateralInUsd");
   const badDebtShortfallInUsd = Math.max(0, badDebtInUsd - badDebtCollateralInUsd);
-  const loansLt100 = rows.filter((row) => (Number.isFinite(row.healthFactor) && row.healthFactor < 1.0) || ((row.debtInUsd || 0) > (row.collateralInUsd || 0)));
-  const loansLe110 = rows.filter((row) => (Number.isFinite(row.healthFactor) && row.healthFactor <= 1.10) || ((row.debtInUsd || 0) > (row.collateralInUsd || 0)));
-  const loansLe125 = rows.filter((row) => (Number.isFinite(row.healthFactor) && row.healthFactor <= 1.25) || ((row.debtInUsd || 0) > (row.collateralInUsd || 0)));
+  const loansLt100 = organicRows.filter((row) => (Number.isFinite(row.healthFactor) && row.healthFactor < 1.0) || ((row.debtInUsd || 0) > (row.collateralInUsd || 0)));
+  const loansLe110 = organicRows.filter((row) => (Number.isFinite(row.healthFactor) && row.healthFactor <= 1.10) || ((row.debtInUsd || 0) > (row.collateralInUsd || 0)));
+  const loansLe125 = organicRows.filter((row) => (Number.isFinite(row.healthFactor) && row.healthFactor <= 1.25) || ((row.debtInUsd || 0) > (row.collateralInUsd || 0)));
   const debtLt100 = Math.max(total(loansLt100, "debtInUsd"), badDebtInUsd);
   const debtLe110 = Math.max(total(loansLe110, "debtInUsd"), badDebtInUsd);
   const debt100To110 = Math.max(0, debtLe110 - debtLt100);
-  const debt110To125 = total(rows.filter((row) => row.healthFactor > 1.10 && row.healthFactor <= 1.25), "debtInUsd");
-  const debt125To150 = total(rows.filter((row) => row.healthFactor > 1.25 && row.healthFactor <= 1.50), "debtInUsd");
-  const debtAbove150 = total(rows.filter((row) => row.healthFactor > 1.50), "debtInUsd");
+  const debt110To125 = total(organicRows.filter((row) => row.healthFactor > 1.10 && row.healthFactor <= 1.25), "debtInUsd");
+  const debt125To150 = total(organicRows.filter((row) => row.healthFactor > 1.25 && row.healthFactor <= 1.50), "debtInUsd");
+  const debtAbove150 = total(organicRows.filter((row) => row.healthFactor > 1.50), "debtInUsd");
+
+  const polDebtInUsd = total(polRows, "debtInUsd");
+  const polCollateralInUsd = total(polRows, "collateralInUsd");
+
   return {
     marketId,
     marketDisplayName,
     loanCount: rows.length,
+    organicLoanCount: organicRows.length,
+    polLoanCount: polRows.length,
     debtInUsd: debt,
-    collateralInUsd: total(rows, "collateralInUsd"),
+    organicDebtInUsd: organicDebt,
+    polDebtInUsd,
+    collateralInUsd,
+    organicCollateralInUsd: organicCollateral,
+    polCollateralInUsd,
     debtShare: protocolDebt ? debt / protocolDebt : null,
     minHealthFactor: health[0] ?? null,
     p10HealthFactor: quantile(health, 0.10),
     medianHealthFactor: quantile(health, 0.50),
-    debtWeightedHealthFactor: weightedAverage(rows, "healthFactor", "debtInUsd"),
+    debtWeightedHealthFactor: weightedAverage(organicRows, "healthFactor", "debtInUsd"),
     weightedLtv: weightedAverage(rows, "LTV", "debtInUsd"),
     weightedApy: weightedAverage(rows, "APY", "debtInUsd"),
     loanCountBelow100: loansLt100.length,
@@ -1036,8 +1121,8 @@ function loanMarketRow(marketId, rows, protocolDebt) {
     badDebtInUsd,
     badDebtCollateralInUsd,
     badDebtShortfallInUsd,
-    loanHealthPressure: debt ? (debtLe110 + 0.30 * debt110To125 + 0.05 * debt125To150) / debt : 0,
-    healthBuckets: healthBucketRows(rows, debt)
+    loanHealthPressure: organicDebt ? (debtLe110 + 0.30 * debt110To125 + 0.05 * debt125To150) / organicDebt : 0,
+    healthBuckets: healthBucketRows(organicRows, organicDebt)
   };
 }
 
@@ -1106,4 +1191,142 @@ function formatMoney(value) {
 
 function formatNumber(value) {
   return Number.isFinite(value) ? value.toFixed(2) : "unavailable";
+}
+
+export function buildPolAnalysisContext(input = {}) {
+  const activeLoans = Array.isArray(input.activeLoans) ? input.activeLoans : [];
+  const markets = Array.isArray(input.markets) ? input.markets : (input.bundle?.markets || []);
+  const marketMap = new Map(markets.map((m) => [m.id, m]));
+
+  const polLoans = activeLoans.filter((l) => isPolLoan(l));
+  let totalDebtInUsd = 0;
+  let totalCollateralInUsd = 0;
+  let totalCollateralTokens = 0;
+  let totalAnnualInterestCostInUsd = 0;
+
+  const positions = polLoans.map((loan) => {
+    const market = marketMap.get(loan.marketId) || {};
+    const debtInUsd = Number(loan.adjustedAmount ?? loan.amount ?? loan.debtInUsd ?? 0);
+    const collateralInUsd = Number(loan.collateral ?? loan.collateralInUsd ?? 0);
+    let collaterals = loan.collaterals;
+    if (typeof collaterals === "string") {
+      try { collaterals = JSON.parse(collaterals); } catch { collaterals = []; }
+    }
+    const polCol = Array.isArray(collaterals) ? collaterals.find((c) => {
+      const q = String(c?.qTokenName || c?.displayName || "").toUpperCase();
+      const m = String(c?.market?.id || c?.marketId || "").toUpperCase();
+      return q === "QPOL" || m === "POL";
+    }) : null;
+    const collateralTokens = polCol ? Number(polCol.qTokenAmount ?? 0) : 0;
+    const apy = Number(loan.APY ?? market.borrowAPY ?? market.borrowAPR ?? 0);
+    const healthFactor = Number(loan.healthFactor ?? 0);
+    const ltv = collateralInUsd > 0 ? (debtInUsd / collateralInUsd) : 0;
+    const nominalHealthFactor = debtInUsd > 0 ? (collateralInUsd / debtInUsd) : 0;
+    const annualInterestInUsd = debtInUsd * apy;
+
+    const marketTotalBorrowInUsd = Number(market.borrow ?? market.borrowInUsd ?? debtInUsd);
+    const marketBorrowShare = marketTotalBorrowInUsd > 0 ? Math.min(1, debtInUsd / marketTotalBorrowInUsd) : 1;
+
+    totalDebtInUsd += debtInUsd;
+    totalCollateralInUsd += collateralInUsd;
+    totalCollateralTokens += collateralTokens;
+    totalAnnualInterestCostInUsd += annualInterestInUsd;
+
+    return {
+      id: loan.id,
+      marketId: loan.marketId,
+      marketDisplayName: market.displayName || market.symbol || loan.marketId,
+      publicKey: loan.publicKey || LIQWID_POL_PUBLIC_KEY,
+      debtInUsd,
+      collateralInUsd,
+      collateralTokens,
+      collateralTokenName: "qPOL",
+      borrowAPY: apy,
+      healthFactor,
+      nominalLTV: ltv,
+      nominalHealthFactor,
+      annualInterestCostInUsd: annualInterestInUsd,
+      marketTotalBorrowInUsd,
+      marketBorrowShare,
+      canBeLiquidated: false,
+      governanceProtection: {
+        collateralWeight: 100,
+        weightedLiquidationThreshold: 100,
+        weightedMaxLoanToValue: 86.96,
+        liquidationPenalty: 0,
+        liquidationProfitability: 0
+      }
+    };
+  }).sort((a, b) => b.debtInUsd - a.debtInUsd);
+
+  const totalProtocolBorrowInUsd = Number(input.bundle?.currentTotals?.borrowInUsd || markets.reduce((sum, m) => sum + Number(m.borrow ?? 0), 0) || totalDebtInUsd);
+  const protocolBorrowShare = totalProtocolBorrowInUsd > 0 ? totalDebtInUsd / totalProtocolBorrowInUsd : 0;
+  const weightedAverageAPY = totalDebtInUsd > 0 ? totalAnnualInterestCostInUsd / totalDebtInUsd : 0;
+
+  const djedPos = positions.find((p) => p.marketId === "DJED");
+  const usdmPos = positions.find((p) => p.marketId === "USDM");
+  const usdcPos = positions.find((p) => p.marketId === "USDC" || p.marketId === "wanUSDC");
+  const iusdPos = positions.find((p) => p.marketId === "IUSD");
+
+  const rawPolHistory = Array.isArray(input.loanSnapshotHistory?.pol) ? input.loanSnapshotHistory.pol : [];
+  const protocolHistoryRows = rawPolHistory
+    .filter((r) => r.scope === "protocol")
+    .map((r) => ({
+      date: String(r.timestamp || "").slice(0, 10),
+      timestamp: r.timestamp,
+      totalDebtInUsd: Number(r.totalDebtInUsd ?? 0),
+      totalCollateralInUsd: Number(r.totalCollateralInUsd ?? 0),
+      totalCollateralTokens: Number(r.totalCollateralTokens ?? 0),
+      totalAnnualInterestCostInUsd: Number(r.totalAnnualInterestCostInUsd ?? 0),
+      weightedBorrowApy: Number(r.weightedBorrowApy ?? r.weightedAverageApy ?? 0),
+      protocolBorrowShare: Number(r.protocolBorrowShare ?? 0),
+      djedDebtInUsd: Number(r.djedDebtInUsd ?? 0),
+      usdmDebtInUsd: Number(r.usdmDebtInUsd ?? 0),
+      usdcDebtInUsd: Number(r.usdcDebtInUsd ?? 0),
+      iusdDebtInUsd: Number(r.iusdDebtInUsd ?? 0),
+      loanCount: Number(r.loanCount ?? r.polLoanCount ?? 0)
+    }))
+    .sort((a, b) => String(a.timestamp).localeCompare(String(b.timestamp)));
+
+  const currentDate = String(input.bundle?.generatedAt || new Date().toISOString()).slice(0, 10);
+  const fallbackHistory = [
+    {
+      date: currentDate,
+      timestamp: input.bundle?.generatedAt || new Date().toISOString(),
+      totalDebtInUsd,
+      totalCollateralInUsd,
+      polShareOfProtocolBorrow: protocolBorrowShare,
+      djedDebtInUsd: djedPos?.debtInUsd || 0,
+      usdmDebtInUsd: usdmPos?.debtInUsd || 0,
+      usdcDebtInUsd: usdcPos?.debtInUsd || 0,
+      iusdDebtInUsd: iusdPos?.debtInUsd || 0,
+      loanCount: positions.length
+    }
+  ];
+
+  const history = protocolHistoryRows.length > 0 ? protocolHistoryRows : fallbackHistory;
+
+  return {
+    summary: {
+      totalDebtInUsd,
+      totalCollateralInUsd,
+      totalCollateralTokens,
+      totalAnnualInterestCostInUsd,
+      totalProtocolBorrowInUsd,
+      protocolBorrowShare,
+      weightedAverageAPY,
+      loanCount: positions.length,
+      publicKey: LIQWID_POL_PUBLIC_KEY
+    },
+    positions,
+    history,
+    governanceRules: {
+      collateralWeight: 100,
+      weightedLiquidationThreshold: 100,
+      weightedMaxLoanToValue: 86.96,
+      liquidationPenalty: 0,
+      liquidationProfitability: 0,
+      description: "Liqwid Plutus validator rules assign a 100x collateral weight to qPOL with 0% liquidation penalty and 0% profitability, protecting protocol-owned liquidity backing."
+    }
+  };
 }

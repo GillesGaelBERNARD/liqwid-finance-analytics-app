@@ -1,5 +1,29 @@
 import { computeLoanAggregateReconciliation, classifyReconciliationState } from "../shared/metrics.js";
 
+export const LIQWID_POL_PUBLIC_KEY = "7ac5878231522baf2972231d1a587e20a0d814c164fa7fea28ee459f";
+
+export function isPolLoan(loan) {
+  if (!loan) return false;
+  const key = String(loan.publicKey || loan.observedKey || "");
+  if (key && key.toLowerCase() === LIQWID_POL_PUBLIC_KEY.toLowerCase()) return true;
+  let collaterals = loan.collaterals;
+  if (typeof collaterals === "string") {
+    try {
+      collaterals = JSON.parse(collaterals);
+    } catch {
+      if (collaterals.includes("qPOL") || collaterals.includes('"POL"')) return true;
+    }
+  }
+  if (Array.isArray(collaterals)) {
+    return collaterals.some((c) => {
+      const qName = String(c?.qTokenName || c?.displayName || "").toUpperCase();
+      const mId = String(c?.market?.id || c?.marketId || c?.id || "").toUpperCase();
+      return qName === "QPOL" || mId === "POL" || mId.includes(".POL") || mId.includes("QPOL");
+    });
+  }
+  return false;
+}
+
 const HEALTH_BANDS = [
   ["debtBelow100InUsd", -Infinity, 1.00],
   ["debt100To110InUsd", 1.00, 1.10],
@@ -19,7 +43,7 @@ export const EXPOSURE_HEALTH_TRANCHES = Object.freeze([
 ]);
 
 export function buildHealthTranches(activeLoans) {
-  const loans = Array.isArray(activeLoans) ? activeLoans : [];
+  const loans = (Array.isArray(activeLoans) ? activeLoans : []).filter((loan) => !isPolLoan(loan));
   const totalActiveDebt = sumValues(loans.map((loan) => loan.debtInUsd));
   return EXPOSURE_HEALTH_TRANCHES.map((tranche) => {
     const matching = loans.filter((loan) => {
@@ -152,16 +176,24 @@ export function buildCurrentExposureAnalysis(input) {
   const activeLoans = normalizeLoans(input.activeLoans || [], marketNames).filter((loan) => loan.debtInUsd > 0);
   const collateralLoans = normalizeLoans(input.collateralLoans || [], marketNames);
 
-  const badDebtLoans = activeLoans.filter((loan) => (loan.debtInUsd || 0) > (loan.collateralInUsd || 0));
+  const organicLoans = activeLoans.filter((loan) => !isPolLoan(loan));
+  const polLoans = activeLoans.filter((loan) => isPolLoan(loan));
+
+  const badDebtLoans = organicLoans.filter((loan) => (loan.debtInUsd || 0) > (loan.collateralInUsd || 0));
   const badDebtInUsd = badDebtLoans.reduce((sum, loan) => sum + loan.debtInUsd, 0);
   const badDebtCollateralInUsd = badDebtLoans.reduce((sum, loan) => sum + loan.collateralInUsd, 0);
   const badDebtShortfallInUsd = Math.max(0, badDebtInUsd - badDebtCollateralInUsd);
   const badDebtLoanCount = badDebtLoans.length;
 
-  const rawDebtBelowHf100InUsd = activeLoans
+  const rawDebtBelowHf100InUsd = organicLoans
     .filter((loan) => (Number.isFinite(loan.healthFactor) && loan.healthFactor < 1.0) || ((loan.debtInUsd || 0) > (loan.collateralInUsd || 0)))
     .reduce((sum, loan) => sum + loan.debtInUsd, 0);
   const debtBelowHf100InUsd = Math.max(rawDebtBelowHf100InUsd, badDebtInUsd);
+
+  const polDebtInUsd = polLoans.reduce((sum, loan) => sum + loan.debtInUsd, 0);
+  const polCollateralInUsd = polLoans.reduce((sum, loan) => sum + loan.collateralInUsd, 0);
+  const totalActiveDebtInUsd = activeLoans.reduce((sum, loan) => sum + loan.debtInUsd, 0);
+  const polShareOfTotalDebt = totalActiveDebtInUsd > 0 ? polDebtInUsd / totalActiveDebtInUsd : 0;
 
   return {
     summary: {
@@ -169,7 +201,11 @@ export function buildCurrentExposureAnalysis(input) {
       badDebtInUsd,
       badDebtCollateralInUsd,
       badDebtShortfallInUsd,
-      badDebtLoanCount
+      badDebtLoanCount,
+      polDebtInUsd,
+      polCollateralInUsd,
+      polShareOfTotalDebt,
+      polLoanCount: polLoans.length
     },
     alerts: buildAlertAnalysis(bundle),
     collateralRisk: buildCollateralRisk(activeLoans),
@@ -262,10 +298,11 @@ function buildAlertAnalysis(bundle) {
 }
 
 function buildCollateralRisk(activeLoans) {
+  const loans = (Array.isArray(activeLoans) ? activeLoans : []).filter((loan) => !isPolLoan(loan));
   const rowsByCollateral = new Map();
   const rowsByBorrowed = new Map();
   const shockRows = new Map();
-  for (const loan of activeLoans) {
+  for (const loan of loans) {
     const collateralTotal = loan.collaterals.reduce((sum, item) => sum + item.amountInUsd, 0);
     const isBadDebt = (loan.debtInUsd || 0) > (loan.collateralInUsd || 0);
     const badDebtExcessInUsd = isBadDebt ? (loan.debtInUsd || 0) - (loan.collateralInUsd || 0) : 0;
@@ -389,23 +426,28 @@ function buildBorrowerConcentration(bundle, activeLoans) {
     totalDebtInUsd: state.loans.reduce((sum, loan) => sum + loan.debtInUsd, 0)
   })).sort((a, b) => b.totalDebtInUsd - a.totalDebtInUsd || a.observedKey.localeCompare(b.observedKey));
 
-  const observedKeyRows = rankedKeys.map((entry, index) => ({
-    observedKeyLabel: `Observed key ${index + 1}`,
-    totalDebtInUsd: entry.totalDebtInUsd,
-    protocolBorrowShare: protocolBorrowInUsd > 0 ? entry.totalDebtInUsd / protocolBorrowInUsd : null,
-    loanCount: entry.state.loans.length,
-    marketCount: entry.state.marketIds.size,
-    thresholdRows: OBSERVED_KEY_HF_THRESHOLDS.map((threshold) => {
-      const lowHfDebtInUsd = entry.state.loans
-        .filter((loan) => Number.isFinite(loan.healthFactor) && loan.healthFactor <= threshold)
-        .reduce((sum, loan) => sum + loan.debtInUsd, 0);
-      return {
-        threshold,
-        lowHfDebtInUsd,
-        lowHfShareOfKeyDebt: entry.totalDebtInUsd > 0 ? lowHfDebtInUsd / entry.totalDebtInUsd : null
-      };
-    })
-  }));
+  const observedKeyRows = rankedKeys.map((entry, index) => {
+    const isPolKey = isPolLoan({ observedKey: entry.observedKey });
+    const observedKeyLabel = isPolKey ? "Liqwid POL (Team/Protocol)" : `Observed key ${index + 1}`;
+    return {
+      observedKeyLabel,
+      isPolKey,
+      totalDebtInUsd: entry.totalDebtInUsd,
+      protocolBorrowShare: protocolBorrowInUsd > 0 ? entry.totalDebtInUsd / protocolBorrowInUsd : null,
+      loanCount: entry.state.loans.length,
+      marketCount: entry.state.marketIds.size,
+      thresholdRows: OBSERVED_KEY_HF_THRESHOLDS.map((threshold) => {
+        const lowHfDebtInUsd = entry.state.loans
+          .filter((loan) => Number.isFinite(loan.healthFactor) && loan.healthFactor <= threshold)
+          .reduce((sum, loan) => sum + loan.debtInUsd, 0);
+        return {
+          threshold,
+          lowHfDebtInUsd,
+          lowHfShareOfKeyDebt: entry.totalDebtInUsd > 0 ? lowHfDebtInUsd / entry.totalDebtInUsd : null
+        };
+      })
+    };
+  });
 
   const concentrationSensitivity = OBSERVED_KEY_HF_THRESHOLDS.map((threshold) => {
     const qualifyingByKey = rankedKeys.map((entry) => entry.state.loans
@@ -627,7 +669,11 @@ function buildSupplySide(bundle, collateralLoans) {
 
 function normalizeLoans(rows, marketNames) {
   return rows.map((row) => {
-    const collaterals = normalizeCollaterals(row.collaterals || [], marketNames);
+    let rawCollaterals = row.collaterals || [];
+    if (typeof rawCollaterals === "string") {
+      try { rawCollaterals = JSON.parse(rawCollaterals); } catch { rawCollaterals = []; }
+    }
+    const collaterals = normalizeCollaterals(rawCollaterals, marketNames);
     const collateralsSum = collaterals.reduce((sum, item) => sum + item.amountInUsd, 0);
     const collateralInUsd = collateralsSum > 0 ? collateralsSum : finite(row.collateralInUsd, row.collateral);
     const marketId = String(row.marketId || row.market?.id || "Unknown");
@@ -636,10 +682,13 @@ function normalizeLoans(rows, marketNames) {
     );
     const rawAmount = finite(row.amount, row.amountInUsd);
     const adjustedAmount = finite(row.adjustedAmount, row.adjustedDebt, row.adjustedAmountInUsd, row.debtInUsd, rawAmount);
+    const publicKey = String(row.publicKey || row.observedKey || "");
     return {
+      id: row.id,
       marketId,
       marketDisplayName,
-      observedKey: row.publicKey ? String(row.publicKey) : "",
+      publicKey,
+      observedKey: publicKey,
       amount: rawAmount,
       adjustedAmount: adjustedAmount,
       amountInUsd: rawAmount,
@@ -656,12 +705,14 @@ function normalizeCollaterals(rows, marketNames) {
   const byMarket = new Map();
   for (const row of rows) {
     const marketId = String(row.market?.id || row.marketId || row.id || row.qTokenName || "Unknown");
+    const qTokenName = String(row.qTokenName || row.displayName || "");
     const marketDisplayName = String(
       row.marketDisplayName || row.market?.displayName || row.market?.symbol || row.qTokenName || marketNames?.get(marketId) || marketId
     );
     if (!byMarket.has(marketId)) {
       byMarket.set(marketId, {
         marketId,
+        qTokenName,
         marketDisplayName,
         amountInUsd: 0
       });

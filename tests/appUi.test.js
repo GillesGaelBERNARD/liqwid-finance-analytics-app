@@ -140,13 +140,13 @@ test("standalone app is one zero-data, folder-backed, client-only HTML workflow"
   assert.match(html, /position:\s*sticky[\s\S]{0,160}?top:\s*0/);
   for (const section of [
     "Liquidity", "Liquidity & Rates", "Debt flows", "Interest flows", "USD stablecoin yields", "Revenue", "Liquidations", "Exposure", "Market impact", "Participation and concentration",
-    "Health", "Parameters History", "Risk & Parameters"
+    "Health", "Parameters History", "Risk & Parameters", "Protocol-Owned Liquidity (POL)"
   ]) {
     assert.ok(html.includes(section), `standalone app is missing section tab ${section}`);
   }
   for (const viewId of [
     "overview", "protocolDebtFlows", "protocolInterestFlows", "protocolStablecoinYields", "revenue", "liquidations", "exposure", "impact", "protocolParticipation",
-    "protocolParameters", "marketOverview", "marketRepayments", "marketInterest", "marketRevenue", "marketHealth", "marketParticipation", "marketParameters"
+    "protocolParameters", "protocolPol", "marketOverview", "marketRepayments", "marketInterest", "marketRevenue", "marketHealth", "marketParticipation", "marketParameters", "marketPol"
   ]) {
     assert.match(html, new RegExp(`<section id="${viewId}" class="view`), `standalone app is missing ${viewId}`);
   }
@@ -156,11 +156,14 @@ test("standalone app is one zero-data, folder-backed, client-only HTML workflow"
   assert.match(html, /Where is current debt most vulnerable to market or collateral stress\?/);
   assert.match(html, /Which markets contribute most to protocol-wide debt, interest, repayments, positive gaps, and stress\?/);
   assert.match(html, /Where is this market's capital, and how expensive or constrained is borrowing\?/);
-  assert.match(html, /When does debt repayment activity accelerate, fade, or stop\?/);
-  assert.match(html, /\["marketParticipation", "Participation and concentration"\],\s*\["marketParameters", "Parameters History"\]\s*\]/);
-  assert.match(html, /\["protocolLqToken", "LQ token & staking"\],\s*\["protocolParameters", "Risk & Parameters"\]\s*\]/);
+  assert.match(html, /\["marketParticipation", "Participation and concentration"\],\s*\["marketParameters", "Parameters History"\],\s*\["marketPol", "Protocol-Owned Liquidity \(POL\)"\]\s*\]/);
+  assert.match(html, /\["protocolParameters", "Risk & Parameters"\],\s*\["protocolPol", "Protocol-Owned Liquidity \(POL\)"\]\s*\]/);
   assert.match(html, /function renderProtocolParameters\(\)/);
+  assert.match(html, /function renderProtocolPol\(\)/);
+  assert.match(html, /POL share of protocol borrow/);
+  assert.match(html, /function renderMarketPol\(\)/);
   assert.match(html, /Protocol parameter landscape/);
+  assert.match(html, /Tracking the Liqwid DAO and core development infrastructure financing loans/);
   assert.match(html, /Borrow APR curve atlas/);
   assert.match(html, /Current capacity headroom/);
   assert.match(html, /Current market guardrails/);
@@ -384,6 +387,7 @@ test("standalone app is one zero-data, folder-backed, client-only HTML workflow"
   assert.match(revenueView, /kpi\("YTD collected revenue", usd\(summary\.ytdCollectedRevenueInUsd\)/);
   assert.match(revenueView, /kpi\("Revenue from repaid interest", usd\(summary\.ytdCollectedInterestRevenueInUsd\)/);
   assert.match(revenueView, /kpi\("Loan origination fees", usd\(summary\.ytdCollectedOriginationRevenueInUsd\)/);
+  assert.match(revenueView, /kpi\("Top revenue market", topMarketName, topMarketNote\)/);
   assert.match(revenueView, /chartSection\("Collected revenue"/);
   assert.match(revenueView, /kpi\("Collected revenue"/);
   assert.match(revenueView, /kpi\("Interest revenue collected"/);
@@ -391,6 +395,7 @@ test("standalone app is one zero-data, folder-backed, client-only HTML workflow"
   assert.match(revenueView, /periodLabel\(summary\.collectedCoverageFromDate, summary\.collectedCoverageToDate\)/);
   assert.match(revenueView, /"Daily collected revenue"/);
   assert.match(revenueView, /"Monthly collected revenue"/);
+  assert.match(revenueView, /interactiveBreakdownPanel\("Market YTD revenue contribution",\s*"protocolMarketRevenueContributionYtd"/);
   assert.doesNotMatch(revenueView, /liquidationProfit/i);
   assert.match(revenueView, /metricPeriodGroup\("All-time collected revenue"/);
   assert.match(revenueView, /metricPeriodGroup\("Cumulative accrued DAO allocation"/);
@@ -410,6 +415,7 @@ test("standalone app is one zero-data, folder-backed, client-only HTML workflow"
   const collectedSectionIdx = revenueView.indexOf('chartSection("Collected revenue"');
   const collectedDailyIdx = revenueView.indexOf('"Daily collected revenue"');
   const collectedMonthlyIdx = revenueView.indexOf('"Monthly collected revenue"');
+  const marketContributionIdx = revenueView.indexOf('"Market YTD revenue contribution"');
   const daoSectionIdx = revenueView.indexOf('chartSection("Accrued DAO revenue"');
   const daoMonthlyIdx = revenueView.indexOf('"Monthly DAO revenue allocation"');
   const daoDailyIdx = revenueView.indexOf('"Daily DAO revenue allocation"');
@@ -422,7 +428,8 @@ test("standalone app is one zero-data, folder-backed, client-only HTML workflow"
       && collectedSectionIdx > allTimeCollectedGroupIdx
       && collectedDailyIdx > collectedSectionIdx
       && collectedMonthlyIdx > collectedDailyIdx
-      && daoSectionIdx > collectedMonthlyIdx
+      && marketContributionIdx > collectedMonthlyIdx
+      && daoSectionIdx > marketContributionIdx
       && runRateIdx > daoSectionIdx
       && daoMonthlyIdx > runRateIdx
       && daoDailyIdx > daoMonthlyIdx
@@ -474,7 +481,7 @@ test("standalone app is one zero-data, folder-backed, client-only HTML workflow"
   assert.match(marketHealthView, /marketHealthHistoryDebt/);
   assert.doesNotMatch(marketHealthView, /marketBorrowConcentration|marketCollateralizedSupplyConcentration|health and concentration/i);
   const healthKpiSections = marketHealthView.match(/<div class="kpis">[\s\S]*?<\/div>/g) || [];
-  assert.equal(healthKpiSections.length, 3, "Market Health top stats must be split into 3 distinct sections");
+  assert.equal(healthKpiSections.length, 4, "Market Health stats must include 3 top organic sections and 1 conditional POL section");
   assert.match(healthKpiSections[0], /Active-debt positions/);
   assert.match(healthKpiSections[0], /Active-loan debt/);
   assert.doesNotMatch(healthKpiSections[0], /Debt at HF < 1\.0|Bad-debt positions/);
@@ -486,6 +493,10 @@ test("standalone app is one zero-data, folder-backed, client-only HTML workflow"
   assert.match(healthKpiSections[2], /Sum of bad debt/);
   assert.match(healthKpiSections[2], /Minimum health factor/);
   assert.doesNotMatch(healthKpiSections[2], /Active-debt positions|Debt at HF < 1\.0/);
+  assert.match(healthKpiSections[3], /Market POL debt/);
+  assert.match(healthKpiSections[3], /Locked qPOL collateral/);
+  assert.match(healthKpiSections[3], /Nominal LTV vs Health Factor/);
+  assert.match(healthKpiSections[3], /Liquidation status/);
   assert.match(marketParticipationView, /participation and concentration/i);
   assert.match(marketParticipationView, /kpi\("Active-debt positions", integer\(market\.activeDebtLoanCount\)/);
   assert.match(
@@ -830,6 +841,8 @@ test("market health summary pairs near-liquidation debt with affected position c
     assert.match(healthView, /kpi\("Bad-debt positions", integer\(market\.activeLoanBadDebtLoanCount\)/);
     assert.match(healthView, /kpi\("Sum of bad debt", usd\(market\.activeLoanBadDebtInUsd\)/);
     assert.match(source, /function activeDebtPositionCount\(value\)/);
+    assert.match(healthView, /Protocol-Owned Liquidity \(POL\)/);
+    assert.match(healthView, /activateView\(['"]marketPol['"]\)/);
   }
 });
 
@@ -933,3 +946,76 @@ test("pct formatter defaults to 2 decimal places and ignores string seriesKey ar
   assert.equal(pct(0.0845, 1), "8.5%");
   assert.equal(pct(null), "n/a");
 });
+
+test("POL health comparison charts include nominal health factor alongside nominal LTV and use symlog scale", async () => {
+  const [html, generator] = await Promise.all([
+    fs.readFile(path.join(projectRoot, "data", "liqwid", "liqwid-analysis-app.html"), "utf8"),
+    fs.readFile(path.join(projectRoot, "scripts", "static_app_generator.py"), "utf8")
+  ]);
+
+  for (const source of [html, generator]) {
+    // Check protocol POL health comparison chart
+    assert.match(source, /chartId:\s*"protocolPolHealthComparison"[\s\S]*?nominalHealthFactor:[\s\S]*?xScale:\s*"symlog"[\s\S]*?allowXScaleToggle:\s*true/);
+    assert.match(source, /chartId:\s*"protocolPolHealthComparison"[\s\S]*?key:\s*"nominalLtv"[\s\S]*?key:\s*"nominalHealthFactor"[\s\S]*?key:\s*"healthFactor"/);
+
+    // Check market POL health comparison chart
+    assert.match(source, /chartId:\s*"marketPolHealthComparison"[\s\S]*?nominalHealthFactor:[\s\S]*?xScale:\s*"symlog"[\s\S]*?allowXScaleToggle:\s*true/);
+    assert.match(source, /chartId:\s*"marketPolHealthComparison"[\s\S]*?key:\s*"nominalLtv"[\s\S]*?key:\s*"nominalHealthFactor"[\s\S]*?key:\s*"healthFactor"/);
+  }
+});
+
+test("protocol POL tab includes Annual interest yield paid stat and interest contribution chart", async () => {
+  const [html, generator] = await Promise.all([
+    fs.readFile(path.join(projectRoot, "data", "liqwid", "liqwid-analysis-app.html"), "utf8"),
+    fs.readFile(path.join(projectRoot, "scripts", "static_app_generator.py"), "utf8")
+  ]);
+
+  for (const source of [html, generator]) {
+    // Check Annual interest yield paid KPI in protocolPol
+    assert.match(source, /kpi\(\s*"Annual interest yield paid \(at current rates\)",\s*usd\(summary\.totalAnnualInterestCostInUsd\)/);
+    
+    // Check protocolPolInterestContribution breakdown panel
+    assert.match(source, /interactiveBreakdownPanel\(\s*"Annual interest yield paid and contribution by market \(at current rates\)",\s*"protocolPolInterestContribution"/);
+
+    // Check protocolPolInterestContribution rendering in drawProtocolPolCharts
+    assert.match(source, /protocolPolInterestContribution[\s\S]*?annualInterestInUsd:[\s\S]*?renderInteractiveCategoryChart/);
+    assert.match(source, /protocolPolInterestContribution:\s*"What is the projected annual interest yield paid by each POL position at current borrow rates/);
+  }
+});
+
+test("market POL tab includes historical POL trajectory charts over time (size, share, yield, health)", async () => {
+  const [html, generator] = await Promise.all([
+    fs.readFile(path.join(projectRoot, "data", "liqwid", "liqwid-analysis-app.html"), "utf8"),
+    fs.readFile(path.join(projectRoot, "scripts", "static_app_generator.py"), "utf8")
+  ]);
+
+  for (const source of [html, generator]) {
+    // Chart panels in renderMarketPol
+    assert.match(source, /interactiveChartPanel\(\s*"POL debt and collateral valuation history",\s*"marketPolDebtHistory"/);
+    assert.match(source, /interactiveChartPanel\(\s*"POL share of market borrow over time",\s*"marketPolBorrowShareHistory"/);
+    assert.match(source, /interactiveChartPanel\(\s*"POL projected annual interest yield & borrow APY over time",\s*"marketPolYieldHistory"/);
+    assert.match(source, /interactiveChartPanel\(\s*"Nominal LTV and smart contract health factor over time",\s*"marketPolHealthHistory"/);
+
+    // Chart questions registered
+    assert.match(source, /marketPolDebtHistory:\s*"How have this market's protocol-owned debt obligations and locked collateral valuation evolved across snapshot observations\?"/);
+    assert.match(source, /marketPolBorrowShareHistory:\s*"What share of this market's total active borrow has been protocol-owned over time\?"/);
+    assert.match(source, /marketPolYieldHistory:\s*"How have the projected annual interest yield and borrow APY for this market's POL position changed across observations\?"/);
+    assert.match(source, /marketPolHealthHistory:\s*"How have nominal LTV and effective smart contract health factor for this market's POL position evolved over time\?"/);
+
+    // marketChartIds includes all 4
+    assert.match(source, /"marketPolDebtHistory",\s*"marketPolBorrowShareHistory",\s*"marketPolYieldHistory",\s*"marketPolHealthHistory"/);
+
+    // drawMarketTimeChart renders all 4 time-series charts with appropriate series and formatters
+    assert.match(source, /chartId === "marketPolDebtHistory"[\s\S]*?key:\s*"debtInUsd"[\s\S]*?key:\s*"collateralInUsd"[\s\S]*?usdCompact/);
+    assert.match(source, /chartId === "marketPolBorrowShareHistory"[\s\S]*?key:\s*"marketBorrowShare"[\s\S]*?pct/);
+    assert.match(source, /chartId === "marketPolYieldHistory"[\s\S]*?key:\s*"annualInterestCostInUsd"[\s\S]*?key:\s*"borrowApy"/);
+    assert.match(source, /chartId === "marketPolHealthHistory"[\s\S]*?key:\s*"nominalLtv"[\s\S]*?key:\s*"healthFactor"/);
+
+    // KPI metadata
+    assert.match(source, /"POL share of market borrow":\s*\{/);
+
+    // Historical API disclosure disclaimer note in protocol and market POL views
+    assert.match(source, /Historical API Disclosure Note:[\s\S]*?Prior to August 25, 2026/);
+  }
+});
+

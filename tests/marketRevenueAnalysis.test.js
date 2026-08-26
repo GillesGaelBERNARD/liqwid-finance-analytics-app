@@ -158,3 +158,58 @@ test("the latest parameter effective by the UTC day end controls that day's accr
   assert.equal(analysis.byMarket.A.daily[1].protocolInterestShare, 0.3);
   assert.equal(analysis.byMarket.A.daily[1].accruedProtocolInterestRevenueInUsd, 30);
 });
+
+test("market revenue analysis aggregates and sorts YTD revenue contributions across markets and identifies the top market", () => {
+  const analysis = buildMarketRevenueAnalysis({
+    markets: [{ id: "A", displayName: "Market A" }, { id: "B", displayName: "Market B" }, { id: "C", displayName: "Market C" }],
+    marketSeriesById: {
+      A: [history("A", "2026-07-20", {
+        interestRepaidInUsd: 80,
+        loanOriginationFeesInUsd: 3
+      })],
+      B: [history("B", "2026-07-20", {
+        interestRepaidInUsd: 20,
+        loanOriginationFeesMinAdaInUsd: 1
+      })],
+      C: [history("C", "2026-07-20", {
+        interestRepaidInUsd: 0,
+        loanOriginationFeesInUsd: 0
+      })]
+    },
+    marketParamsById: {
+      A: [parameters("A", "2026-01-01T00:00:00.000Z", 8)],
+      B: [parameters("B", "2026-01-01T00:00:00.000Z", 9)],
+      C: [parameters("C", "2026-01-01T00:00:00.000Z", 8)]
+    },
+    protocolRevenueDaily: [{
+      date: "2026-07-20",
+      revenueFromRepaidInterestInUsd: 18,
+      loanOriginationFeesInUsd: 3,
+      loanOriginationFeesMinAdaInUsd: 1,
+      isComplete: true
+    }],
+    generatedAt: "2026-07-21T08:00:00.000Z"
+  });
+
+  assert.ok(Array.isArray(analysis.ytdMarketContributions));
+  assert.equal(analysis.ytdMarketContributions.length, 3);
+  assert.equal(analysis.ytdMarketContributions[0].marketId, "A");
+  assert.equal(analysis.ytdMarketContributions[0].totalRevenueInUsd, 19);
+  assert.equal(analysis.ytdMarketContributions[0].attributedCollectedInterestRevenueInUsd, 16);
+  assert.equal(analysis.ytdMarketContributions[0].directOriginationRevenueInUsd, 3);
+  assert.ok(Math.abs(analysis.ytdMarketContributions[0].revenueShare - (19 / 22)) < 1e-6);
+
+  assert.equal(analysis.ytdMarketContributions[1].marketId, "B");
+  assert.equal(analysis.ytdMarketContributions[1].totalRevenueInUsd, 3);
+  assert.ok(Math.abs(analysis.ytdMarketContributions[1].revenueShare - (3 / 22)) < 1e-6);
+
+  assert.equal(analysis.ytdMarketContributions[2].marketId, "C");
+  assert.equal(analysis.ytdMarketContributions[2].totalRevenueInUsd, 0);
+  assert.equal(analysis.ytdMarketContributions[2].revenueShare, 0);
+
+  assert.ok(analysis.topYtdMarket);
+  assert.equal(analysis.topYtdMarket.marketId, "A");
+  assert.equal(analysis.topYtdMarket.marketDisplayName, "Market A");
+  assert.equal(analysis.topYtdMarket.totalRevenueInUsd, 19);
+  assert.ok(Math.abs(analysis.topYtdMarket.revenueShare - (19 / 22)) < 1e-6);
+});
