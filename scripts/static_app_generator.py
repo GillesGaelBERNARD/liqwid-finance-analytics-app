@@ -1040,7 +1040,8 @@ HTML_TEMPLATE = r"""<!doctype html>
         "description": "Total USD debt held in liquidatable loans.",
         "explanation": "Total USD debt in active loans where Health Factor (HF) is below 1.00. These loans are undercollateralized or subject to immediate liquidation.",
         "formulaHtml": '<div class="formula-card">&sum;<sub>HF &lt; 1.00</sub> <span class="formula-num">Debt<sub>USD</sub></span></div>',
-        "formulaText": "sum(Debt where HF < 1.00)"
+        "formulaText": "sum(Debt where HF < 1.00)",
+        "note": "Part of the eventual debt at HF < 1.0 might be due to the undercollateralized POL position used to finance the protocol."
     },
     "Debt at HF <= 1.25": {
         "description": "Total USD debt near liquidation thresholds.",
@@ -1058,7 +1059,8 @@ HTML_TEMPLATE = r"""<!doctype html>
         "description": "Total USD debt in undercollateralized loans.",
         "explanation": "Sum of outstanding debt in loans with Health Factor (HF) < 1.00, subject to immediate liquidation.",
         "formulaHtml": '<div class="formula-card">&sum;<sub>HF &lt; 1.00</sub> <span class="formula-num">Debt<sub>USD</sub></span></div>',
-        "formulaText": "sum(Debt where HF < 1.00)"
+        "formulaText": "sum(Debt where HF < 1.00)",
+        "note": "Part of the eventual debt at HF < 1.0 might be due to the undercollateralized POL position used to finance the protocol."
     },
     "Debt near liquidation": {
         "description": "Total USD debt in loans with health factor <= 1.25.",
@@ -4672,8 +4674,8 @@ HTML_TEMPLATE = r"""<!doctype html>
         : "Coverage divides native repaid by native accrued quantities. The asset-unit view is primary. The secondary USD view values both window totals at the same current observed asset price, so price movement between accrual and repayment cannot change coverage.";
     }
         
-    function renderInfoBubble(title, explanation, formula = "", range = "") {
-      if (!explanation && !formula && !range) return "";
+    function renderInfoBubble(title, explanation, formula = "", range = "", note = "") {
+      if (!explanation && !formula && !range && !note) return "";
       return `<span class="app-info-wrapper">
         <button type="button" class="app-info-btn" aria-label="Explanation for ${esc(title)}" data-app-info-trigger>?</button>
         <span class="app-info-popover" role="dialog" aria-modal="false">
@@ -4684,6 +4686,7 @@ HTML_TEMPLATE = r"""<!doctype html>
           <span style="display:block;margin:0 0 8px;color:#dceeff;font-size:.82rem;line-height:1.45">${esc(explanation)}</span>
           ${formula ? `<span style="display:block;margin:8px 0 4px;font-size:.74rem;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:#8fa9bf">Formula / Calculation</span>${formula}` : ""}
           ${range ? `<span style="display:block;margin-top:8px;padding-top:6px;border-top:1px dashed rgba(36,72,102,.6);font-size:.76rem;color:#3edc81">${esc(range)}</span>` : ""}
+          ${note ? `<span style="display:block;margin-top:8px;padding-top:6px;border-top:1px dashed rgba(36,72,102,.6);font-size:.76rem;line-height:1.4;color:#8fa9bf">${esc(note)}</span>` : ""}
         </span>
       </span>`;
     }
@@ -4694,7 +4697,8 @@ HTML_TEMPLATE = r"""<!doctype html>
       const helpText = help || meta.explanation || meta.description || "";
       const formula = meta.formulaHtml || meta.formulaText || "";
       const range = meta.range || "";
-      const infoBubble = renderInfoBubble(label, helpText, formula, range);
+      const popoverNote = meta.note || "";
+      const infoBubble = renderInfoBubble(label, helpText, formula, range, popoverNote);
       return `<div class="kpi"><span class="kpi-label"><span>${esc(label)}</span>${infoBubble}</span><strong>${esc(value)}</strong>${note ? `<span class="kpi-note">${esc(note)}</span>` : ""}</div>`;
     }
 

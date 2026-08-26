@@ -19,9 +19,10 @@ test("static_app_generator.py defines complete, typo-free metadata for all APP_K
   const generator = await fs.readFile(path.join(projectRoot, "scripts", "static_app_generator.py"), "utf8");
 
   // Verify renderInfoBubble definition and structure
-  assert.match(generator, /function renderInfoBubble\(title, explanation, formula = "", range = ""\)/);
+  assert.match(generator, /function renderInfoBubble\(title, explanation, formula = "", range = "", note = ""\)/);
   assert.match(generator, /class="app-info-btn"/);
   assert.match(generator, /class="app-info-popover"/);
+  assert.match(generator, /Part of the eventual debt at HF < 1\.0 might be due to the undercollateralized POL position used to finance the protocol\./);
 
   // Extract APP_KPI_METADATA block
   const match = generator.match(/const APP_KPI_METADATA = Object\.freeze\((\{[\s\S]*?\n\}\);)/);
