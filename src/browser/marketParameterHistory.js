@@ -56,8 +56,12 @@ export function buildParameterStepSeries(rows) {
 
 export function buildRateCurve(parameters, options = {}) {
   if (!parameters) return emptyRateCurve();
-  const row = normalizeMarketParameterRows([parameters])[0];
+  const row = normalizeMarketParameterRows(Array.isArray(parameters) ? parameters : [parameters]).at(-1);
   if (!row) return emptyRateCurve();
+
+  const events = Array.isArray(options.events) && options.events.length > 0
+    ? normalizeMarketParameterRows(options.events)
+    : (Array.isArray(parameters) ? normalizeMarketParameterRows(parameters) : [row]);
 
   const baseBorrowerAPR = finiteParameterNumber(row.baseBorrowerAPR);
   const optimalBorrowerAPR = finiteParameterNumber(row.optimalBorrowerAPR);
@@ -78,12 +82,17 @@ export function buildRateCurve(parameters, options = {}) {
     };
   }
 
-  const utilizationPoints = new Set([0, utilizationCap]);
-  for (let utilization = 0; utilization <= utilizationCap + 1e-10; utilization += 0.01) {
-    utilizationPoints.add(roundParameter(Math.min(utilization, utilizationCap)));
+  const jumpSlope = resolveBorrowJumpSlope(row, events);
+
+  const utilizationPoints = new Set([0, 1]);
+  for (let utilization = 0; utilization <= 1.0 + 1e-10; utilization += 0.01) {
+    utilizationPoints.add(roundParameter(Math.min(utilization, 1)));
   }
-  if (kink <= utilizationCap) utilizationPoints.add(roundParameter(kink));
-  if (currentUtilization != null && currentUtilization >= 0 && currentUtilization <= utilizationCap) {
+  if (kink != null && kink >= 0 && kink <= 1) utilizationPoints.add(roundParameter(kink));
+  if (utilizationCap != null && utilizationCap >= 0 && utilizationCap <= 1) {
+    utilizationPoints.add(roundParameter(utilizationCap));
+  }
+  if (currentUtilization != null && currentUtilization >= 0 && currentUtilization <= 1) {
     utilizationPoints.add(roundParameter(currentUtilization));
   }
 
@@ -91,11 +100,10 @@ export function buildRateCurve(parameters, options = {}) {
   for (const utilization of [...utilizationPoints].sort((left, right) => left - right)) {
     const borrowerRate = parameterBorrowRate({
       utilization,
-      utilizationCap,
       kink,
       baseBorrowerAPR,
       optimalBorrowerAPR,
-      maxBorrowerAPR
+      jumpSlope
     });
     const supplierRate = (1 - utilization) * baseSupplierAPY
       + utilization * borrowerRate * supplierSplit;
@@ -150,7 +158,7 @@ export function buildMarketParametersAnalysis(input = {}) {
       current: currentRow ? currentParameterGroups(currentRow) : null,
       events,
       history: buildParameterStepSeries(events),
-      rateCurve: buildRateCurve(currentRow, { currentUtilization })
+      rateCurve: buildRateCurve(currentRow, { currentUtilization, events })
     };
   }
 
@@ -199,27 +207,76 @@ function parameterIncomeAllocation(row) {
   };
 }
 
+function resolveBorrowJumpSlope(row, events) {
+  const kink = clampParameter(row?.kink, 0, 1);
+  const baseBorrowerAPR = finiteParameterNumber(row?.baseBorrowerAPR);
+  const optimalBorrowerAPR = finiteParameterNumber(row?.optimalBorrowerAPR);
+  const maxBorrowerAPR = finiteParameterNumber(row?.maxBorrowerAPR);
+  const borrowCap = row?.borrowCap == null ? null : finiteParameterNumber(row?.borrowCap);
+  const utilMultiplier = finiteParameterNumber(row?.utilMultiplier);
+  const utilMultiplierJump = finiteParameterNumber(row?.utilMultiplierJump);
+
+  if (kink == null || optimalBorrowerAPR == null) return 0;
+  if (kink >= 1) return 0;
+
+  // Case 1: borrowCap is null or >= 1.0 -> maxBorrowerAPR was evaluated at 1.0
+  if (borrowCap == null || borrowCap >= 1.0) {
+    if (maxBorrowerAPR != null && maxBorrowerAPR >= optimalBorrowerAPR) {
+      return (maxBorrowerAPR - optimalBorrowerAPR) / (1.0 - kink);
+    }
+  }
+
+  // Case 2: borrowCap > kink -> maxBorrowerAPR was evaluated at borrowCap
+  if (borrowCap != null && borrowCap > kink) {
+    if (maxBorrowerAPR != null && maxBorrowerAPR >= optimalBorrowerAPR) {
+      return (maxBorrowerAPR - optimalBorrowerAPR) / (borrowCap - kink);
+    }
+  }
+
+  // Case 3: borrowCap <= kink -> maxBorrowerAPR is at or before kink, so jump rate isn't directly in this row
+  // 3a. Search historical events for matching kink & utilMultiplierJump where cap was null or cap > kink
+  if (Array.isArray(events) && events.length > 0) {
+    for (let i = events.length - 1; i >= 0; i--) {
+      const e = events[i];
+      const eKink = clampParameter(e?.kink, 0, 1);
+      const eCap = e?.borrowCap == null ? null : finiteParameterNumber(e?.borrowCap);
+      const eJump = finiteParameterNumber(e?.utilMultiplierJump);
+      const eOpt = finiteParameterNumber(e?.optimalBorrowerAPR);
+      const eMax = finiteParameterNumber(e?.maxBorrowerAPR);
+      if (eKink === kink && eJump === utilMultiplierJump && eMax != null && eOpt != null && eMax >= eOpt) {
+        if (eCap == null || eCap >= 1.0) {
+          return (eMax - eOpt) / (1.0 - kink);
+        } else if (eCap > kink) {
+          return (eMax - eOpt) / (eCap - kink);
+        }
+      }
+    }
+  }
+
+  // 3b. Use model coefficients multiplier ratio:
+  if (kink > 0 && baseBorrowerAPR != null && utilMultiplier != null && utilMultiplier > 0 && utilMultiplierJump != null && utilMultiplierJump > 0) {
+    const slope1 = (optimalBorrowerAPR - baseBorrowerAPR) / kink;
+    return slope1 * (utilMultiplierJump / utilMultiplier);
+  }
+
+  return 0;
+}
+
 function parameterBorrowRate(input) {
   const {
     utilization,
-    utilizationCap,
     kink,
     baseBorrowerAPR,
     optimalBorrowerAPR,
-    maxBorrowerAPR
+    jumpSlope
   } = input;
-  if (utilizationCap <= 0) return baseBorrowerAPR;
-  if (utilizationCap <= kink || kink <= 0) {
-    return interpolateParameter(baseBorrowerAPR, maxBorrowerAPR, utilization / utilizationCap);
-  }
+  if (baseBorrowerAPR == null) return 0;
+  const opt = optimalBorrowerAPR ?? baseBorrowerAPR;
+  if (kink == null || kink <= 0) return opt;
   if (utilization <= kink) {
-    return interpolateParameter(baseBorrowerAPR, optimalBorrowerAPR, utilization / kink);
+    return interpolateParameter(baseBorrowerAPR, opt, utilization / kink);
   }
-  return interpolateParameter(
-    optimalBorrowerAPR,
-    maxBorrowerAPR,
-    (utilization - kink) / (utilizationCap - kink)
-  );
+  return opt + (utilization - kink) * (jumpSlope ?? 0);
 }
 
 function interpolateParameter(start, end, progress) {

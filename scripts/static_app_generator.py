@@ -3094,7 +3094,7 @@ HTML_TEMPLATE = r"""<!doctype html>
           </article>
         </div>
         ${chartSection("Current rate curve", "How do today's parameters translate utilization into borrowing cost and supplier yield?")}
-        ${interactiveBreakdownPanel("Borrow APR and Supply APY by utilization", "marketParameterRateCurve", { help: "Borrow APR is linearly interpolated from base to optimal at the kink, then from optimal to maximum at the utilization cap. Supply APY = (1 - utilization) * baseSupplierAPY + utilization * borrowerAPR * supplierSplit. Curves stop at the utilization cap; the axis remains fixed at 0-100%." })}
+        ${interactiveBreakdownPanel("Borrow APR and Supply APY by utilization", "marketParameterRateCurve", { help: "Borrow APR is linearly interpolated from base to optimal at the kink, then follows the jump slope beyond the kink up to 100% utilization. Supply APY = (1 - utilization) * baseSupplierAPY + utilization * borrowerAPR * supplierSplit. Reference lines indicate current utilization, kink, and utilization cap when active." })}
         <p class="parameter-formula"><strong>Implemented supplier formula:</strong> <code>(1 - utilization) * baseSupplierAPY + utilization * borrowerAPR * supplierSplit</code>. The supplier split is the supplier income ratio divided by the total income ratio.</p>
         ${chartSection("Historical evolution", "Which exact governance updates changed the market's rates, limits, allocation, or model coefficients?")}
         ${interactiveChartPanel("Borrower rate landmarks", "marketParameterBorrowRates", { defaultPeriod: "all", help: "Step lines change only at exact governance event timestamps; no daily updates are invented." })}

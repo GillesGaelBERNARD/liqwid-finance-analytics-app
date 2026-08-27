@@ -63,7 +63,7 @@ test("parameter history draws exact effective-time steps without inventing daily
   assert.equal(series[2].syntheticStepBoundary, false);
 });
 
-test("current rate curve uses official landmark rates, supplier split, and utilization cap", () => {
+test("current rate curve uses official landmark rates, supplier split, and spans full 0 to 100% utilization", () => {
   const current = normalizeMarketParameterRows([
     params("2026-01-01T12:00:00.000Z")
   ])[0];
@@ -72,18 +72,74 @@ test("current rate curve uses official landmark rates, supplier split, and utili
   assert.equal(curve.utilizationCap, 0.9);
   assert.equal(curve.kink, 0.8);
   assert.equal(curve.currentUtilization, 0.42);
-  assert.ok(curve.rows.every((row) => row.utilization >= 0 && row.utilization <= 0.9));
+  assert.ok(curve.rows.every((row) => row.utilization >= 0 && row.utilization <= 1.0));
   assert.ok(curve.rows.some((row) => row.utilization === 0.42));
+  assert.ok(curve.rows.some((row) => row.utilization === 1.0));
 
   const borrowerAtKink = curve.rows.find((row) => row.curve === "borrower" && row.utilization === 0.8);
   const supplierAtKink = curve.rows.find((row) => row.curve === "supplier" && row.utilization === 0.8);
   const borrowerAtCap = curve.rows.find((row) => row.curve === "borrower" && row.utilization === 0.9);
   const supplierAtCap = curve.rows.find((row) => row.curve === "supplier" && row.utilization === 0.9);
+  const borrowerAt100 = curve.rows.find((row) => row.curve === "borrower" && row.utilization === 1.0);
 
   assert.equal(borrowerAtKink.rate, 0.1);
   assert.equal(supplierAtKink.rate, 0.068);
   assert.equal(borrowerAtCap.rate, 0.6);
   assert.equal(supplierAtCap.rate, 0.434);
+  assert.equal(borrowerAt100.rate, 1.1);
+});
+
+test("rate curve correctly computes full curves when borrowCap is below kink (e.g. DJED)", () => {
+  const events = [
+    params("2026-07-27T18:56:19.000Z", {
+      kink: "0.90",
+      borrowCap: "",
+      utilMultiplier: "0.0000171251553358",
+      utilMultiplierJump: "0.0004382463557246",
+      baseBorrowerAPR: "0.03",
+      baseSupplierAPY: "0",
+      optimalBorrowerAPR: "0.3133524340780993",
+      optimalSupplierAPY: "0.2256137525362315",
+      maxBorrowerAPR: "1.6928066577857515",
+      maxSupplierAPY: "1.3542453262286012"
+    }),
+    params("2026-08-24T13:15:48.000Z", {
+      kink: "0.90",
+      borrowCap: "0.875",
+      utilMultiplier: "0.0000171251553358",
+      utilMultiplierJump: "0.0004382463557246",
+      baseBorrowerAPR: "0.03",
+      baseSupplierAPY: "0",
+      optimalBorrowerAPR: "0.3133524340780993",
+      optimalSupplierAPY: "0.2256137525362315",
+      maxBorrowerAPR: "0.3045163476748678",
+      maxSupplierAPY: "0.21316144337240747"
+    })
+  ];
+  const currentRow = events[1];
+  const curve = buildRateCurve(currentRow, { currentUtilization: 0.8993, events });
+
+  assert.equal(curve.utilizationCap, 0.875);
+  assert.equal(curve.kink, 0.9);
+  assert.equal(curve.currentUtilization, 0.8993);
+  assert.ok(curve.rows.some((row) => row.utilization === 0.875));
+  assert.ok(curve.rows.some((row) => row.utilization === 0.8993));
+  assert.ok(curve.rows.some((row) => row.utilization === 0.9));
+  assert.ok(curve.rows.some((row) => row.utilization === 1.0));
+
+  const borrowerAtCap = curve.rows.find((row) => row.curve === "borrower" && row.utilization === 0.875);
+  const supplierAtCap = curve.rows.find((row) => row.curve === "supplier" && row.utilization === 0.875);
+  const borrowerAtKink = curve.rows.find((row) => row.curve === "borrower" && row.utilization === 0.9);
+  const supplierAtKink = curve.rows.find((row) => row.curve === "supplier" && row.utilization === 0.9);
+  const borrowerAt100 = curve.rows.find((row) => row.curve === "borrower" && row.utilization === 1.0);
+  const supplierAt100 = curve.rows.find((row) => row.curve === "supplier" && row.utilization === 1.0);
+
+  assert.equal(borrowerAtCap.rate, 0.3054815331);
+  assert.equal(supplierAtCap.rate, 0.2138370732);
+  assert.equal(borrowerAtKink.rate, 0.3133524341);
+  assert.equal(supplierAtKink.rate, 0.2256137525);
+  assert.equal(borrowerAt100.rate, 1.6928066578);
+  assert.equal(supplierAt100.rate, 1.3542453262);
 });
 
 test("market parameter analysis exposes current groups, allocation shares, curve, and exact events", () => {
