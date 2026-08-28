@@ -955,3 +955,38 @@ export function buildStablecoinYieldComparisonData(marketSeriesById, stablecoinM
     return combinedRow;
   });
 }
+
+export function buildStablecoinSupplyComparisonData(marketSeriesById, stablecoinMarketIds = USD_STABLECOIN_MARKET_IDS) {
+  const ids = Array.isArray(stablecoinMarketIds) ? stablecoinMarketIds : USD_STABLECOIN_MARKET_IDS;
+  const seriesByMarket = {};
+  const dateSet = new Set();
+
+  for (const id of ids) {
+    const rawKey = Object.keys(marketSeriesById || {}).find(
+      (candidate) => candidate.toUpperCase() === String(id).toUpperCase()
+    );
+    const rows = rawKey ? chartDataRows(marketSeriesById[rawKey]) : [];
+    const dateMap = new Map();
+    for (const row of rows) {
+      if (row.date) {
+        dateSet.add(row.date);
+        dateMap.set(row.date, row);
+      }
+    }
+    seriesByMarket[id] = dateMap;
+  }
+
+  const sortedDates = [...dateSet].sort((a, b) => a.localeCompare(b));
+  return sortedDates.map((date) => {
+    const combinedRow = { date };
+    for (const id of ids) {
+      const marketRow = seriesByMarket[id]?.get(date);
+      const key = `${id.toLowerCase()}SupplyInUsd`;
+      combinedRow[key] = marketRow && Number.isFinite(Number(marketRow.supplyInUsd))
+        ? Number(marketRow.supplyInUsd)
+        : null;
+    }
+    return combinedRow;
+  });
+}
+

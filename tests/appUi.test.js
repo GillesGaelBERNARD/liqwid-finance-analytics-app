@@ -292,13 +292,17 @@ test("standalone app is one zero-data, folder-backed, client-only HTML workflow"
   assert.ok(protocolInterestView.indexOf('"protocolInterestGap"') < protocolInterestView.indexOf('"protocolInterestRepaymentDistribution"'));
   assert.match(protocolStablecoinYieldsView, /USD stablecoin yields/);
   assert.match(protocolStablecoinYieldsView, /Top USD stablecoin yield/);
-  assert.match(protocolStablecoinYieldsView, /Supply-weighted USD stablecoin yield/);
+  assert.match(protocolStablecoinYieldsView, /Most supplied USD stablecoin/);
+  assert.match(protocolStablecoinYieldsView, /Most borrowed USD stablecoin/);
+  assert.match(protocolStablecoinYieldsView, /Most liquid USD stablecoin/);
   assert.match(protocolStablecoinYieldsView, /USD stablecoin supply APR over time/);
+  assert.match(protocolStablecoinYieldsView, /USD stablecoin supply over time/);
   assert.match(protocolStablecoinYieldsView, /USD stablecoin market comparison/);
   assert.match(generator, /function drawProtocolDebtCharts\(/);
   assert.match(generator, /function drawProtocolInterestCharts\(/);
   assert.match(generator, /function drawProtocolStablecoinYieldsCharts\(/);
-  assert.match(generator, /chartId === "protocolStablecoinYields"/);
+  assert.match(generator, /chartId === "protocolStablecoinSupplyApy"/);
+  assert.match(generator, /chartId === "protocolStablecoinSupply"/);
   assert.match(generator, /chartId === "protocolInterestCoverage"[\s\S]{0,300}?interestCoverage7d[\s\S]{0,100}?interestCoverage30d[\s\S]{0,100}?interestCoverage90d/);
   for (const appSource of [generator, html]) {
     const marketDebtView = appSource.match(/function renderMarketRepayments\(\)[\s\S]*?function renderMarketInterest\(\)/)?.[0] || "";
