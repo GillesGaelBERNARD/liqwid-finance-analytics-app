@@ -1,6 +1,6 @@
 # Liqwid Finance Analytics App
 
-An open-source, client-side web application and data pipeline for monitoring and analyzing Cardano's [Liqwid Finance](https://liqwid.finance) lending & borrowing DeFi protocol: liquidity, market dynamics, revenue, debt and interest flows, debt history and more, from the official Liqwid v2 API.
+An open-source, client-side web application and data pipeline for monitoring and analyzing Cardano's [Liqwid Finance](https://liqwid.finance) lending & borrowing DeFi protocol: liquidity, market dynamics, revenue, debt and interest flows, parameters history and more, from the official Liqwid v2 API.
 
 ![Liqwid Analysis Viewer Overview](screenshots/UI_overview.png)
 

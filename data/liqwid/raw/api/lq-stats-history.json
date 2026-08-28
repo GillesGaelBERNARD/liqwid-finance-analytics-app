@@ -1,9 +1,9 @@
 {
-  "fetchedAt": "2026-08-27T08:23:30.428Z",
+  "fetchedAt": "2026-08-28T07:24:30.935Z",
   "source": "https://v2.api.liqwid.finance/graphql",
   "query": "query LQStats {\n  lq {\n    price(input: { currency: USD })\n    staked\n    totalSupply\n    circulatingSupply\n    treasury\n    currencySymbol\n  }\n}",
   "variables": {},
-  "rowCount": 22,
+  "rowCount": 24,
   "payload": {
     "series": [
       {
@@ -247,6 +247,28 @@
         "daoTreasuryLqAmount": 689375.071788,
         "stakingRatio": 0.18418569470890475,
         "totalStakedValueInUsd": 864204.8051450223
+      },
+      {
+        "timestamp": "2026-08-27T11:17:54.295Z",
+        "date": "2026-08-27",
+        "lqPriceInUsd": 0.22232,
+        "stakedLqAmount": 3867899.588887,
+        "totalSupply": 21000000,
+        "circulatingSupply": 20310624.928212,
+        "daoTreasuryLqAmount": 689375.071788,
+        "stakingRatio": 0.18418569470890475,
+        "totalStakedValueInUsd": 859911.4366013578
+      },
+      {
+        "timestamp": "2026-08-28T07:24:30.935Z",
+        "date": "2026-08-28",
+        "lqPriceInUsd": 0.21948,
+        "stakedLqAmount": 3841971.91069,
+        "totalSupply": 21000000,
+        "circulatingSupply": 20310624.928212,
+        "daoTreasuryLqAmount": 689375.071788,
+        "stakingRatio": 0.18295104336619047,
+        "totalStakedValueInUsd": 843235.9949582412
       }
     ]
   }
