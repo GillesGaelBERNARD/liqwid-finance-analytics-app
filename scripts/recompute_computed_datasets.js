@@ -21,6 +21,7 @@ async function recomputeComputedDatasets(dataRoot) {
 
   let masterHistory = { participation: [], health: [], reconciliation: [] };
   let lqStatsHistory = [];
+  let latestAllLoans = null;
 
   const existingHistoryPath = path.join(dataRoot, "raw", "api", "lq-stats-history.json");
   if (fs.existsSync(existingHistoryPath)) {
@@ -86,6 +87,9 @@ async function recomputeComputedDatasets(dataRoot) {
       }
 
       const { allLoans, activeLoans } = deriveLoanPopulations(rawResults);
+      if (allLoans && allLoans.length) {
+        latestAllLoans = allLoans;
+      }
       const observation = buildLoanSnapshotHistory({
         timestamp: fetchedAt,
         allLoans,
@@ -113,6 +117,13 @@ async function recomputeComputedDatasets(dataRoot) {
   fs.writeFileSync(healthCsvPath, rowsToCsv(masterHistory.health), "utf-8");
   fs.writeFileSync(polCsvPath, rowsToCsv(masterHistory.pol || []), "utf-8");
   fs.writeFileSync(reconCsvPath, rowsToCsv(masterHistory.reconciliation || []), "utf-8");
+
+  if (latestAllLoans && latestAllLoans.length) {
+    const cleanDir = path.join(dataRoot, "clean");
+    if (!fs.existsSync(cleanDir)) fs.mkdirSync(cleanDir, { recursive: true });
+    const loansCsvPath = path.join(cleanDir, "current-all-loans.csv");
+    fs.writeFileSync(loansCsvPath, rowsToCsv(latestAllLoans), "utf-8");
+  }
 
   if (lqStatsHistory.length) {
     const rawApiDir = path.join(dataRoot, "raw", "api");

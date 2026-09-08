@@ -222,7 +222,8 @@ export function normalizePolRows(rows) {
     djedDebtInUsd: numberOrZero(row.djedDebtInUsd),
     usdmDebtInUsd: numberOrZero(row.usdmDebtInUsd),
     usdcDebtInUsd: numberOrZero(row.usdcDebtInUsd),
-    iusdDebtInUsd: numberOrZero(row.iusdDebtInUsd)
+    iusdDebtInUsd: numberOrZero(row.iusdDebtInUsd),
+    adaDebtInUsd: numberOrZero(row.adaDebtInUsd)
   }));
 }
 
@@ -1267,6 +1268,7 @@ export function buildPolAnalysisContext(input = {}) {
   const usdmPos = positions.find((p) => p.marketId === "USDM");
   const usdcPos = positions.find((p) => p.marketId === "USDC" || p.marketId === "wanUSDC");
   const iusdPos = positions.find((p) => p.marketId === "IUSD");
+  const adaPos = positions.find((p) => p.marketId.toUpperCase() === "ADA");
 
   const rawPolHistory = Array.isArray(input.loanSnapshotHistory?.pol) ? input.loanSnapshotHistory.pol : [];
   const protocolHistoryRows = rawPolHistory
@@ -1284,6 +1286,7 @@ export function buildPolAnalysisContext(input = {}) {
       usdmDebtInUsd: Number(r.usdmDebtInUsd ?? 0),
       usdcDebtInUsd: Number(r.usdcDebtInUsd ?? 0),
       iusdDebtInUsd: Number(r.iusdDebtInUsd ?? 0),
+      adaDebtInUsd: Number(r.adaDebtInUsd ?? 0),
       loanCount: Number(r.loanCount ?? r.polLoanCount ?? 0)
     }))
     .sort((a, b) => String(a.timestamp).localeCompare(String(b.timestamp)));
@@ -1300,6 +1303,7 @@ export function buildPolAnalysisContext(input = {}) {
       usdmDebtInUsd: usdmPos?.debtInUsd || 0,
       usdcDebtInUsd: usdcPos?.debtInUsd || 0,
       iusdDebtInUsd: iusdPos?.debtInUsd || 0,
+      adaDebtInUsd: adaPos?.debtInUsd || 0,
       loanCount: positions.length
     }
   ];

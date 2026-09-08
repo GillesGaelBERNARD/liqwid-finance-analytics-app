@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { buildAnalysisBundle } from "../src/browser/dataWorkflow.js";
-import { aggregateDailyProtocolFeeAllocations, buildArchiveAudit, buildCompleteAnalysis, buildLqTokenAnalysis, buildPolAnalysisContext, buildProtocolRevenueRunRateSeries, deriveLoanPopulations } from "../src/browser/fullAnalysis.js";
+import { aggregateDailyProtocolFeeAllocations, buildArchiveAudit, buildCompleteAnalysis, buildLqTokenAnalysis, buildPolAnalysisContext, buildProtocolRevenueRunRateSeries, deriveLoanPopulations, normalizePolRows } from "../src/browser/fullAnalysis.js";
 
 function history(date, overrides = {}) {
   return {
@@ -800,6 +800,61 @@ test("buildPolAnalysisContext aggregates active POL positions with governance ru
   assert.equal(pol.positions[0].canBeLiquidated, false);
   assert.equal(pol.positions[0].governanceProtection.collateralWeight, 100);
   assert.equal(pol.governanceRules.liquidationPenalty, 0);
+});
+
+test("buildPolAnalysisContext and normalizePolRows correctly track ADA POL loans alongside other markets", () => {
+  const activeLoans = [
+    {
+      id: "pol-ada",
+      marketId: "Ada",
+      publicKey: "7ac5878231522baf2972231d1a587e20a0d814c164fa7fea28ee459f",
+      amount: 1100000,
+      collateral: 1300000,
+      healthFactor: 120.86,
+      APY: 0.04,
+      collaterals: [{ id: "qpol", qTokenName: "qPOL", qTokenAmount: 5800000, amount: 1300000, market: { id: "POL", displayName: "POL" } }]
+    },
+    {
+      id: "pol-djed",
+      marketId: "DJED",
+      publicKey: "7ac5878231522baf2972231d1a587e20a0d814c164fa7fea28ee459f",
+      amount: 2000000,
+      collateral: 800000,
+      healthFactor: 40.91,
+      APY: 0.45,
+      collaterals: [{ id: "qpol", qTokenName: "qPOL", qTokenAmount: 3670000, amount: 800000, market: { id: "POL", displayName: "POL" } }]
+    }
+  ];
+
+  const markets = [
+    { id: "Ada", displayName: "ADA", borrow: 1100000, borrowAPY: 0.04 },
+    { id: "DJED", displayName: "DJED", borrow: 2000000, borrowAPY: 0.45 }
+  ];
+
+  const pol = buildPolAnalysisContext({ activeLoans, markets });
+
+  assert.equal(pol.summary.loanCount, 2);
+  assert.equal(pol.summary.totalDebtInUsd, 3100000);
+  assert.equal(pol.positions.length, 2);
+  const adaPos = pol.positions.find((p) => p.marketId === "Ada");
+  assert.ok(adaPos);
+  assert.equal(adaPos.debtInUsd, 1100000);
+  assert.equal(pol.history[0].adaDebtInUsd, 1100000);
+  assert.equal(pol.history[0].djedDebtInUsd, 2000000);
+
+  const normalized = normalizePolRows([{
+    timestamp: "2026-09-08T10:00:00.000Z",
+    scope: "protocol",
+    marketId: "",
+    totalDebtInUsd: 3100000,
+    adaDebtInUsd: 1100000,
+    djedDebtInUsd: 2000000,
+    iusdDebtInUsd: 0
+  }]);
+
+  assert.equal(normalized[0].adaDebtInUsd, 1100000);
+  assert.equal(normalized[0].djedDebtInUsd, 2000000);
+  assert.equal(normalized[0].iusdDebtInUsd, 0);
 });
 
 test("loanHealthPressure and loanState market rows strictly exclude governance-protected POL loans", () => {

@@ -116,6 +116,7 @@ function polObservationRow(timestamp, scope, marketId, loans, markets = [], tota
     let usdmDebtInUsd = 0;
     let usdcDebtInUsd = 0;
     let iusdDebtInUsd = 0;
+    let adaDebtInUsd = 0;
 
     for (const loan of polLoans) {
       const debt = snapshotNumber(loan?.adjustedAmount ?? loan?.debtInUsd ?? loan?.amount);
@@ -144,6 +145,7 @@ function polObservationRow(timestamp, scope, marketId, loans, markets = [], tota
       else if (mUpper === "USDM") usdmDebtInUsd += debt;
       else if (mUpper === "USDC" || mUpper === "WANUSDC") usdcDebtInUsd += debt;
       else if (mUpper === "IUSD") iusdDebtInUsd += debt;
+      else if (mUpper === "ADA") adaDebtInUsd += debt;
     }
 
     const protocolBorrowShare = totalProtocolBorrow > 0 ? totalDebtInUsd / totalProtocolBorrow : 0;
@@ -171,7 +173,8 @@ function polObservationRow(timestamp, scope, marketId, loans, markets = [], tota
       djedDebtInUsd,
       usdmDebtInUsd,
       usdcDebtInUsd,
-      iusdDebtInUsd
+      iusdDebtInUsd,
+      adaDebtInUsd
     };
   }
 
