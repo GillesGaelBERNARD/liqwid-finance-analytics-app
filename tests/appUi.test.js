@@ -140,13 +140,13 @@ test("standalone app is one zero-data, folder-backed, client-only HTML workflow"
   assert.match(html, /position:\s*sticky[\s\S]{0,160}?top:\s*0/);
   for (const section of [
     "Liquidity", "Liquidity & Rates", "Debt flows", "Interest flows", "USD stablecoin yields", "Revenue", "Liquidations", "Exposure", "Market impact", "Participation and concentration",
-    "Health", "Parameters History", "Risk & Parameters", "Protocol-Owned Liquidity (POL)"
+    "Health", "Collateral usage", "Parameters History", "Risk & Parameters", "Protocol-Owned Liquidity (POL)"
   ]) {
     assert.ok(html.includes(section), `standalone app is missing section tab ${section}`);
   }
   for (const viewId of [
-    "overview", "protocolDebtFlows", "protocolInterestFlows", "protocolStablecoinYields", "revenue", "liquidations", "exposure", "impact", "protocolParticipation",
-    "protocolParameters", "protocolPol", "marketOverview", "marketRepayments", "marketInterest", "marketRevenue", "marketHealth", "marketParticipation", "marketParameters", "marketPol"
+    "overview", "protocolDebtFlows", "protocolInterestFlows", "protocolStablecoinYields", "revenue", "liquidations", "exposure", "impact", "protocolParticipation", "protocolCollateralUsage",
+    "protocolParameters", "protocolPol", "marketOverview", "marketRepayments", "marketInterest", "marketRevenue", "marketHealth", "marketParticipation", "marketCollateralUsage", "marketParameters", "marketPol"
   ]) {
     assert.match(html, new RegExp(`<section id="${viewId}" class="view`), `standalone app is missing ${viewId}`);
   }
@@ -156,7 +156,8 @@ test("standalone app is one zero-data, folder-backed, client-only HTML workflow"
   assert.match(html, /Where is current debt most vulnerable to market or collateral stress\?/);
   assert.match(html, /Which markets contribute most to protocol-wide debt, interest, repayments, positive gaps, and stress\?/);
   assert.match(html, /Where is this market's capital, and how expensive or constrained is borrowing\?/);
-  assert.match(html, /\["marketParticipation", "Participation and concentration"\],\s*\["marketParameters", "Parameters History"\],\s*\["marketPol", "Protocol-Owned Liquidity \(POL\)"\]\s*\]/);
+  assert.match(html, /\["protocolParticipation", "Participation and concentration"\],\s*\["protocolCollateralUsage", "Collateral usage"\],\s*\["protocolLqToken", "LQ token & staking"\]/);
+  assert.match(html, /\["marketParticipation", "Participation and concentration"\],\s*\["marketCollateralUsage", "Collateral usage"\],\s*\["marketParameters", "Parameters History"\],\s*\["marketPol", "Protocol-Owned Liquidity \(POL\)"\]\s*\]/);
   assert.match(html, /\["protocolParameters", "Risk & Parameters"\],\s*\["protocolPol", "Protocol-Owned Liquidity \(POL\)"\]\s*\]/);
   assert.match(html, /function renderProtocolParameters\(\)/);
   assert.match(html, /function renderProtocolPol\(\)/);
@@ -1022,4 +1023,74 @@ test("market POL tab includes historical POL trajectory charts over time (size, 
     assert.match(source, /Historical API Disclosure Note:[\s\S]*?Prior to August 25, 2026/);
   }
 });
+
+test("market collateral usage tab renders supplied collateral deployment and borrowed debt breakdowns", async () => {
+  const [generator, html] = await Promise.all([
+    fs.readFile(path.join(projectRoot, "scripts", "static_app_generator.py"), "utf8"),
+    fs.readFile(path.join(projectRoot, "data", "liqwid", "liqwid-analysis-app.html"), "utf8")
+  ]);
+
+  for (const source of [generator, html]) {
+    // Function definition
+    assert.match(source, /function renderMarketCollateralUsage\(\)/);
+    assert.match(source, /function currentMarketCollateralUsage\(\)/);
+    assert.match(source, /function drawMarketCollateralUsageCharts\(/);
+
+    // Tab positioning in analyticsScopes
+    assert.match(source, /\["marketParticipation", "Participation and concentration"\],\s*\["marketCollateralUsage", "Collateral usage"\],\s*\["marketParameters", "Parameters History"\]/);
+
+    // KPIs present
+    assert.match(source, /kpi\("Active collateral backing loans"/);
+    assert.match(source, /kpi\("Supply used as collateral"/);
+    assert.match(source, /kpi\("Attributed debt borrowed"/);
+    assert.match(source, /kpi\("Effective collateral LTV"/);
+    assert.match(source, /kpi\("Top borrowed asset"/);
+
+    // Interactive breakdown panels
+    assert.match(source, /interactiveBreakdownPanel\(\s*"Debt borrowed by destination asset",\s*"marketCollateralUsageBorrowBreakdown"/);
+    assert.match(source, /interactiveBreakdownPanel\(\s*"Borrow demand by asset category",\s*"marketCollateralUsageCategoryBreakdown"/);
+    assert.match(source, /interactiveBreakdownPanel\(\s*"Supply deployment: collateral vs\. uncollateralized supply",\s*"marketCollateralUsageDeployment"/);
+
+    // Tables
+    assert.match(source, /Debt borrowed against \$\{esc\(symbol\)\} collateral/);
+    assert.match(source, /Top active loans utilizing \$\{esc\(symbol\)\} collateral/);
+  }
+});
+
+test("protocol collateral usage tab renders protocol-level collateral KPIs, charts, and credit pairings", async () => {
+  const [generator, html] = await Promise.all([
+    fs.readFile(path.join(projectRoot, "scripts", "static_app_generator.py"), "utf8"),
+    fs.readFile(path.join(projectRoot, "data", "liqwid", "liqwid-analysis-app.html"), "utf8")
+  ]);
+
+  for (const source of [generator, html]) {
+    // Function definition
+    assert.match(source, /function renderProtocolCollateralUsage\(\)/);
+    assert.match(source, /function drawProtocolCollateralUsageCharts\(/);
+
+    // Tab positioning in analyticsScopes
+    assert.match(source, /\["protocolParticipation", "Participation and concentration"\],\s*\["protocolCollateralUsage", "Collateral usage"\],\s*\["protocolLqToken", "LQ token & staking"\]/);
+
+    // Section view in DOM
+    assert.match(source, /<section id="protocolCollateralUsage" class="view"><\/section>/);
+
+    // KPIs present
+    assert.match(source, /kpi\("Active collateral backing loans"/);
+    assert.match(source, /kpi\("Protocol supply collateralized"/);
+    assert.match(source, /kpi\("Total protocol debt"/);
+    assert.match(source, /kpi\("Protocol effective LTV"/);
+    assert.match(source, /kpi\("Top collateral asset"/);
+
+    // Interactive breakdown panels / charts
+    assert.match(source, /interactiveBreakdownPanel\(\s*"Protocol collateral composition by asset",\s*"protocolCollateralComposition"/);
+    assert.match(source, /interactiveBreakdownPanel\(\s*"Market collateralization spectrum \(% of supply used as collateral\)",\s*"protocolCollateralSpectrum"/);
+    assert.match(source, /interactiveBreakdownPanel\(\s*"Borrow demand by collateral category",\s*"protocolCollateralCategoryFlow"/);
+
+    // Tables
+    assert.match(source, /Market collateralization overview/);
+    assert.match(source, /Top cross-asset credit pairings/);
+  }
+});
+
+
 

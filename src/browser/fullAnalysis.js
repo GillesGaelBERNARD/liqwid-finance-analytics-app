@@ -8,6 +8,7 @@ import { buildLoanSnapshotHistory, LOAN_HEALTH_BUCKETS } from "./loanSnapshotHis
 import { buildMarketParametersAnalysis } from "./marketParameterHistory.js";
 import { buildMarketRevenueAnalysis } from "./marketRevenueAnalysis.js";
 import { buildProtocolParameterLandscape } from "./protocolParameterLandscape.js";
+import { buildMarketCollateralUsageAnalysis } from "./marketCollateralUsage.js";
 
 const REVENUE_RUN_RATE_WINDOW_DAYS = 90;
 const ANNUALIZATION_DAYS = 365.25;
@@ -323,6 +324,11 @@ export function buildCompleteAnalysis(input) {
     marketParamsById: input.marketParamsById || {}
   });
 
+  const collateralUsage = buildMarketCollateralUsageAnalysis({
+    markets: bundle.markets || [],
+    allLoans: input.allLoans || input.collateralLoans || []
+  });
+
   return {
     generatedAt: bundle.generatedAt || new Date().toISOString(),
     liveDataGeneratedAt: bundle.generatedAt || null,
@@ -339,6 +345,7 @@ export function buildCompleteAnalysis(input) {
     marketParameters,
     protocolParameters,
     pol,
+    collateralUsage,
     dataStatus
   };
 }

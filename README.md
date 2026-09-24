@@ -6,7 +6,7 @@ An open-source, client-side web application and data pipeline for monitoring and
 
 ## Features
 
-- **Protocol & Market Dynamics Analytics**: Explore TVL, utilization rate, borrow/supply APYs, active debt, debt and interest accrual vs repayment flows, risk metrics across all active markets, POL backed DAO loan positions, markets participants concentration, and more.
+- **Protocol & Market Dynamics Analytics**: Explore TVL, utilization rate, borrow/supply APYs, active debt, debt and interest accrual vs repayment flows, risk metrics across all active markets, collateral usage and credit pairings, POL backed DAO loan positions, markets participants concentration, and more.
 - **Client-Side & Offline Ready**: Runs directly in any web browser without needing a backend server or persistent daemon.
 - **Portable Data Store & Zip Archive**: Bundles raw historical fetches, cleaned daily histories, and computed market datasets in a portable ZIP archive (`liqwid-data.zip`) and CSV manifest (`liqwid-portable-manifest.csv`).
 - **On-Demand Data Ingestion**: Does **not** perform always-on or continuous background data ingestion. New protocol observations are queried on-demand from the official Liqwid v2 GraphQL API only when triggered by the user clicking **"Fetch new data"**.

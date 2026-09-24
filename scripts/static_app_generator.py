@@ -42,6 +42,7 @@ def build_browser_runtime():
         project_root / "src" / "browser" / "marketParameterHistory.js",
         project_root / "src" / "browser" / "marketRevenueAnalysis.js",
         project_root / "src" / "browser" / "protocolParameterLandscape.js",
+        project_root / "src" / "browser" / "marketCollateralUsage.js",
         project_root / "src" / "browser" / "fullAnalysis.js",
         project_root / "src" / "browser" / "completeDataWorkflow.js",
         project_root / "src" / "browser" / "directoryStore.js",
@@ -678,6 +679,7 @@ HTML_TEMPLATE = r"""<!doctype html>
     <section id="exposure" class="view"></section>
     <section id="impact" class="view"></section>
     <section id="protocolParticipation" class="view"></section>
+    <section id="protocolCollateralUsage" class="view"></section>
     <section id="protocolLqToken" class="view"></section>
     <section id="protocolParameters" class="view"></section>
     <section id="protocolPol" class="view"></section>
@@ -687,6 +689,7 @@ HTML_TEMPLATE = r"""<!doctype html>
     <section id="marketRevenue" class="view"></section>
     <section id="marketHealth" class="view"></section>
     <section id="marketParticipation" class="view"></section>
+    <section id="marketCollateralUsage" class="view"></section>
     <section id="marketParameters" class="view"></section>
     <section id="marketPol" class="view"></section>
   </main>
@@ -733,6 +736,7 @@ HTML_TEMPLATE = r"""<!doctype html>
         ["exposure", "Exposure"],
         ["impact", "Market impact"],
         ["protocolParticipation", "Participation and concentration"],
+        ["protocolCollateralUsage", "Collateral usage"],
         ["protocolLqToken", "LQ token & staking"],
         ["protocolParameters", "Risk & Parameters"],
         ["protocolPol", "Protocol-Owned Liquidity (POL)"]
@@ -744,6 +748,7 @@ HTML_TEMPLATE = r"""<!doctype html>
         ["marketRevenue", "Revenue"],
         ["marketHealth", "Health"],
         ["marketParticipation", "Participation and concentration"],
+        ["marketCollateralUsage", "Collateral usage"],
         ["marketParameters", "Parameters History"],
         ["marketPol", "Protocol-Owned Liquidity (POL)"]
       ]]
@@ -1539,6 +1544,72 @@ HTML_TEMPLATE = r"""<!doctype html>
         "explanation": "Number of distinct USD-pegged stablecoin lending pools available in the protocol.",
         "formulaHtml": '<div class="formula-card"><span class="formula-func">count</span><span class="formula-paren">(</span><span class="formula-num">Distinct USD stablecoins</span><span class="formula-paren">)</span></div>',
         "formulaText": "count(distinct USD stablecoin markets)"
+    },
+    "Total collateral supplied": {
+        "description": "Total collateral value of this asset locked across all borrower loan positions.",
+        "explanation": "Sum of all collateral units of this asset deposited into active loan positions, evaluated at current market price.",
+        "formulaHtml": '<div class="formula-card">&sum;<sub>Active loans</sub> <span class="formula-num">Collateral Deposited &times; Price<sub>USD</sub></span></div>',
+        "formulaText": "sum(Collateral Deposited * Price USD)"
+    },
+    "Active collateral backing loans": {
+        "description": "Estimated collateral value actively securing outstanding borrower debt.",
+        "explanation": "Portion of supplied collateral actively required to back outstanding debt (calculated as min(collateralValue, loanDebt / maxLtv)), with any remainder representing idle collateral.",
+        "formulaHtml": '<div class="formula-card">&sum;<sub>Active loans</sub> <span class="formula-num">min(Collateral<sub>USD</sub>, Debt<sub>USD</sub> / MaxLTV)</span></div>',
+        "formulaText": "sum(min(Collateral USD, Debt USD / MaxLTV))"
+    },
+    "Supply used as collateral": {
+        "description": "Share of this asset's total supplied pool locked as collateral across active borrower positions.",
+        "explanation": "Percentage of the total asset supply deposited into Liqwid that is currently locked as collateral backing loans, rather than earning passive yield as uncollateralized lending liquidity.",
+        "formulaHtml": '<div class="formula-card"><div class="formula-frac"><span class="formula-num">Total Collateral<sub>USD</sub></span><span class="formula-den">Total Market Supply<sub>USD</sub></span></div></div>',
+        "formulaText": "Total Collateral USD / Total Market Supply USD"
+    },
+    "Active collateral utilization": {
+        "description": "Share of supplied collateral actively deployed to back borrower debt.",
+        "explanation": "Percentage of total supplied collateral valuation that is actively backing outstanding borrow obligations rather than sitting idle as excess equity.",
+        "formulaHtml": '<div class="formula-card"><div class="formula-frac"><span class="formula-num">Active Collateral<sub>USD</sub></span><span class="formula-den">Total Collateral<sub>USD</sub></span></div></div>',
+        "formulaText": "Active Collateral USD / Total Collateral USD"
+    },
+    "Attributed debt borrowed": {
+        "description": "Total debt borrowed across all markets attributed to this asset as collateral.",
+        "explanation": "Aggregate outstanding debt across all borrowing markets secured by this asset, apportioned pro-rata for multi-collateral loans based on this asset\'s share of total loan collateral.",
+        "formulaHtml": '<div class="formula-card">&sum;<sub>Loans</sub> <span class="formula-num">Loan Debt<sub>USD</sub> &times; (Asset Collateral<sub>USD</sub> / Total Loan Collateral<sub>USD</sub>)</span></div>',
+        "formulaText": "sum(Loan Debt USD * (Asset Collateral USD / Total Loan Collateral USD))"
+    },
+    "Effective collateral LTV": {
+        "description": "Realized aggregate loan-to-value ratio for debt backed by this collateral.",
+        "explanation": "Overall loan-to-value ratio computed as total attributed debt divided by total collateral supplied.",
+        "formulaHtml": '<div class="formula-card"><div class="formula-frac"><span class="formula-num">Attributed Debt<sub>USD</sub></span><span class="formula-den">Total Collateral<sub>USD</sub></span></div></div>',
+        "formulaText": "Attributed Debt USD / Total Collateral USD"
+    },
+    "Top borrowed asset": {
+        "description": "The asset accounting for the largest share of debt borrowed against this collateral.",
+        "explanation": "Identifies the highest-volume borrow destination financed by depositors using this asset as collateral.",
+        "formulaHtml": '<div class="formula-card"><span class="formula-func">argmax</span><sub>Asset</sub><span class="formula-paren">(</span><span class="formula-num">Attributed Debt<sub>USD</sub></span><span class="formula-paren">)</span></div>',
+        "formulaText": "argmax(Attributed Debt USD)"
+    },
+    "Protocol supply collateralized": {
+        "description": "Percentage of total protocol deposits locked as collateral backing active loans.",
+        "explanation": "Calculated as total protocol collateral valuation in USD divided by total protocol supply valuation across all markets.",
+        "formulaHtml": '<div class="formula-card"><div class="formula-frac"><span class="formula-num">Total Protocol Collateral<sub>USD</sub></span><span class="formula-den">Total Protocol Supply<sub>USD</sub></span></div></div>',
+        "formulaText": "Total Protocol Collateral USD / Total Protocol Supply USD"
+    },
+    "Total protocol debt": {
+        "description": "Total outstanding debt borrowed across all active loans in the protocol.",
+        "explanation": "Sum of all outstanding borrow obligations across all active borrower positions in Liqwid, converted to USD at current oracle prices.",
+        "formulaHtml": '<div class="formula-card">&sum;<sub>Active loans</sub> <span class="formula-num">Loan Debt<sub>USD</sub></span></div>',
+        "formulaText": "sum(Loan Debt USD)"
+    },
+    "Protocol effective LTV": {
+        "description": "Realized aggregate loan-to-value ratio across all active collateralized loans in the protocol.",
+        "explanation": "Protocol-wide debt-to-collateral ratio, calculated as total outstanding protocol debt divided by total collateral locked.",
+        "formulaHtml": '<div class="formula-card"><div class="formula-frac"><span class="formula-num">Total Protocol Debt<sub>USD</sub></span><span class="formula-den">Total Protocol Collateral<sub>USD</sub></span></div></div>',
+        "formulaText": "Total Protocol Debt USD / Total Protocol Collateral USD"
+    },
+    "Top collateral asset": {
+        "description": "The asset representing the largest share of total collateral locked across the protocol.",
+        "explanation": "Identifies the primary collateral asset securing loans in Liqwid by total USD valuation.",
+        "formulaHtml": '<div class="formula-card"><span class="formula-func">argmax</span><sub>Asset</sub><span class="formula-paren">(</span><span class="formula-num">Collateral Locked<sub>USD</sub></span><span class="formula-paren">)</span></div>',
+        "formulaText": "argmax(Collateral Locked USD)"
     }
 });
 
@@ -1662,6 +1733,9 @@ HTML_TEMPLATE = r"""<!doctype html>
       marketKeyDependence: "How much of this market's official borrow maps to its largest keys versus unmapped debt?",
       marketBorrowConcentration: "How quickly do the largest observed keys account for this market's official borrow?",
       marketCollateralizedSupplyConcentration: "How quickly do the largest observed keys account for represented collateralized supply?",
+      marketCollateralUsageBorrowBreakdown: "Which individual markets account for the debt borrowed against this collateral pool?",
+      marketCollateralUsageCategoryBreakdown: "How is debt backed by this collateral distributed across stablecoins, DEX stableswap LPs, and volatile crypto?",
+      marketCollateralUsageDeployment: "How much of this asset's total Liqwid supply is committed as collateral (active or idle) versus held as uncollateralized lending liquidity?",
       marketParameterRateCurve: "How do the current governance parameters translate utilization into borrower cost and supplier yield?",
       marketParameterBorrowRates: "When did governance move this market's base, optimal, or maximum borrower rate?",
       marketParameterSupplyRates: "When did governance move this market's base, optimal, or maximum supplier yield?",
@@ -1678,7 +1752,10 @@ HTML_TEMPLATE = r"""<!doctype html>
       impactRepaymentContributions: "Which markets contributed the largest shares of recent debt repayment?",
       impactDebtGapContributions: "Which markets contributed most to recent positive debt-flow gaps?",
       impactCurrentContributions: "How is today's debt stock and latest 30-day flow mix divided among markets?",
-      impactLoanState: "Which markets currently hold the most active debt near low health factors?"
+      impactLoanState: "Which markets currently hold the most active debt near low health factors?",
+      protocolCollateralComposition: "Which assets constitute the collateral backing loans across the protocol, and what is their share of total locked collateral?",
+      protocolCollateralSpectrum: "How do individual markets compare on the collateral vs. yield spectrum, from purely collateral assets to uncollateralized yield pools?",
+      protocolCollateralCategoryFlow: "How does borrow demand flow across collateral categories, showing what types of assets are borrowed against volatile crypto, stablecoins, and POL?"
     });
     const chartPeriods = {};
     let activeScope = "protocol";
@@ -1854,6 +1931,7 @@ HTML_TEMPLATE = r"""<!doctype html>
         exposure: renderCurrentExposure,
         impact: renderImpact,
         protocolParticipation: renderProtocolParticipation,
+        protocolCollateralUsage: renderProtocolCollateralUsage,
         protocolLqToken: renderProtocolLqToken,
         protocolParameters: renderProtocolParameters,
         protocolPol: renderProtocolPol,
@@ -1863,6 +1941,7 @@ HTML_TEMPLATE = r"""<!doctype html>
         marketRevenue: renderMarketRevenue,
         marketHealth: renderMarketHealth,
         marketParticipation: renderMarketParticipation,
+        marketCollateralUsage: renderMarketCollateralUsage,
         marketParameters: renderMarketParameters,
         marketPol: renderMarketPol
       };
@@ -2337,6 +2416,157 @@ HTML_TEMPLATE = r"""<!doctype html>
       `);
       drawProtocolCharts();
       drawProtocolConcentrationCharts();
+    }
+
+    function renderProtocolCollateralUsage() {
+      const usage = deep?.collateralUsage?.protocol;
+
+      if (!usage) {
+        setHtml("protocolCollateralUsage", `
+          <div class="hero">
+            <h2>Protocol collateral usage</h2>
+            <p>How supplied assets are pledged as collateral across all markets, backing cross-asset borrowing and credit exposure.</p>
+          </div>
+          <div class="parameter-empty">
+            <strong>Collateral usage data unavailable.</strong><br>
+            No active loan snapshot or collateral data is present in the opened archive.
+          </div>
+        `);
+        return;
+      }
+
+      const totalCollatUsd = usage.totalCollateralUsd ?? 0;
+      const activeCollatUsd = usage.activeCollateralUsd ?? 0;
+      const idleCollatUsd = usage.idleCollateralUsd ?? 0;
+      const totalMarketSupplyUsd = usage.totalMarketSupplyUsd ?? 0;
+      const collateralShareOfSupply = usage.protocolCollateralShareOfSupply ?? usage.supplyUsedAsCollateral ?? (totalMarketSupplyUsd > 0 ? totalCollatUsd / totalMarketSupplyUsd : 0);
+      const totalAttributedDebt = usage.totalAttributedDebtUsd ?? 0;
+      const effLtv = usage.effectiveProtocolLtv ?? (totalCollatUsd > 0 ? totalAttributedDebt / totalCollatUsd : 0);
+      const activeLoansCount = usage.activeLoansCount ?? 0;
+      const topCollat = usage.topCollateralAsset;
+      const topCollatSymbol = topCollat?.symbol || topCollat?.displayName || "None";
+      const topCollatShare = topCollat?.shareOfProtocolCollateral ?? 0;
+      const topCollatUsd = topCollat?.collateralUsd ?? 0;
+      const marketCollateralList = usage.marketCollateralList || [];
+      const crossAssetPairings = usage.crossAssetPairings || [];
+
+      setHtml("protocolCollateralUsage", `
+        <div class="hero">
+          <h2>Protocol collateral usage</h2>
+          <p>How supplied assets are pledged as collateral across all markets, backing cross-asset borrowing and credit exposure.</p>
+        </div>
+        <div class="kpis">
+          ${kpi("Active collateral backing loans", usdCompact(activeCollatUsd), `${integer(activeLoansCount)} active loans`)}
+          ${kpi("Protocol supply collateralized", pct(collateralShareOfSupply), totalMarketSupplyUsd > 0 ? `of ${usdCompact(totalMarketSupplyUsd)} total supply` : "Share of deposits")}
+          ${kpi("Total protocol debt", usdCompact(totalAttributedDebt), "Across all active borrow positions")}
+          ${kpi("Protocol effective LTV", pct(effLtv), "Total debt / Total collateral")}
+          ${kpi("Top collateral asset", esc(topCollatSymbol), topCollat ? `${pct(topCollatShare)} share (${usdCompact(topCollatUsd)})` : "No collateral")}
+        </div>
+        ${chartSection("Collateral composition and distribution", "How is locked collateral distributed across assets, and what is the balance between active loan backing and idle capital?")}
+        ${interactiveBreakdownPanel("Protocol collateral composition by asset", "protocolCollateralComposition", { help: "Shows the market value of collateral deposited per asset, distinguishing between active collateral backing loans and idle collateral." })}
+        ${chartSection("Collateral vs. yield spectrum", "Which assets function primarily as loan collateral versus uncollateralized yield pools?")}
+        ${interactiveBreakdownPanel("Market collateralization spectrum (% of supply used as collateral)", "protocolCollateralSpectrum", { help: "Ranks every market by the share of its total supply locked as collateral, highlighting pure collateral assets versus liquidity and yield pools." })}
+        ${chartSection("Cross-category credit flow", "How does borrow credit flow between different risk and asset categories across the protocol?")}
+        ${interactiveBreakdownPanel("Borrow demand by collateral category", "protocolCollateralCategoryFlow", { help: "Breaks down debt borrowed against each collateral asset category into Stablecoins, DEX Stableswap LPs, and Volatile Crypto." })}
+        <div class="card" style="margin-top:20px">
+          <div class="card-head">
+            <div>
+              <h3>Market collateralization overview</h3>
+              <p>Protocol-wide breakdown of supplied assets, showing locked collateral, debt attribution, and effective LTV per market.</p>
+            </div>
+          </div>
+          <div class="table-wrap">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>Market</th>
+                  <th>Category</th>
+                  <th style="text-align:right">Total Supply</th>
+                  <th style="text-align:right">Collateral Locked</th>
+                  <th style="text-align:right">Share of Collateral</th>
+                  <th style="text-align:right">Supply as Collateral</th>
+                  <th style="text-align:right">Attributed Debt</th>
+                  <th style="text-align:right">Effective LTV</th>
+                  <th style="text-align:right">Active Loans</th>
+                  <th>Top Borrow Destination</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${marketCollateralList.length === 0 ? `
+                  <tr><td colspan="10" style="text-align:center;color:var(--muted);padding:16px">No collateral data available.</td></tr>
+                ` : marketCollateralList.map((m) => {
+                  const catUpper = String(m.category || "").toLowerCase();
+                  const catBadge = catUpper.includes("stablecoin") ? `<span class="badge" style="background:rgba(46,196,182,0.15);color:var(--mint);padding:2px 8px;border-radius:4px;font-size:0.75rem">Stablecoin</span>`
+                    : catUpper.includes("pol") ? `<span class="badge" style="background:rgba(155,93,229,0.15);color:var(--purple);padding:2px 8px;border-radius:4px;font-size:0.75rem">POL</span>`
+                    : catUpper.includes("lp") ? `<span class="badge" style="background:rgba(255,159,28,0.15);color:var(--amber);padding:2px 8px;border-radius:4px;font-size:0.75rem">Stableswap LP</span>`
+                    : `<span class="badge" style="background:rgba(67,97,238,0.15);color:var(--blue);padding:2px 8px;border-radius:4px;font-size:0.75rem">Volatile Crypto</span>`;
+                  const mName = m.displayName || m.symbol || m.marketId;
+                  const topB = m.topBorrow;
+                  const topBName = topB ? (topB.displayName || topB.symbol || topB.borrowedMarketId) : "None";
+                  const topBShare = topB ? (topB.shareOfAttributedDebt ?? 0) : 0;
+                  return `
+                    <tr>
+                      <td><strong>${esc(mName)}</strong></td>
+                      <td>${catBadge}</td>
+                      <td style="text-align:right">${esc(usdCompact(m.marketSupplyUsd))}</td>
+                      <td style="text-align:right;font-weight:600">${esc(usdCompact(m.collateralUsd))}</td>
+                      <td style="text-align:right">${esc(pct(m.shareOfProtocolCollateral))}</td>
+                      <td style="text-align:right;font-weight:600">${esc(pct(m.collateralShareOfSupply))}</td>
+                      <td style="text-align:right">${esc(usdCompact(m.attributedDebtUsd))}</td>
+                      <td style="text-align:right">${esc(pct(m.effectiveLtv))}</td>
+                      <td style="text-align:right">${esc(integer(m.activeLoans))}</td>
+                      <td>${topB ? `<strong>${esc(topBName)}</strong> (${esc(pct(topBShare))})` : "None"}</td>
+                    </tr>
+                  `;
+                }).join("")}
+              </tbody>
+            </table>
+          </div>
+        </div>
+        <div class="card" style="margin-top:20px">
+          <div class="card-head">
+            <div>
+              <h3>Top cross-asset credit pairings</h3>
+              <p>Highest volume credit pairings across the protocol, showing what debt is borrowed against each collateral asset.</p>
+            </div>
+          </div>
+          <div class="table-wrap">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>Collateral Asset</th>
+                  <th>Borrowed Asset</th>
+                  <th>Borrow Category</th>
+                  <th style="text-align:right">Attributed Debt (USD)</th>
+                  <th style="text-align:right">Share of Protocol Debt</th>
+                  <th style="text-align:right">Active Loans</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${crossAssetPairings.length === 0 ? `
+                  <tr><td colspan="6" style="text-align:center;color:var(--muted);padding:16px">No credit pairing data available.</td></tr>
+                ` : crossAssetPairings.map((p) => {
+                  const catUpper = String(p.borrowCategory || "").toLowerCase();
+                  const catBadge = catUpper.includes("stablecoin") ? `<span class="badge" style="background:rgba(46,196,182,0.15);color:var(--mint);padding:2px 8px;border-radius:4px;font-size:0.75rem">Stablecoin</span>`
+                    : catUpper.includes("lp") ? `<span class="badge" style="background:rgba(255,159,28,0.15);color:var(--amber);padding:2px 8px;border-radius:4px;font-size:0.75rem">Stableswap LP</span>`
+                    : `<span class="badge" style="background:rgba(67,97,238,0.15);color:var(--blue);padding:2px 8px;border-radius:4px;font-size:0.75rem">Volatile Crypto</span>`;
+                  return `
+                    <tr>
+                      <td><strong>${esc(p.collateralDisplayName || p.collateralSymbol)}</strong></td>
+                      <td><strong>${esc(p.borrowDisplayName || p.borrowSymbol)}</strong></td>
+                      <td>${catBadge}</td>
+                      <td style="text-align:right;font-weight:600">${esc(usd(p.attributedDebtUsd))}</td>
+                      <td style="text-align:right">${esc(pct(p.shareOfProtocolDebt))}</td>
+                      <td style="text-align:right">${esc(integer(p.loanCount))}</td>
+                    </tr>
+                  `;
+                }).join("")}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      `);
+      drawProtocolCollateralUsageCharts();
     }
 
     function renderProtocolLqToken() {
@@ -3057,6 +3287,151 @@ HTML_TEMPLATE = r"""<!doctype html>
       drawMarketCharts();
     }
 
+    function renderMarketCollateralUsage() {
+      const market = currentMarketSummary();
+      const usage = currentMarketCollateralUsage();
+      const marketName = market?.displayName || market?.marketId || "Market";
+      const symbol = usage?.symbol || market?.symbol || marketName;
+
+      if (!usage) {
+        setHtml("marketCollateralUsage", `
+          <div class="hero"><h2>${esc(marketName)} Collateral usage</h2><p>How supplied ${esc(symbol)} is utilized as collateral across the protocol, and what assets are borrowed against it.</p></div>
+          <div class="parameter-empty"><strong>Collateral usage data unavailable.</strong><br>No active loan snapshot or collateral data is present for this market in the opened archive.</div>
+        `);
+        return;
+      }
+
+      const totalCollatUsd = usage.totalCollateralUsd ?? usage.totalCollateralInUsd ?? 0;
+      const activeCollatUsd = usage.activeCollateralUsd ?? usage.activeCollateralInUsd ?? 0;
+      const idleCollatUsd = usage.idleCollateralUsd ?? usage.idleCollateralInUsd ?? 0;
+      const marketSupplyUsd = usage.marketSupplyUsd ?? Number(market?.supplyInUsd ?? market?.supply ?? 0);
+      const collateralShareOfSupply = usage.collateralShareOfSupply ?? usage.supplyUsedAsCollateral ?? (marketSupplyUsd > 0 ? totalCollatUsd / marketSupplyUsd : 0);
+      const totalAttrDebt = usage.totalAttributedDebtUsd ?? usage.totalAttributedDebtInUsd ?? 0;
+      const effLtv = usage.effectiveCollateralLtv ?? usage.effectiveLtv ?? 0;
+      const activeLoansCount = usage.activeLoanCount ?? usage.loanCount ?? 0;
+      const topBorrow = usage.topBorrowedAsset;
+      const topBorrowName = topBorrow ? (topBorrow.displayName || topBorrow.borrowedDisplayName || topBorrow.symbol || topBorrow.borrowedSymbol) : "None";
+      const topBorrowShare = topBorrow ? (topBorrow.shareOfAttributedDebt ?? topBorrow.shareOfDebt ?? 0) : 0;
+      const topBorrowDebt = topBorrow ? (topBorrow.attributedDebtUsd ?? topBorrow.attributedDebtInUsd ?? 0) : 0;
+      const borrowsList = usage.borrowedAssets || usage.borrows || [];
+      const topLoansList = usage.topLoans || [];
+
+      setHtml("marketCollateralUsage", `
+        <div class="hero">
+          <h2>${esc(marketName)} Collateral usage</h2>
+          <p>How supplied ${esc(symbol)} is utilized as collateral across the protocol, and what assets are borrowed against it.</p>
+        </div>
+        <div class="kpis">
+          ${kpi("Active collateral backing loans", usdCompact(activeCollatUsd), usage.totalCollateralNative != null ? (idleCollatUsd > 0 ? `${assetAmount(usage.totalCollateralNative, symbol)} locked (${usdCompact(idleCollatUsd)} idle)` : `${assetAmount(usage.totalCollateralNative, symbol)} locked`) : `${usdCompact(idleCollatUsd)} idle collateral`)}
+          ${kpi("Supply used as collateral", pct(collateralShareOfSupply), marketSupplyUsd > 0 ? `of ${usdCompact(marketSupplyUsd)} total supply` : "Relative to pool supply")}
+          ${kpi("Attributed debt borrowed", usdCompact(totalAttrDebt), `${integer(activeLoansCount)} active loans`)}
+          ${kpi("Effective collateral LTV", pct(effLtv), "Attributed debt / Collateral")}
+          ${kpi("Top borrowed asset", esc(topBorrowName), topBorrow ? `${pct(topBorrowShare)} share (${usdCompact(topBorrowDebt)})` : "No debt")}
+        </div>
+        ${chartSection("Borrowed assets breakdown", "Which assets are borrowers minting or taking out against this collateral, and in what proportions?")}
+        ${interactiveBreakdownPanel("Debt borrowed by destination asset", "marketCollateralUsageBorrowBreakdown", { help: "Apportions multi-collateral debt pro-rata to this asset's share of total collateral in each loan." })}
+        ${interactiveBreakdownPanel("Borrow demand by asset category", "marketCollateralUsageCategoryBreakdown", { help: "Groups borrowed debt into Stablecoins (carry/leverage), Stableswap LP tokens (DEX liquidity), and Volatile Crypto (shorting/staking)." })}
+        ${chartSection("Supply deployment and collateralization", "How much of this asset's total Liqwid supply is locked as collateral to back debt versus held as uncollateralized lending liquidity?")}
+        ${interactiveBreakdownPanel("Supply deployment: collateral vs. uncollateralized supply", "marketCollateralUsageDeployment", { help: "Decomposes total market supply into active collateral backing loans, idle collateral, and uncollateralized supply earning passive yield." })}
+        <div class="card" style="margin-top:20px">
+          <div class="card-head">
+            <div>
+              <h3>Debt borrowed against ${esc(symbol)} collateral</h3>
+              <p>Granular breakdown of borrowed assets backed by this collateral pool, apportioned pro-rata for multi-collateral loans.</p>
+            </div>
+          </div>
+          <div class="table-wrap">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>Borrowed Asset</th>
+                  <th>Category</th>
+                  <th style="text-align:right">Attributed Debt (USD)</th>
+                  <th style="text-align:right">Share of Debt</th>
+                  <th style="text-align:right">Active Loans</th>
+                  <th style="text-align:right">Avg LTV</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${borrowsList.length === 0 ? `
+                  <tr><td colspan="6" style="text-align:center;color:var(--muted);padding:16px">No active debt borrowed against this collateral.</td></tr>
+                ` : borrowsList.map((b) => {
+                  const catUpper = String(b.category || "").toLowerCase();
+                  const catBadge = catUpper.includes("stablecoin") ? `<span class="badge" style="background:rgba(46,196,182,0.15);color:var(--mint);padding:2px 8px;border-radius:4px;font-size:0.75rem">Stablecoin</span>`
+                    : catUpper.includes("lp") ? `<span class="badge" style="background:rgba(255,159,28,0.15);color:var(--amber);padding:2px 8px;border-radius:4px;font-size:0.75rem">Stableswap LP</span>`
+                    : `<span class="badge" style="background:rgba(67,97,238,0.15);color:var(--blue);padding:2px 8px;border-radius:4px;font-size:0.75rem">Volatile Crypto</span>`;
+                  const bName = b.displayName || b.borrowedDisplayName || b.symbol || b.borrowedSymbol || "Asset";
+                  const bDebt = b.attributedDebtUsd ?? b.attributedDebtInUsd ?? 0;
+                  const bShare = b.shareOfAttributedDebt ?? b.shareOfDebt ?? 0;
+                  return `
+                    <tr>
+                      <td><strong>${esc(bName)}</strong></td>
+                      <td>${catBadge}</td>
+                      <td style="text-align:right;font-weight:600">${esc(usd(bDebt))}</td>
+                      <td style="text-align:right">${esc(pct(bShare))}</td>
+                      <td style="text-align:right">${esc(integer(b.loanCount))}</td>
+                      <td style="text-align:right">${esc(pct(b.avgLtv))}</td>
+                    </tr>
+                  `;
+                }).join("")}
+              </tbody>
+            </table>
+          </div>
+        </div>
+        <div class="card" style="margin-top:20px">
+          <div class="card-head">
+            <div>
+              <h3>Top active loans utilizing ${esc(symbol)} collateral</h3>
+              <p>Individual borrower positions with the largest collateral commitment of this asset.</p>
+            </div>
+          </div>
+          <div class="table-wrap">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>Loan Key</th>
+                  <th>Borrow Market</th>
+                  <th style="text-align:right">Collateral Deposited</th>
+                  <th style="text-align:right">Collateral Value</th>
+                  <th style="text-align:right">Collateral Share</th>
+                  <th style="text-align:right">Total Loan Debt</th>
+                  <th style="text-align:right">Attributed Debt</th>
+                  <th style="text-align:right">Loan LTV</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${topLoansList.length === 0 ? `
+                  <tr><td colspan="8" style="text-align:center;color:var(--muted);padding:16px">No active loans found for this collateral.</td></tr>
+                ` : topLoansList.map((l) => {
+                  const keyStr = String(l.loanKey || l.id || l.observedKey || "Loan");
+                  const displayKey = keyStr.length > 20 ? keyStr.slice(0, 10) + "..." + keyStr.slice(-8) : keyStr;
+                  const bSym = l.borrowSymbol || l.borrowDisplayName || l.borrowMarketId || l.borrowedMarketId || "Market";
+                  const cVal = l.collateralUsd ?? l.collateralInUsd ?? 0;
+                  const cShare = l.collateralShareOfLoan ?? l.collateralShare ?? 0;
+                  const lDebt = l.loanDebtUsd ?? l.loanDebtInUsd ?? 0;
+                  const aDebt = l.attributedDebtUsd ?? l.attributedDebtInUsd ?? 0;
+                  const cNative = l.collateralNative != null ? assetAmount(l.collateralNative, symbol) : usd(cVal);
+                  return `
+                    <tr>
+                      <td><code>${esc(displayKey)}</code></td>
+                      <td><strong>${esc(bSym)}</strong></td>
+                      <td style="text-align:right">${esc(cNative)}</td>
+                      <td style="text-align:right;font-weight:600">${esc(usd(cVal))}</td>
+                      <td style="text-align:right">${esc(pct(cShare))}</td>
+                      <td style="text-align:right">${esc(usd(lDebt))}</td>
+                      <td style="text-align:right;color:var(--blue);font-weight:600">${esc(usd(aDebt))}</td>
+                      <td style="text-align:right">${esc(pct(l.ltv))}</td>
+                    </tr>
+                  `;
+                }).join("")}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      `);
+      drawMarketCharts();
+    }
+
     function renderMarketParameters() {
       const market = currentMarketSummary();
       const state = currentMarketParameters();
@@ -3456,6 +3831,23 @@ HTML_TEMPLATE = r"""<!doctype html>
       return key ? byMarket[key] : null;
     }
 
+    function currentMarketCollateralUsage() {
+      const byMarket = deep.collateralUsage?.byMarket || {};
+      const market = currentMarketSummary();
+      const marketId = selectedMarket || market?.marketId || market?.id || market?.symbol;
+      if (!marketId) return null;
+      if (byMarket[marketId]) return byMarket[marketId];
+      const upper = String(marketId).toUpperCase();
+      if (byMarket[upper]) return byMarket[upper];
+      const symbolUpper = String(market?.symbol || "").toUpperCase();
+      if (symbolUpper && byMarket[symbolUpper]) return byMarket[symbolUpper];
+      const key = Object.keys(byMarket).find((candidate) => {
+        const cUpper = candidate.toUpperCase();
+        return cUpper === upper || (symbolUpper && cUpper === symbolUpper) || (market?.displayName && cUpper === String(market.displayName).toUpperCase());
+      });
+      return key ? byMarket[key] : null;
+    }
+
     function loanSnapshotRows(kind, scope, marketId = "") {
       return (deep.loanSnapshotHistory?.[kind] || []).filter((row) =>
         row.scope === scope && (scope === "protocol" || String(row.marketId).toUpperCase() === String(marketId).toUpperCase())
@@ -3494,6 +3886,7 @@ HTML_TEMPLATE = r"""<!doctype html>
 
     function drawProtocolCharts(chartId = null, resetRange = false) {
       for (const id of chartId ? [chartId] : protocolChartIds()) drawProtocolTimeChart(id, resetRange);
+      if (!chartId || chartId.startsWith("protocolCollateral")) drawProtocolCollateralUsageCharts(chartId);
     }
 
     function drawProtocolParameterCharts(chartId = null, resetRange = false) {
@@ -3998,8 +4391,186 @@ HTML_TEMPLATE = r"""<!doctype html>
       if (!chartId || chartId === "marketKeyDependence") drawMarketKeyDependence();
       if (!chartId || chartId === "marketBorrowConcentration") drawMarketBorrowConcentration();
       if (!chartId || chartId === "marketCollateralizedSupplyConcentration") drawMarketCollateralizedSupplyConcentration();
+      if (!chartId || chartId.startsWith("marketCollateralUsage")) drawMarketCollateralUsageCharts(chartId);
       if (!chartId || chartId.startsWith("marketPol")) drawMarketPolCharts(chartId, resetRange);
       if (!chartId) drawMarketHealthChart();
+    }
+
+    function drawMarketCollateralUsageCharts(chartId = null) {
+      const usage = currentMarketCollateralUsage();
+      if (!usage) return;
+
+      if (!chartId || chartId === "marketCollateralUsageBorrowBreakdown") {
+        const container = document.querySelector("#marketCollateralUsageBorrowBreakdown");
+        if (container) {
+          const rawBorrows = usage.borrowedAssets || usage.borrows || [];
+          const rows = rawBorrows.slice(0, 10).map((b) => ({
+            asset: b.displayName || b.borrowedDisplayName || b.symbol || b.borrowedSymbol || "Asset",
+            attributedDebtUsd: b.attributedDebtUsd ?? b.attributedDebtInUsd ?? 0
+          }));
+          renderInteractiveCategoryChart(container, {
+            chartId: "marketCollateralUsageBorrowBreakdown",
+            rows: rows.length ? rows : [{ asset: "No active debt", attributedDebtUsd: 0 }],
+            categoryKey: "asset",
+            series: [
+              { key: "attributedDebtUsd", label: "Attributed Debt (USD)", color: colors.blue }
+            ],
+            mode: "grouped",
+            valueFormatter: usdCompact
+          });
+        }
+      }
+
+      if (!chartId || chartId === "marketCollateralUsageDeployment") {
+        const container = document.querySelector("#marketCollateralUsageDeployment");
+        if (container) {
+          const activeVal = usage.activeCollateralUsd ?? usage.activeCollateralInUsd ?? 0;
+          const idleVal = usage.idleCollateralUsd ?? usage.idleCollateralInUsd ?? 0;
+          const totalCollat = activeVal + idleVal;
+          const marketSup = usage.marketSupplyUsd ?? totalCollat;
+          const uncollatVal = Math.max(0, marketSup - totalCollat);
+          renderInteractiveCategoryChart(container, {
+            chartId: "marketCollateralUsageDeployment",
+            rows: [
+              {
+                segment: usage.displayName || usage.symbol || "Supply Deployment",
+                activeCollateralUsd: activeVal,
+                idleCollateralUsd: idleVal,
+                uncollateralizedSupplyUsd: uncollatVal
+              }
+            ],
+            categoryKey: "segment",
+            series: [
+              { key: "activeCollateralUsd", label: "Active Collateral (backing debt)", color: colors.amber },
+              { key: "idleCollateralUsd", label: "Idle Collateral", color: colors.mint },
+              { key: "uncollateralizedSupplyUsd", label: "Uncollateralized Supply (passive yield)", color: colors.blue }
+            ],
+            mode: "stacked",
+            valueFormatter: usdCompact
+          });
+        }
+      }
+
+      if (!chartId || chartId === "marketCollateralUsageCategoryBreakdown") {
+        const container = document.querySelector("#marketCollateralUsageCategoryBreakdown");
+        if (container) {
+          let rawCats = [];
+          if (Array.isArray(usage.categoryBreakdown)) {
+            rawCats = usage.categoryBreakdown;
+          } else if (usage.categoryBreakdown && typeof usage.categoryBreakdown === "object") {
+            const cb = usage.categoryBreakdown;
+            rawCats = [
+              { label: "Stablecoins", attributedDebtUsd: cb.stablecoins?.debtInUsd || 0 },
+              { label: "Stableswap LP tokens", attributedDebtUsd: cb.stableswapLp?.debtInUsd || 0 },
+              { label: "Volatile Crypto", attributedDebtUsd: cb.volatileCrypto?.debtInUsd || 0 }
+            ];
+          }
+          const rows = rawCats.map((c) => ({
+            category: c.label || c.category || "Category",
+            attributedDebtUsd: c.attributedDebtUsd ?? c.debtInUsd ?? c.attributedDebtInUsd ?? 0
+          }));
+          renderInteractiveCategoryChart(container, {
+            chartId: "marketCollateralUsageCategoryBreakdown",
+            rows: rows.length ? rows : [{ category: "No active debt", attributedDebtUsd: 0 }],
+            categoryKey: "category",
+            series: [
+              { key: "attributedDebtUsd", label: "Attributed Debt (USD)", color: colors.purple }
+            ],
+            mode: "grouped",
+            valueFormatter: usdCompact
+          });
+        }
+      }
+    }
+
+    function drawProtocolCollateralUsageCharts(chartId = null) {
+      const usage = deep?.collateralUsage?.protocol;
+      if (!usage) return;
+
+      if (!chartId || chartId === "protocolCollateralComposition") {
+        const container = document.querySelector("#protocolCollateralComposition");
+        if (container) {
+          const list = (usage.marketCollateralList || []).filter((m) => m.collateralUsd > 0);
+          const topList = list.slice(0, 10).map((m) => ({
+            asset: m.displayName || m.symbol || m.marketId,
+            activeCollateralUsd: m.activeCollateralUsd,
+            idleCollateralUsd: m.idleCollateralUsd,
+            totalCollateralUsd: m.collateralUsd
+          }));
+          renderInteractiveCategoryChart(container, {
+            chartId: "protocolCollateralComposition",
+            rows: topList.length ? topList : [{ asset: "No collateral", activeCollateralUsd: 0, idleCollateralUsd: 0, totalCollateralUsd: 0 }],
+            categoryKey: "asset",
+            series: [
+              { key: "activeCollateralUsd", label: "Active Collateral (backing debt)", color: colors.amber },
+              { key: "idleCollateralUsd", label: "Idle Collateral", color: colors.mint }
+            ],
+            mode: "stacked",
+            sortKey: "totalCollateralUsd",
+            allowXScaleToggle: true,
+            valueFormatter: usdCompact
+          });
+        }
+      }
+
+      if (!chartId || chartId === "protocolCollateralSpectrum") {
+        const container = document.querySelector("#protocolCollateralSpectrum");
+        if (container) {
+          const seen = new Set();
+          const spectrum = (usage.collateralSpectrum || [])
+            .filter((m) => m.collateralShareOfSupply > 0 || m.collateralUsd > 0)
+            .filter((m) => {
+              const name = m.displayName || m.symbol || m.marketId;
+              if (seen.has(name)) return false;
+              seen.add(name);
+              return true;
+            })
+            .map((m) => ({
+              market: m.displayName || m.symbol || m.marketId,
+              collateralShareOfSupply: Math.min(1, Number(m.collateralShareOfSupply) || 0),
+              collateralUsd: m.collateralUsd
+            }));
+          renderInteractiveCategoryChart(container, {
+            chartId: "protocolCollateralSpectrum",
+            rows: spectrum.length ? spectrum : [{ market: "No collateral", collateralShareOfSupply: 0, collateralUsd: 0 }],
+            categoryKey: "market",
+            series: [
+              { key: "collateralShareOfSupply", label: "Supply used as collateral (%)", color: colors.blue }
+            ],
+            mode: "grouped",
+            sortKey: "collateralShareOfSupply",
+            allowXScaleToggle: true,
+            valueFormatter: pct
+          });
+        }
+      }
+
+      if (!chartId || chartId === "protocolCollateralCategoryFlow") {
+        const container = document.querySelector("#protocolCollateralCategoryFlow");
+        if (container) {
+          const flowRows = (usage.categoryFlowRows || []).map((r) => ({
+            category: r.category,
+            borrowedStablecoinsUsd: r.borrowedStablecoinsUsd,
+            borrowedStableswapLpUsd: r.borrowedStableswapLpUsd,
+            borrowedVolatileUsd: r.borrowedVolatileUsd,
+            totalDebtUsd: r.debtUsd
+          }));
+          renderInteractiveCategoryChart(container, {
+            chartId: "protocolCollateralCategoryFlow",
+            rows: flowRows.length ? flowRows : [{ category: "No active debt", borrowedStablecoinsUsd: 0, borrowedStableswapLpUsd: 0, borrowedVolatileUsd: 0 }],
+            categoryKey: "category",
+            series: [
+              { key: "borrowedStablecoinsUsd", label: "Stablecoins", color: colors.mint },
+              { key: "borrowedStableswapLpUsd", label: "Stableswap LP tokens", color: colors.amber },
+              { key: "borrowedVolatileUsd", label: "Volatile Crypto", color: colors.purple }
+            ],
+            mode: "stacked",
+            sortKey: "totalDebtUsd",
+            allowXScaleToggle: true,
+            valueFormatter: usdCompact
+          });
+        }
+      }
     }
 
     function drawMarketPolCharts(chartId = null, resetRange = false) {
