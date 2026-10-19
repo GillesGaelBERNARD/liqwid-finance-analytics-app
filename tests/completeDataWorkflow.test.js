@@ -438,6 +438,60 @@ test("monthly official allocation is aggregated from canonical daily rows", asyn
   assert.equal(analysis.revenue.summary.completeAllocationDays, 105);
 });
 
+function liquidationSplitApi({ protocolRevenue, liquidationBonus }) {
+  return completeApi({
+    async fetchMarketHistory() {
+      return [{
+        timestamp: "2026-09-10T00:00:00.000Z", supplyInUsd: 100, borrowInUsd: 20,
+        liquidityInUsd: 80, utilizationPercentage: 0.2, interestAccruedInUsd: 2, interestRepaidInUsd: 1
+      }];
+    },
+    async fetchProtocolFees(input) {
+      const variables = toUtcApiRange(input);
+      return {
+        fromDate: variables.startDate,
+        toDate: variables.endDate,
+        totalRevenueInUsd: protocolRevenue + 2,
+        protocolRevenueInUsd: protocolRevenue,
+        holdersRevenueInUsd: 2,
+        feeBreakdown: {
+          borrowInterestAccruedForProtocol: 7,
+          loanOriginationFeesForProtocol: 3,
+          borrowInterestAccruedForHolders: 1.5,
+          loanOriginationFeesForHolders: 0.5,
+          liquidationBonus
+        }
+      };
+    }
+  });
+}
+
+test("protocol revenue above interest and origination is booked as the liquidation fee share", async () => {
+  const { analysis } = await refreshCompleteDataset({
+    store: createPortableDataStore([], { name: "liqwid" }),
+    api: liquidationSplitApi({ protocolRevenue: 25, liquidationBonus: 100 }),
+    startDate: "2026-09-10",
+    endDate: "2026-09-10",
+    runId: "liquidation-split",
+    now: () => new Date("2026-09-11T00:00:00.000Z")
+  });
+
+  assert.equal(analysis.revenue.summary.allocatedProtocolRevenueInUsd, 25);
+  assert.equal(analysis.revenue.summary.allocatedProtocolLiquidationRevenueInUsd, 15);
+  assert.equal(analysis.revenue.monthlyAllocation[0].allocatedProtocolLiquidationRevenueInUsd, 15);
+});
+
+test("protocol revenue that no liquidation bonus can explain fails the refresh", async () => {
+  await assert.rejects(refreshCompleteDataset({
+    store: createPortableDataStore([], { name: "liqwid" }),
+    api: liquidationSplitApi({ protocolRevenue: 25, liquidationBonus: 0 }),
+    startDate: "2026-09-10",
+    endDate: "2026-09-10",
+    runId: "liquidation-split-unexplained",
+    now: () => new Date("2026-09-11T00:00:00.000Z")
+  }), /liquidation bonus/);
+});
+
 test("an old monthly cache is ignored in favor of canonical daily aggregation", async () => {
   const store = createPortableDataStore([], { name: "liqwid" });
   await store.writeText("clean/protocol-fees-monthly.csv", rowsToCsv([{

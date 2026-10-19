@@ -14,7 +14,7 @@ import { appendLoanSnapshotHistory, buildLoanSnapshotHistory } from "./loanSnaps
 import { addDays, toUtcApiRange } from "../shared/dates.js";
 
 const PROTOCOL_FEES_COVERAGE_START = "2026-01-01";
-const PROTOCOL_FEES_DAILY_PROVENANCE = "analytics-fees-daily-v1";
+const PROTOCOL_FEES_DAILY_PROVENANCE = "analytics-fees-daily-v2";
 const PROTOCOL_FEES_DAILY_BATCH_SIZE = 4;
 
 const PROTOCOL_FEES_SELECTION = `
@@ -34,6 +34,7 @@ const PROTOCOL_FEES_SELECTION = `
     loanOriginationFees
     loanOriginationFeesForProtocol
     loanOriginationFeesForHolders
+    liquidationBonus
   }
 `;
 
@@ -54,6 +55,7 @@ const PROTOCOL_FEES_NATIVE_SELECTION = `
     loanOriginationFees
     loanOriginationFeesForProtocol
     loanOriginationFeesForHolders
+    liquidationBonus
   }
 `;
 
@@ -543,23 +545,41 @@ function protocolFeeRow(current, { date, startDay, endDay, isComplete, provenanc
     loanOriginationFeesInUsd: numeric(breakdown.loanOriginationFees),
     loanOriginationFeesForProtocolInUsd: numeric(breakdown.loanOriginationFeesForProtocol),
     loanOriginationFeesForHoldersInUsd: numeric(breakdown.loanOriginationFeesForHolders),
+    liquidationBonusInUsd: numeric(breakdown.liquidationBonus),
+    liquidationFeeShareForProtocolInUsd: protocolLiquidationShare(current, breakdown),
     isComplete,
     provenance
   };
 }
 
-function assertProtocolFeeAllocationReconciles(row) {
+function protocolLiquidationShare(current, breakdown) {
+  const protocolRevenue = numeric(current.protocolRevenueInUsd);
+  const components = numeric(breakdown.borrowInterestAccruedForProtocol) + numeric(breakdown.loanOriginationFeesForProtocol);
+  return approximatelyEqual(protocolRevenue, components) ? 0 : protocolRevenue - components;
+}
+
+function protocolFeeAllocationProblem(row) {
   const protocolComponents = numeric(row.borrowInterestAccruedForProtocolInUsd) + numeric(row.loanOriginationFeesForProtocolInUsd);
   const holderComponents = numeric(row.borrowInterestAccruedForHoldersInUsd) + numeric(row.loanOriginationFeesForHoldersInUsd);
-  if (!approximatelyEqual(row.protocolRevenueInUsd, protocolComponents)) {
-    throw new Error(`Protocol fee allocation does not reconcile for ${row.date}: protocol total differs from its interest and origination components.`);
+  const liquidationShare = numeric(row.liquidationFeeShareForProtocolInUsd);
+  if (liquidationShare < 0 || liquidationShare > numeric(row.liquidationBonusInUsd) + 1e-6) {
+    return `protocol total exceeds its interest and origination components by ${liquidationShare}, which the day's liquidation bonus of ${numeric(row.liquidationBonusInUsd)} cannot explain.`;
+  }
+  if (!approximatelyEqual(row.protocolRevenueInUsd, protocolComponents + liquidationShare)) {
+    return "protocol total differs from its interest, origination, and liquidation components.";
   }
   if (!approximatelyEqual(row.holdersRevenueInUsd, holderComponents)) {
-    throw new Error(`Protocol fee allocation does not reconcile for ${row.date}: holder total differs from its interest and origination components.`);
+    return "holder total differs from its interest and origination components.";
   }
   if (!approximatelyEqual(row.totalRevenueInUsd, numeric(row.protocolRevenueInUsd) + numeric(row.holdersRevenueInUsd))) {
-    throw new Error(`Protocol fee allocation does not reconcile for ${row.date}: total revenue differs from protocol plus holder allocations.`);
+    return "total revenue differs from protocol plus holder allocations.";
   }
+  return null;
+}
+
+function assertProtocolFeeAllocationReconciles(row) {
+  const problem = protocolFeeAllocationProblem(row);
+  if (problem) throw new Error(`Protocol fee allocation does not reconcile for ${row.date}: ${problem}`);
 }
 
 function approximatelyEqual(left, right) {
@@ -573,8 +593,7 @@ function validCachedDailyFeeRow(row, date) {
   const expected = toUtcApiRange({ startDay: date, endDay: date });
   return sameUtcSecond(row.fromDate, expected.startDate)
     && sameUtcSecond(row.toDate, expected.endDate)
-    && approximatelyEqual(row.protocolRevenueInUsd, numeric(row.borrowInterestAccruedForProtocolInUsd) + numeric(row.loanOriginationFeesForProtocolInUsd))
-    && approximatelyEqual(row.holdersRevenueInUsd, numeric(row.borrowInterestAccruedForHoldersInUsd) + numeric(row.loanOriginationFeesForHoldersInUsd));
+    && protocolFeeAllocationProblem(row) === null;
 }
 
 function workflowDateRange(startValue, endValue) {

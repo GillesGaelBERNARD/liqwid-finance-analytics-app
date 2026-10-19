@@ -6,11 +6,15 @@ An open-source, client-side web application and data pipeline for monitoring and
 
 ## Features
 
-- **Protocol & Market Dynamics Analytics**: Explore TVL, utilization rate, borrow/supply APYs, active debt, debt and interest accrual vs repayment flows, risk metrics across all active markets, collateral usage and credit pairings, POL backed DAO loan positions, markets participants concentration, and more.
+- **Protocol & Market Dynamics Analytics**: Explore TVL, utilization rate, borrow/supply APYs, active debt, debt and interest accrual vs repayment flows, risk metrics across all active markets, market participant concentration, and parameter landscape history.
+- **DAO & LQ-Staker Revenue Allocation**: Daily and monthly tracking of protocol fee allocations between the DAO treasury and LQ stakers, with itemized interest accrual, loan origination fees, and Proposal 195 liquidation fee share splits.
+- **USD Stablecoin Yields & Circulating Supply**: Comparative historical time series analyzing supply APYs and circulating supplies across all major USD stablecoin markets (USDM, USDA, wanPYUSD, USDCx, and USDrf).
+- **Collateral Usage & Credit Pairing Analytics**: In-depth breakdown of collateral asset composition and borrow-to-collateral pairing flows across active loans and markets.
+- **Protocol-Owned Liquidity (POL) Tracking**: Dedicated monitoring of DAO POL borrowing lines and locked qPOL collateral positions, with custom risk and health factor exclusions.
 - **Client-Side & Offline Ready**: Runs directly in any web browser without needing a backend server or persistent daemon.
 - **Portable Data Store & Zip Archive**: Bundles raw historical fetches, cleaned daily histories, and computed market datasets in a portable ZIP archive (`liqwid-data.zip`) and CSV manifest (`liqwid-portable-manifest.csv`).
 - **On-Demand Data Ingestion**: Does **not** perform always-on or continuous background data ingestion. New protocol observations are queried on-demand from the official Liqwid v2 GraphQL API only when triggered by the user clicking **"Fetch new data"**.
-- **Data Status** page: A separate page with data coverage and consistency checks.
+- **Data Status**: Dedicated diagnostic interface providing data coverage audits, schema consistency verifications, and loan reconciliation checks.
 
 ## Project Layout
 

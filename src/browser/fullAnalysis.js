@@ -778,6 +778,7 @@ function buildRevenueContext(bundle, marketSummaries, dailyInput, dailyAllocated
       allocatedProtocolRevenueInUsd: completeAllocationDays.length ? total(completeAllocationDays, "allocatedProtocolRevenueInUsd") : null,
       allocatedProtocolInterestRevenueInUsd: completeAllocationDays.length ? total(completeAllocationDays, "allocatedProtocolInterestRevenueInUsd") : null,
       allocatedProtocolOriginationRevenueInUsd: completeAllocationDays.length ? total(completeAllocationDays, "allocatedProtocolOriginationRevenueInUsd") : null,
+      allocatedProtocolLiquidationRevenueInUsd: completeAllocationDays.length ? total(completeAllocationDays, "allocatedProtocolLiquidationRevenueInUsd") : null,
       allocatedHoldersRevenueInUsd: completeAllocationDays.length ? total(completeAllocationDays, "allocatedHoldersRevenueInUsd") : null,
       allocatedHoldersInterestRevenueInUsd: completeAllocationDays.length ? total(completeAllocationDays, "allocatedHoldersInterestRevenueInUsd") : null,
       allocatedHoldersOriginationRevenueInUsd: completeAllocationDays.length ? total(completeAllocationDays, "allocatedHoldersOriginationRevenueInUsd") : null,
@@ -868,6 +869,8 @@ function normalizeProtocolFeeAllocation(row, granularity = "month") {
     allocatedHoldersRevenueInUsd: numberOrZero(row.allocatedHoldersRevenueInUsd ?? row.holdersRevenueInUsd),
     allocatedProtocolInterestRevenueInUsd: numberOrZero(row.allocatedProtocolInterestRevenueInUsd ?? row.borrowInterestAccruedForProtocolInUsd ?? row.borrowInterestAccruedForProtocol ?? breakdown.borrowInterestAccruedForProtocol),
     allocatedProtocolOriginationRevenueInUsd: numberOrZero(row.allocatedProtocolOriginationRevenueInUsd ?? row.loanOriginationFeesForProtocolInUsd ?? row.loanOriginationFeesForProtocol ?? breakdown.loanOriginationFeesForProtocol),
+    allocatedProtocolLiquidationRevenueInUsd: numberOrZero(row.allocatedProtocolLiquidationRevenueInUsd ?? row.liquidationFeeShareForProtocolInUsd),
+    liquidationBonusInUsd: numberOrZero(row.liquidationBonusInUsd),
     allocatedHoldersInterestRevenueInUsd: numberOrZero(row.allocatedHoldersInterestRevenueInUsd ?? row.borrowInterestAccruedForHoldersInUsd ?? row.borrowInterestAccruedForHolders ?? breakdown.borrowInterestAccruedForHolders),
     allocatedHoldersOriginationRevenueInUsd: numberOrZero(row.allocatedHoldersOriginationRevenueInUsd ?? row.loanOriginationFeesForHoldersInUsd ?? row.loanOriginationFeesForHolders ?? breakdown.loanOriginationFeesForHolders)
   };
@@ -906,6 +909,8 @@ export function aggregateDailyProtocolFeeAllocations(dailyRows) {
       holdersRevenueInUsd: sum("allocatedHoldersRevenueInUsd"),
       borrowInterestAccruedForProtocolInUsd: sum("allocatedProtocolInterestRevenueInUsd"),
       loanOriginationFeesForProtocolInUsd: sum("allocatedProtocolOriginationRevenueInUsd"),
+      liquidationFeeShareForProtocolInUsd: sum("allocatedProtocolLiquidationRevenueInUsd"),
+      liquidationBonusInUsd: sum("liquidationBonusInUsd"),
       borrowInterestAccruedForHoldersInUsd: sum("allocatedHoldersInterestRevenueInUsd"),
       loanOriginationFeesForHoldersInUsd: sum("allocatedHoldersOriginationRevenueInUsd"),
       isComplete,

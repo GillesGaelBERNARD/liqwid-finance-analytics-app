@@ -1097,9 +1097,9 @@ HTML_TEMPLATE = r"""<!doctype html>
     },
     "DAO / treasury revenue": {
         "description": "Cumulative accrual-based protocol revenue allocated to the DAO Treasury.",
-        "explanation": "Sums API-reported DAO interest and origination accruals across every complete daily analytics.fees row. This is earned allocation, not repayment-timed collection.",
-        "formulaHtml": '<div class="formula-card">&sum;<sub>complete days</sub> <span class="formula-paren">(</span><span class="formula-num">borrowInterestAccruedForProtocol</span> + <span class="formula-num">loanOriginationFeesForProtocol</span><span class="formula-paren">)</span></div>',
-        "formulaText": "sum(Complete daily DAO interest + DAO origination allocation USD)"
+        "explanation": "Sums API-reported DAO protocol revenue across every complete daily analytics.fees row: interest and origination accruals plus any liquidation fee share (Proposal 195). This is earned allocation, not repayment-timed collection.",
+        "formulaHtml": '<div class="formula-card">&sum;<sub>complete days</sub> <span class="formula-num">dailyProtocolRevenue</span> <span class="formula-paren">=</span> <span class="formula-num">borrowInterestAccruedForProtocol</span> + <span class="formula-num">loanOriginationFeesForProtocol</span> + <span class="formula-num">liquidation fee share</span></div>',
+        "formulaText": "sum(Complete daily dailyProtocolRevenue USD) = DAO interest + DAO origination + DAO liquidation fee share"
     },
     "DAO Treasury LQ": {
         "description": "Total LQ tokens held in the DAO Treasury reserve.",
@@ -1118,6 +1118,12 @@ HTML_TEMPLATE = r"""<!doctype html>
         "explanation": "Sums the API-reported DAO origination allocation across complete daily analytics.fees rows through the latest available full day.",
         "formulaHtml": '<div class="formula-card">&sum;<sub>complete days</sub> <span class="formula-num">loanOriginationFeesForProtocol<sub>USD</sub></span></div>',
         "formulaText": "sum(Complete daily loanOriginationFeesForProtocol USD)"
+    },
+    "DAO liquidation fee share": {
+        "description": "Cumulative liquidation bonus share routed to the DAO Treasury by Proposal 195 (15% split for ADA, NIGHT and stablecoin collateral, executed 2026-09-03).",
+        "explanation": "The API has no dedicated field for the split. Each complete day takes official dailyProtocolRevenue minus its interest and origination components. The refresh fails if that remainder is negative or larger than the day's reported liquidation bonus.",
+        "formulaHtml": '<div class="formula-card">&sum;<sub>complete days</sub> <span class="formula-paren">(</span><span class="formula-num">dailyProtocolRevenue</span> &minus; <span class="formula-num">borrowInterestAccruedForProtocol</span> &minus; <span class="formula-num">loanOriginationFeesForProtocol</span><span class="formula-paren">)</span></div>',
+        "formulaText": "sum(Complete daily dailyProtocolRevenue - borrowInterestAccruedForProtocol - loanOriginationFeesForProtocol USD), bounded by liquidationBonus"
     },
     "Days with a market repayment spike": {
         "description": "Count of days where market repayment exceeded 2x active median.",
@@ -1493,13 +1499,13 @@ HTML_TEMPLATE = r"""<!doctype html>
     },
     "Top USD stablecoin yield": {
         "description": "Highest current supply APR among USD-pegged stablecoin markets.",
-        "explanation": "Identifies the highest annualized supply rate currently earned by liquidity providers among all active USD stablecoin pools (DJED, iUSD, wanUSDC, wanUSDT, wanDAI, USDM, USDA, wanPYUSD, USDCx).",
+        "explanation": "Identifies the highest annualized supply rate currently earned by liquidity providers among all active USD stablecoin pools (DJED, iUSD, wanUSDC, wanUSDT, wanDAI, USDM, USDA, wanPYUSD, USDCx, USDrf).",
         "formulaHtml": '<div class="formula-card"><span class="formula-func">max</span><sub>USD stablecoins</sub><span class="formula-paren">(</span><span class="formula-num">Supply APR</span><span class="formula-paren">)</span></div>',
         "formulaText": "max(Supply APR across USD stablecoin markets)"
     },
     "Most supplied USD stablecoin": {
         "description": "USD-pegged stablecoin market with the largest current supplied capital.",
-        "explanation": "Identifies the USD stablecoin pool holding the greatest total supplied USD liquidity across the protocol (DJED, iUSD, wanUSDC, wanUSDT, wanDAI, USDM, USDA, wanPYUSD, USDCx).",
+        "explanation": "Identifies the USD stablecoin pool holding the greatest total supplied USD liquidity across the protocol (DJED, iUSD, wanUSDC, wanUSDT, wanDAI, USDM, USDA, wanPYUSD, USDCx, USDrf).",
         "formulaHtml": '<div class="formula-card"><span class="formula-func">max</span><sub>USD stablecoins</sub><span class="formula-paren">(</span><span class="formula-num">Supply<sub>USD</sub></span><span class="formula-paren">)</span></div>',
         "formulaText": "max(Supply USD across USD stablecoin markets)"
     },
@@ -1523,7 +1529,7 @@ HTML_TEMPLATE = r"""<!doctype html>
     },
     "USD stablecoin supply": {
         "description": "Total USD value of assets supplied across all USD stablecoin lending pools.",
-        "explanation": "Aggregates total liquidity supplied by lenders across all USD-pegged stablecoins (DJED, iUSD, wanUSDC, wanUSDT, wanDAI, USDM, USDA, wanPYUSD, USDCx).",
+        "explanation": "Aggregates total liquidity supplied by lenders across all USD-pegged stablecoins (DJED, iUSD, wanUSDC, wanUSDT, wanDAI, USDM, USDA, wanPYUSD, USDCx, USDrf).",
         "formulaHtml": '<div class="formula-card">&sum;<sub>USD stablecoins</sub> <span class="formula-num">Supply<sub>USD</sub></span></div>',
         "formulaText": "sum(Supply USD for all USD stablecoin markets)"
     },
@@ -2814,6 +2820,7 @@ HTML_TEMPLATE = r"""<!doctype html>
           ${kpi("DAO / treasury revenue", usd(summary.allocatedProtocolRevenueInUsd))}
           ${kpi("DAO interest allocation", usd(summary.allocatedProtocolInterestRevenueInUsd))}
           ${kpi("DAO origination allocation", usd(summary.allocatedProtocolOriginationRevenueInUsd))}
+          ${kpi("DAO liquidation fee share", usd(summary.allocatedProtocolLiquidationRevenueInUsd), "Proposal 195 split, executed 2026-09-03")}
         `)}
         ${metricPeriodGroup("Recent DAO run rate", runRatePeriod, "Latest 90 consecutive complete days", `
           ${kpi("Annualized run rate", usd(summary.allocatedProtocolRevenueAnnualizedRunRateInUsd), "Trailing 90-day revenue: " + usd(summary.allocatedProtocolRevenueTrailing90DaysInUsd))}
@@ -2821,7 +2828,7 @@ HTML_TEMPLATE = r"""<!doctype html>
         `)}
         ${chartSection("Accrued DAO revenue", "How much revenue has accrued to the DAO, and how are its level and composition changing?")}
         ${interactiveChartPanel("Historical annualized DAO revenue run rate", "protocolRevenueRunRate", { defaultPeriod: "all", help: "Each point annualizes the latest 90 consecutive complete UTC days. The current UTC day is excluded until closed." })}
-        ${interactiveChartPanel("Monthly DAO revenue allocation", "protocolDaoRevenueAllocationMonthly", { defaultPeriod: "all", help: "DAO interest and origination allocations are summed from official daily rows. The current partial month remains visible." })}
+        ${interactiveChartPanel("Monthly DAO revenue allocation", "protocolDaoRevenueAllocationMonthly", { defaultPeriod: "all", help: "DAO interest, origination, and liquidation fee share allocations are summed from official daily rows. The liquidation fee share is official daily protocol revenue minus its interest and origination components; it can only be non-zero on days with liquidation bonus (Proposal 195 split, executed 2026-09-03). The current partial month remains visible." })}
         ${interactiveChartPanel("Daily DAO revenue allocation", "protocolDaoRevenueAllocationDaily", { defaultPeriod: "all" })}
         ${metricPeriodGroup("Cumulative accrued LQ-staker allocation", allocationPeriod, `${integer(summary.completeAllocationDays)} complete days`, `
           ${kpi("LQ-staker allocation", usd(summary.allocatedHoldersRevenueInUsd))}
@@ -4308,7 +4315,8 @@ HTML_TEMPLATE = r"""<!doctype html>
       if (chartId === "protocolInterestCoverage") lineChart(container, rows, [["interestCoverage7d", "Coverage - 7d", colors.blue], ["interestCoverage30d", "Coverage - 30d", colors.purple], ["interestCoverage90d", "Coverage - 90d", colors.mint]], ratio, { ...options, valueMode: "ratio", referenceLines: [{ value: 1, label: "1.00x parity", color: colors.amber }] });
       const daoAllocationSeries = [
         { key: "allocatedProtocolInterestRevenueInUsd", label: "DAO interest", color: colors.blue, type: "bar" },
-        { key: "allocatedProtocolOriginationRevenueInUsd", label: "DAO origination", color: colors.mint, type: "bar" }
+        { key: "allocatedProtocolOriginationRevenueInUsd", label: "DAO origination", color: colors.mint, type: "bar" },
+        { key: "allocatedProtocolLiquidationRevenueInUsd", label: "DAO liquidation fee share", color: colors.amber, type: "bar" }
       ];
       const stakerAllocationSeries = [
         { key: "allocatedHoldersInterestRevenueInUsd", label: "LQ stakers interest", color: colors.purple, type: "bar" },

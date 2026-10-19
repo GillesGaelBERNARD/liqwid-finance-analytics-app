@@ -19,3 +19,4 @@ __pycache__/
 
 # Temp download zips
 data/liqwid/liqwid-data (*).zip
+data/liqwid/.archive-backups/

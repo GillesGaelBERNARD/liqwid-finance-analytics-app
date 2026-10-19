@@ -657,7 +657,7 @@
   </dialog>
   <script id="payload" type="application/json">{"bundle":null,"deep":null}</script>
   <script>
-    const VIEWER_BUILD = "932c6aa87ac4";
+    const VIEWER_BUILD = "83b07dbb00af";
     // src/shared/dates.js
 const UTC_INCLUSIVE_DAY_CONTRACT = "utc-inclusive-day-v1";
 
@@ -2550,7 +2550,8 @@ const USD_STABLECOIN_MARKET_IDS = [
   "USDM",
   "USDA",
   "PYUSD",
-  "USDCx"
+  "USDCx",
+  "USDrf"
 ];
 
 const USD_STABLECOIN_CONFIG = [
@@ -2562,7 +2563,8 @@ const USD_STABLECOIN_CONFIG = [
   { id: "USDM", label: "USDM", color: "#d593ff" },
   { id: "USDA", label: "USDA", color: "#ff5a67" },
   { id: "PYUSD", label: "wanPYUSD", color: "#f368e0" },
-  { id: "USDCx", label: "USDCx", color: "#fed330" }
+  { id: "USDCx", label: "USDCx", color: "#fed330" },
+  { id: "USDrf", label: "USDrf", color: "#a29bfe" }
 ];
 
 function buildStablecoinYieldComparisonData(marketSeriesById, stablecoinMarketIds = USD_STABLECOIN_MARKET_IDS) {
@@ -9366,6 +9368,7 @@ function buildRevenueContext(bundle, marketSummaries, dailyInput, dailyAllocated
       allocatedProtocolRevenueInUsd: completeAllocationDays.length ? total(completeAllocationDays, "allocatedProtocolRevenueInUsd") : null,
       allocatedProtocolInterestRevenueInUsd: completeAllocationDays.length ? total(completeAllocationDays, "allocatedProtocolInterestRevenueInUsd") : null,
       allocatedProtocolOriginationRevenueInUsd: completeAllocationDays.length ? total(completeAllocationDays, "allocatedProtocolOriginationRevenueInUsd") : null,
+      allocatedProtocolLiquidationRevenueInUsd: completeAllocationDays.length ? total(completeAllocationDays, "allocatedProtocolLiquidationRevenueInUsd") : null,
       allocatedHoldersRevenueInUsd: completeAllocationDays.length ? total(completeAllocationDays, "allocatedHoldersRevenueInUsd") : null,
       allocatedHoldersInterestRevenueInUsd: completeAllocationDays.length ? total(completeAllocationDays, "allocatedHoldersInterestRevenueInUsd") : null,
       allocatedHoldersOriginationRevenueInUsd: completeAllocationDays.length ? total(completeAllocationDays, "allocatedHoldersOriginationRevenueInUsd") : null,
@@ -9456,6 +9459,8 @@ function normalizeProtocolFeeAllocation(row, granularity = "month") {
     allocatedHoldersRevenueInUsd: numberOrZero(row.allocatedHoldersRevenueInUsd ?? row.holdersRevenueInUsd),
     allocatedProtocolInterestRevenueInUsd: numberOrZero(row.allocatedProtocolInterestRevenueInUsd ?? row.borrowInterestAccruedForProtocolInUsd ?? row.borrowInterestAccruedForProtocol ?? breakdown.borrowInterestAccruedForProtocol),
     allocatedProtocolOriginationRevenueInUsd: numberOrZero(row.allocatedProtocolOriginationRevenueInUsd ?? row.loanOriginationFeesForProtocolInUsd ?? row.loanOriginationFeesForProtocol ?? breakdown.loanOriginationFeesForProtocol),
+    allocatedProtocolLiquidationRevenueInUsd: numberOrZero(row.allocatedProtocolLiquidationRevenueInUsd ?? row.liquidationFeeShareForProtocolInUsd),
+    liquidationBonusInUsd: numberOrZero(row.liquidationBonusInUsd),
     allocatedHoldersInterestRevenueInUsd: numberOrZero(row.allocatedHoldersInterestRevenueInUsd ?? row.borrowInterestAccruedForHoldersInUsd ?? row.borrowInterestAccruedForHolders ?? breakdown.borrowInterestAccruedForHolders),
     allocatedHoldersOriginationRevenueInUsd: numberOrZero(row.allocatedHoldersOriginationRevenueInUsd ?? row.loanOriginationFeesForHoldersInUsd ?? row.loanOriginationFeesForHolders ?? breakdown.loanOriginationFeesForHolders)
   };
@@ -9494,6 +9499,8 @@ function aggregateDailyProtocolFeeAllocations(dailyRows) {
       holdersRevenueInUsd: sum("allocatedHoldersRevenueInUsd"),
       borrowInterestAccruedForProtocolInUsd: sum("allocatedProtocolInterestRevenueInUsd"),
       loanOriginationFeesForProtocolInUsd: sum("allocatedProtocolOriginationRevenueInUsd"),
+      liquidationFeeShareForProtocolInUsd: sum("allocatedProtocolLiquidationRevenueInUsd"),
+      liquidationBonusInUsd: sum("liquidationBonusInUsd"),
       borrowInterestAccruedForHoldersInUsd: sum("allocatedHoldersInterestRevenueInUsd"),
       loanOriginationFeesForHoldersInUsd: sum("allocatedHoldersOriginationRevenueInUsd"),
       isComplete,
@@ -9932,7 +9939,7 @@ function buildPolAnalysisContext(input = {}) {
 
 // src/browser/completeDataWorkflow.js
 const PROTOCOL_FEES_COVERAGE_START = "2026-01-01";
-const PROTOCOL_FEES_DAILY_PROVENANCE = "analytics-fees-daily-v1";
+const PROTOCOL_FEES_DAILY_PROVENANCE = "analytics-fees-daily-v2";
 const PROTOCOL_FEES_DAILY_BATCH_SIZE = 4;
 
 const PROTOCOL_FEES_SELECTION = `
@@ -9952,6 +9959,7 @@ const PROTOCOL_FEES_SELECTION = `
     loanOriginationFees
     loanOriginationFeesForProtocol
     loanOriginationFeesForHolders
+    liquidationBonus
   }
 `;
 
@@ -9972,6 +9980,7 @@ const PROTOCOL_FEES_NATIVE_SELECTION = `
     loanOriginationFees
     loanOriginationFeesForProtocol
     loanOriginationFeesForHolders
+    liquidationBonus
   }
 `;
 
@@ -10461,23 +10470,41 @@ function protocolFeeRow(current, { date, startDay, endDay, isComplete, provenanc
     loanOriginationFeesInUsd: numeric(breakdown.loanOriginationFees),
     loanOriginationFeesForProtocolInUsd: numeric(breakdown.loanOriginationFeesForProtocol),
     loanOriginationFeesForHoldersInUsd: numeric(breakdown.loanOriginationFeesForHolders),
+    liquidationBonusInUsd: numeric(breakdown.liquidationBonus),
+    liquidationFeeShareForProtocolInUsd: protocolLiquidationShare(current, breakdown),
     isComplete,
     provenance
   };
 }
 
-function assertProtocolFeeAllocationReconciles(row) {
+function protocolLiquidationShare(current, breakdown) {
+  const protocolRevenue = numeric(current.protocolRevenueInUsd);
+  const components = numeric(breakdown.borrowInterestAccruedForProtocol) + numeric(breakdown.loanOriginationFeesForProtocol);
+  return approximatelyEqual(protocolRevenue, components) ? 0 : protocolRevenue - components;
+}
+
+function protocolFeeAllocationProblem(row) {
   const protocolComponents = numeric(row.borrowInterestAccruedForProtocolInUsd) + numeric(row.loanOriginationFeesForProtocolInUsd);
   const holderComponents = numeric(row.borrowInterestAccruedForHoldersInUsd) + numeric(row.loanOriginationFeesForHoldersInUsd);
-  if (!approximatelyEqual(row.protocolRevenueInUsd, protocolComponents)) {
-    throw new Error(`Protocol fee allocation does not reconcile for ${row.date}: protocol total differs from its interest and origination components.`);
+  const liquidationShare = numeric(row.liquidationFeeShareForProtocolInUsd);
+  if (liquidationShare < 0 || liquidationShare > numeric(row.liquidationBonusInUsd) + 1e-6) {
+    return `protocol total exceeds its interest and origination components by ${liquidationShare}, which the day's liquidation bonus of ${numeric(row.liquidationBonusInUsd)} cannot explain.`;
+  }
+  if (!approximatelyEqual(row.protocolRevenueInUsd, protocolComponents + liquidationShare)) {
+    return "protocol total differs from its interest, origination, and liquidation components.";
   }
   if (!approximatelyEqual(row.holdersRevenueInUsd, holderComponents)) {
-    throw new Error(`Protocol fee allocation does not reconcile for ${row.date}: holder total differs from its interest and origination components.`);
+    return "holder total differs from its interest and origination components.";
   }
   if (!approximatelyEqual(row.totalRevenueInUsd, numeric(row.protocolRevenueInUsd) + numeric(row.holdersRevenueInUsd))) {
-    throw new Error(`Protocol fee allocation does not reconcile for ${row.date}: total revenue differs from protocol plus holder allocations.`);
+    return "total revenue differs from protocol plus holder allocations.";
   }
+  return null;
+}
+
+function assertProtocolFeeAllocationReconciles(row) {
+  const problem = protocolFeeAllocationProblem(row);
+  if (problem) throw new Error(`Protocol fee allocation does not reconcile for ${row.date}: ${problem}`);
 }
 
 function approximatelyEqual(left, right) {
@@ -10491,8 +10518,7 @@ function validCachedDailyFeeRow(row, date) {
   const expected = toUtcApiRange({ startDay: date, endDay: date });
   return sameUtcSecond(row.fromDate, expected.startDate)
     && sameUtcSecond(row.toDate, expected.endDate)
-    && approximatelyEqual(row.protocolRevenueInUsd, numeric(row.borrowInterestAccruedForProtocolInUsd) + numeric(row.loanOriginationFeesForProtocolInUsd))
-    && approximatelyEqual(row.holdersRevenueInUsd, numeric(row.borrowInterestAccruedForHoldersInUsd) + numeric(row.loanOriginationFeesForHoldersInUsd));
+    && protocolFeeAllocationProblem(row) === null;
 }
 
 function workflowDateRange(startValue, endValue) {
@@ -14786,9 +14812,9 @@ function breakdownEscape(value) {
     },
     "DAO / treasury revenue": {
         "description": "Cumulative accrual-based protocol revenue allocated to the DAO Treasury.",
-        "explanation": "Sums API-reported DAO interest and origination accruals across every complete daily analytics.fees row. This is earned allocation, not repayment-timed collection.",
-        "formulaHtml": '<div class="formula-card">&sum;<sub>complete days</sub> <span class="formula-paren">(</span><span class="formula-num">borrowInterestAccruedForProtocol</span> + <span class="formula-num">loanOriginationFeesForProtocol</span><span class="formula-paren">)</span></div>',
-        "formulaText": "sum(Complete daily DAO interest + DAO origination allocation USD)"
+        "explanation": "Sums API-reported DAO protocol revenue across every complete daily analytics.fees row: interest and origination accruals plus any liquidation fee share (Proposal 195). This is earned allocation, not repayment-timed collection.",
+        "formulaHtml": '<div class="formula-card">&sum;<sub>complete days</sub> <span class="formula-num">dailyProtocolRevenue</span> <span class="formula-paren">=</span> <span class="formula-num">borrowInterestAccruedForProtocol</span> + <span class="formula-num">loanOriginationFeesForProtocol</span> + <span class="formula-num">liquidation fee share</span></div>',
+        "formulaText": "sum(Complete daily dailyProtocolRevenue USD) = DAO interest + DAO origination + DAO liquidation fee share"
     },
     "DAO Treasury LQ": {
         "description": "Total LQ tokens held in the DAO Treasury reserve.",
@@ -14807,6 +14833,12 @@ function breakdownEscape(value) {
         "explanation": "Sums the API-reported DAO origination allocation across complete daily analytics.fees rows through the latest available full day.",
         "formulaHtml": '<div class="formula-card">&sum;<sub>complete days</sub> <span class="formula-num">loanOriginationFeesForProtocol<sub>USD</sub></span></div>',
         "formulaText": "sum(Complete daily loanOriginationFeesForProtocol USD)"
+    },
+    "DAO liquidation fee share": {
+        "description": "Cumulative liquidation bonus share routed to the DAO Treasury by Proposal 195 (15% split for ADA, NIGHT and stablecoin collateral, executed 2026-09-03).",
+        "explanation": "The API has no dedicated field for the split. Each complete day takes official dailyProtocolRevenue minus its interest and origination components. The refresh fails if that remainder is negative or larger than the day's reported liquidation bonus.",
+        "formulaHtml": '<div class="formula-card">&sum;<sub>complete days</sub> <span class="formula-paren">(</span><span class="formula-num">dailyProtocolRevenue</span> &minus; <span class="formula-num">borrowInterestAccruedForProtocol</span> &minus; <span class="formula-num">loanOriginationFeesForProtocol</span><span class="formula-paren">)</span></div>',
+        "formulaText": "sum(Complete daily dailyProtocolRevenue - borrowInterestAccruedForProtocol - loanOriginationFeesForProtocol USD), bounded by liquidationBonus"
     },
     "Days with a market repayment spike": {
         "description": "Count of days where market repayment exceeded 2x active median.",
@@ -15182,13 +15214,13 @@ function breakdownEscape(value) {
     },
     "Top USD stablecoin yield": {
         "description": "Highest current supply APR among USD-pegged stablecoin markets.",
-        "explanation": "Identifies the highest annualized supply rate currently earned by liquidity providers among all active USD stablecoin pools (DJED, iUSD, wanUSDC, wanUSDT, wanDAI, USDM, USDA, wanPYUSD, USDCx).",
+        "explanation": "Identifies the highest annualized supply rate currently earned by liquidity providers among all active USD stablecoin pools (DJED, iUSD, wanUSDC, wanUSDT, wanDAI, USDM, USDA, wanPYUSD, USDCx, USDrf).",
         "formulaHtml": '<div class="formula-card"><span class="formula-func">max</span><sub>USD stablecoins</sub><span class="formula-paren">(</span><span class="formula-num">Supply APR</span><span class="formula-paren">)</span></div>',
         "formulaText": "max(Supply APR across USD stablecoin markets)"
     },
     "Most supplied USD stablecoin": {
         "description": "USD-pegged stablecoin market with the largest current supplied capital.",
-        "explanation": "Identifies the USD stablecoin pool holding the greatest total supplied USD liquidity across the protocol (DJED, iUSD, wanUSDC, wanUSDT, wanDAI, USDM, USDA, wanPYUSD, USDCx).",
+        "explanation": "Identifies the USD stablecoin pool holding the greatest total supplied USD liquidity across the protocol (DJED, iUSD, wanUSDC, wanUSDT, wanDAI, USDM, USDA, wanPYUSD, USDCx, USDrf).",
         "formulaHtml": '<div class="formula-card"><span class="formula-func">max</span><sub>USD stablecoins</sub><span class="formula-paren">(</span><span class="formula-num">Supply<sub>USD</sub></span><span class="formula-paren">)</span></div>',
         "formulaText": "max(Supply USD across USD stablecoin markets)"
     },
@@ -15212,7 +15244,7 @@ function breakdownEscape(value) {
     },
     "USD stablecoin supply": {
         "description": "Total USD value of assets supplied across all USD stablecoin lending pools.",
-        "explanation": "Aggregates total liquidity supplied by lenders across all USD-pegged stablecoins (DJED, iUSD, wanUSDC, wanUSDT, wanDAI, USDM, USDA, wanPYUSD, USDCx).",
+        "explanation": "Aggregates total liquidity supplied by lenders across all USD-pegged stablecoins (DJED, iUSD, wanUSDC, wanUSDT, wanDAI, USDM, USDA, wanPYUSD, USDCx, USDrf).",
         "formulaHtml": '<div class="formula-card">&sum;<sub>USD stablecoins</sub> <span class="formula-num">Supply<sub>USD</sub></span></div>',
         "formulaText": "sum(Supply USD for all USD stablecoin markets)"
     },
@@ -16503,6 +16535,7 @@ function breakdownEscape(value) {
           ${kpi("DAO / treasury revenue", usd(summary.allocatedProtocolRevenueInUsd))}
           ${kpi("DAO interest allocation", usd(summary.allocatedProtocolInterestRevenueInUsd))}
           ${kpi("DAO origination allocation", usd(summary.allocatedProtocolOriginationRevenueInUsd))}
+          ${kpi("DAO liquidation fee share", usd(summary.allocatedProtocolLiquidationRevenueInUsd), "Proposal 195 split, executed 2026-09-03")}
         `)}
         ${metricPeriodGroup("Recent DAO run rate", runRatePeriod, "Latest 90 consecutive complete days", `
           ${kpi("Annualized run rate", usd(summary.allocatedProtocolRevenueAnnualizedRunRateInUsd), "Trailing 90-day revenue: " + usd(summary.allocatedProtocolRevenueTrailing90DaysInUsd))}
@@ -16510,7 +16543,7 @@ function breakdownEscape(value) {
         `)}
         ${chartSection("Accrued DAO revenue", "How much revenue has accrued to the DAO, and how are its level and composition changing?")}
         ${interactiveChartPanel("Historical annualized DAO revenue run rate", "protocolRevenueRunRate", { defaultPeriod: "all", help: "Each point annualizes the latest 90 consecutive complete UTC days. The current UTC day is excluded until closed." })}
-        ${interactiveChartPanel("Monthly DAO revenue allocation", "protocolDaoRevenueAllocationMonthly", { defaultPeriod: "all", help: "DAO interest and origination allocations are summed from official daily rows. The current partial month remains visible." })}
+        ${interactiveChartPanel("Monthly DAO revenue allocation", "protocolDaoRevenueAllocationMonthly", { defaultPeriod: "all", help: "DAO interest, origination, and liquidation fee share allocations are summed from official daily rows. The liquidation fee share is official daily protocol revenue minus its interest and origination components; it can only be non-zero on days with liquidation bonus (Proposal 195 split, executed 2026-09-03). The current partial month remains visible." })}
         ${interactiveChartPanel("Daily DAO revenue allocation", "protocolDaoRevenueAllocationDaily", { defaultPeriod: "all" })}
         ${metricPeriodGroup("Cumulative accrued LQ-staker allocation", allocationPeriod, `${integer(summary.completeAllocationDays)} complete days`, `
           ${kpi("LQ-staker allocation", usd(summary.allocatedHoldersRevenueInUsd))}
@@ -17997,7 +18030,8 @@ function breakdownEscape(value) {
       if (chartId === "protocolInterestCoverage") lineChart(container, rows, [["interestCoverage7d", "Coverage - 7d", colors.blue], ["interestCoverage30d", "Coverage - 30d", colors.purple], ["interestCoverage90d", "Coverage - 90d", colors.mint]], ratio, { ...options, valueMode: "ratio", referenceLines: [{ value: 1, label: "1.00x parity", color: colors.amber }] });
       const daoAllocationSeries = [
         { key: "allocatedProtocolInterestRevenueInUsd", label: "DAO interest", color: colors.blue, type: "bar" },
-        { key: "allocatedProtocolOriginationRevenueInUsd", label: "DAO origination", color: colors.mint, type: "bar" }
+        { key: "allocatedProtocolOriginationRevenueInUsd", label: "DAO origination", color: colors.mint, type: "bar" },
+        { key: "allocatedProtocolLiquidationRevenueInUsd", label: "DAO liquidation fee share", color: colors.amber, type: "bar" }
       ];
       const stakerAllocationSeries = [
         { key: "allocatedHoldersInterestRevenueInUsd", label: "LQ stakers interest", color: colors.purple, type: "bar" },

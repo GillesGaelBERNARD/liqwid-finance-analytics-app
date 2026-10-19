@@ -638,3 +638,10 @@ test("buildStablecoinSupplyComparisonData handles missing or empty market series
   assert.deepEqual(nullRows, []);
 });
 
+
+test("default stablecoin yield comparison includes the USDrf core market", () => {
+  const rows = buildStablecoinYieldComparisonData({ USDrf: [{ date: "2026-10-01", supplyApy: 0.08 }], "sUSDrf": [{ date: "2026-10-01", supplyApy: 0.2 }] });
+  assert.equal(rows[0].usdrfSupplyApy, 0.08);
+  assert.equal(rows[0].susdrfSupplyApy, undefined);
+});
+

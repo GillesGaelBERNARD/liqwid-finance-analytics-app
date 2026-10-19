@@ -907,7 +907,8 @@ export const USD_STABLECOIN_MARKET_IDS = [
   "USDM",
   "USDA",
   "PYUSD",
-  "USDCx"
+  "USDCx",
+  "USDrf"
 ];
 
 export const USD_STABLECOIN_CONFIG = [
@@ -919,7 +920,8 @@ export const USD_STABLECOIN_CONFIG = [
   { id: "USDM", label: "USDM", color: "#d593ff" },
   { id: "USDA", label: "USDA", color: "#ff5a67" },
   { id: "PYUSD", label: "wanPYUSD", color: "#f368e0" },
-  { id: "USDCx", label: "USDCx", color: "#fed330" }
+  { id: "USDCx", label: "USDCx", color: "#fed330" },
+  { id: "USDrf", label: "USDrf", color: "#a29bfe" }
 ];
 
 export function buildStablecoinYieldComparisonData(marketSeriesById, stablecoinMarketIds = USD_STABLECOIN_MARKET_IDS) {

@@ -1,0 +1,2 @@
+timestamp,txHash,baseRate,utilMultiplier,utilMultiplierJump,kink,supplyCap,borrowCap,incomeRatioSum,incomeRatioSuppliers,incomeRatioDividends,incomeRatioTreasury,baseBorrowerAPR,baseSupplierAPY,optimalBorrowerAPR,optimalSupplierAPY,maxBorrowerAPR,maxSupplierAPY
+2026-10-06T16:30:02.000Z,39baa55a02dbdee6588d0ba5eec8f37a8dd09f106634e2fedf1091f11feddcd9,3.163078577e-7,0.000005434738329,0.0000737692612676,0.95,,,10,9,0,0,0.005000000000377159,0,0.09023962537583992,0.07715487969634313,0.16048901316767422,0.1444401118509068
