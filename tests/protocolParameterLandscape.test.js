@@ -272,3 +272,121 @@ test("legacy archives without current guardrail fields remain explicitly unavail
   assert.equal(landscape.marketRows[0].closeFactor, null);
   assert.deepEqual(landscape.collateralRows, []);
 });
+
+test("collateral guardrails derive LIP-195 15% liquidation fee split, treasury share, and net liquidator bonus", () => {
+  const markets = [
+    currentMarket("USDC", {
+      parameters: {
+        minValue: 30,
+        minHealthFactor: 1.15,
+        closeFactor0: 0.5,
+        collateralParameters: [
+          {
+            collateral: { id: "Ada", displayName: "qADA", symbol: "qADA" },
+            maxLoanToValue: 0.75,
+            weightedMaxLoanToValue: 0.75,
+            liquidationThreshold: 0.8,
+            weightedLiquidationThreshold: 0.8,
+            liquidationPenalty: 0.1,
+            liquidationProfitability: 0.1111111111,
+            collateralWeight: 1
+          },
+          {
+            collateral: { id: "IUSD", displayName: "qiUSD", symbol: "qiUSD" },
+            maxLoanToValue: 0.52,
+            weightedMaxLoanToValue: 0.52,
+            liquidationThreshold: 0.72,
+            weightedLiquidationThreshold: 0.72,
+            liquidationPenalty: 0.15,
+            liquidationProfitability: 0.1764705882,
+            collateralWeight: 1
+          },
+          {
+            collateral: { id: "USDrf", displayName: "qUSDrf", symbol: "qUSDrf" },
+            maxLoanToValue: 0.8,
+            weightedMaxLoanToValue: 0.8,
+            liquidationThreshold: 0.85,
+            weightedLiquidationThreshold: 0.85,
+            liquidationPenalty: 0.08,
+            liquidationProfitability: 0.0869565217,
+            collateralWeight: 1
+          },
+          {
+            collateral: { id: "sUSDrf-USDCx", displayName: "qsUSDrf", symbol: "qsUSDrf" },
+            maxLoanToValue: 0.85,
+            weightedMaxLoanToValue: 0.85,
+            liquidationThreshold: 0.9,
+            weightedLiquidationThreshold: 0.9,
+            liquidationPenalty: 0.05,
+            liquidationProfitability: 0.0526315789,
+            collateralWeight: 1
+          },
+          {
+            collateral: { id: "SHEN", displayName: "qSHEN", symbol: "qSHEN" },
+            maxLoanToValue: 0.73,
+            weightedMaxLoanToValue: 0.73,
+            liquidationThreshold: 0.79,
+            weightedLiquidationThreshold: 0.79,
+            liquidationPenalty: 0.12,
+            liquidationProfitability: 0.1363636364,
+            collateralWeight: 1
+          },
+          {
+            collateral: { id: "POL", displayName: "qPOL", symbol: "qPOL" },
+            maxLoanToValue: 1,
+            weightedMaxLoanToValue: 1,
+            liquidationThreshold: 1,
+            weightedLiquidationThreshold: 1,
+            liquidationPenalty: 0,
+            liquidationProfitability: 0,
+            collateralWeight: 100
+          }
+        ]
+      }
+    })
+  ];
+  const marketSeriesById = { USDC: [daily("USDC", "2026-01-01", 1000, 800)] };
+  const marketParameters = buildMarketParametersAnalysis({
+    markets,
+    marketParamsById: { USDC: [parameterEvent("2026-01-01T00:00:00.000Z")] },
+    marketSeriesById
+  });
+
+  const landscape = buildProtocolParameterLandscape({
+    markets,
+    marketParameters,
+    marketSeriesById
+  });
+
+  const byCollateral = Object.fromEntries(
+    landscape.collateralRows.map((row) => [row.collateralMarketId, row])
+  );
+
+  assert.equal(byCollateral.Ada.liquidationFeeSplit, 0.15);
+  assert.equal(byCollateral.Ada.treasuryLiquidationShare, 0.015);
+  assert.equal(byCollateral.Ada.netLiquidatorProfitability, Number((0.1111111111 * 0.85).toFixed(10)));
+
+  assert.equal(byCollateral.IUSD.liquidationFeeSplit, 0.15);
+  assert.equal(byCollateral.IUSD.treasuryLiquidationShare, 0.0225);
+  assert.equal(byCollateral.IUSD.netLiquidatorProfitability, Number((0.1764705882 * 0.85).toFixed(10)));
+
+  assert.equal(byCollateral.USDrf.liquidationFeeSplit, 0.15);
+  assert.equal(byCollateral.USDrf.treasuryLiquidationShare, 0.012);
+  assert.equal(byCollateral.USDrf.netLiquidatorProfitability, Number((0.0869565217 * 0.85).toFixed(10)));
+
+  assert.equal(byCollateral["sUSDrf-USDCx"].liquidationFeeSplit, 0.15);
+  assert.equal(byCollateral["sUSDrf-USDCx"].treasuryLiquidationShare, 0.0075);
+  assert.equal(byCollateral["sUSDrf-USDCx"].netLiquidatorProfitability, Number((0.0526315789 * 0.85).toFixed(10)));
+
+  assert.equal(byCollateral.SHEN.liquidationFeeSplit, 0);
+  assert.equal(byCollateral.SHEN.treasuryLiquidationShare, 0);
+  assert.equal(byCollateral.SHEN.netLiquidatorProfitability, 0.1363636364);
+
+  assert.equal(byCollateral.POL.liquidationFeeSplit, 0);
+  assert.equal(byCollateral.POL.treasuryLiquidationShare, 0);
+  assert.equal(byCollateral.POL.netLiquidatorProfitability, 0);
+
+  assert.equal(landscape.collateralSummaryRows[0].maximumLiquidationFeeSplit, 0.15);
+  assert.equal(landscape.collateralSummaryRows[0].maximumTreasuryLiquidationShare, 0.0225);
+  assert.equal(landscape.collateralSummaryRows[0].maximumNetLiquidatorProfitability, 0.15);
+});

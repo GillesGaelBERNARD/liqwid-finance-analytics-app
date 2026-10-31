@@ -18,6 +18,33 @@ const PROTOCOL_PARAMETER_CHANGE_FIELDS = Object.freeze([
 ]);
 
 const RATE_ATLAS_MARKET_LIMIT = 8;
+const LIP_195_LIQUIDATION_FEE_SPLIT = 0.15;
+const LIP_195_LIQUID_COLLATERAL_KEYS = new Set([
+  "ADA",
+  "NIGHT",
+  "DJED",
+  "USDA",
+  "USDC",
+  "USDCX",
+  "WANUSDC",
+  "USDM",
+  "USDT",
+  "WANUSDT",
+  "IUSD",
+  "DAI",
+  "WANDAI",
+  "EURC",
+  "WANEURC",
+  "PYUSD",
+  "WANPYUSD",
+  "USDRF",
+  "SUSDRF",
+  "SUSDRF-USDCX",
+  "LPM-USDM-USDA",
+  "USDM-USDA",
+  "LPS-USDCX-USDM",
+  "USDCX-USDM"
+]);
 
 export function buildProtocolParameterLandscape(input = {}) {
   const markets = (Array.isArray(input.markets) ? input.markets : [])
@@ -80,7 +107,7 @@ export function buildProtocolParameterLandscape(input = {}) {
     rateCurveAtlas,
     availability: {
       historical: "Rate landmarks, utilization and supply caps, income allocation, and raw rate-model coefficients are reconstructed from exact analytics.marketParamsHistory governance events.",
-      currentOnly: "Liquidation, collateral, fee, and batching guardrails come from the current liqwid.data.markets.parameters snapshot and are not backfilled historically."
+      currentOnly: "Liquidation, collateral, fee, and batching guardrails come from the current liqwid.data.markets.parameters snapshot (with the LIP-195 15% protocol liquidation fee split derived for ADA, NIGHT, and stablecoin collaterals) and are not backfilled historically."
     }
   };
 }
@@ -101,6 +128,9 @@ function summarizeCollateralRows(rows) {
     minimumWeightedLiquidationThreshold: finiteMinimum(marketRows.map((row) => row.weightedLiquidationThreshold)),
     maximumLiquidationPenalty: finiteMaximum(marketRows.map((row) => row.liquidationPenalty)),
     maximumLiquidationProfitability: finiteMaximum(marketRows.map((row) => row.liquidationProfitability)),
+    maximumLiquidationFeeSplit: finiteMaximum(marketRows.map((row) => row.liquidationFeeSplit)),
+    maximumTreasuryLiquidationShare: finiteMaximum(marketRows.map((row) => row.treasuryLiquidationShare)),
+    maximumNetLiquidatorProfitability: finiteMaximum(marketRows.map((row) => row.netLiquidatorProfitability)),
     maximumCollateralWeight: finiteMaximum(marketRows.map((row) => row.collateralWeight))
   })).sort((left, right) =>
     right.collateralPairCount - left.collateralPairCount
@@ -196,8 +226,51 @@ function currentCollateralRows(market) {
     weightedLiquidationThreshold: ratioNumber(row?.weightedLiquidationThreshold),
     liquidationPenalty: ratioNumber(row?.liquidationPenalty),
     liquidationProfitability: ratioNumber(row?.liquidationProfitability),
+    ...collateralLiquidationMetrics(row),
     collateralWeight: ratioNumber(row?.collateralWeight)
   }));
+}
+
+function collateralLiquidationMetrics(row) {
+  const liquidationPenalty = ratioNumber(row?.liquidationPenalty);
+  const liquidationProfitability = ratioNumber(row?.liquidationProfitability);
+  const liquidationFeeSplit = ratioNumber(row?.liquidationFeeSplit)
+    ?? collateralLiquidationFeeSplit(row?.collateral, liquidationPenalty);
+  const treasuryLiquidationShare = liquidationPenalty != null && liquidationFeeSplit != null
+    ? roundRatio(liquidationPenalty * liquidationFeeSplit)
+    : null;
+  const netLiquidatorProfitability = liquidationProfitability != null && liquidationFeeSplit != null
+    ? roundRatio(liquidationProfitability * (1 - liquidationFeeSplit))
+    : null;
+  return {
+    liquidationFeeSplit,
+    treasuryLiquidationShare,
+    netLiquidatorProfitability
+  };
+}
+
+function collateralLiquidationFeeSplit(collateral, liquidationPenalty) {
+  if (liquidationPenalty == null) return null;
+  if (liquidationPenalty <= 0) return 0;
+  const candidates = [
+    collateral?.id,
+    collateral?.symbol,
+    collateral?.displayName
+  ];
+  for (const raw of candidates) {
+    const upper = String(raw || "").trim().toUpperCase();
+    if (!upper) continue;
+    const stripped = upper.startsWith("Q") && upper.length > 1 ? upper.slice(1) : upper;
+    if (LIP_195_LIQUID_COLLATERAL_KEYS.has(upper) || LIP_195_LIQUID_COLLATERAL_KEYS.has(stripped)) {
+      return LIP_195_LIQUIDATION_FEE_SPLIT;
+    }
+  }
+  return 0;
+}
+
+function roundRatio(value) {
+  const numeric = finiteNumber(value);
+  return numeric == null ? null : Number(numeric.toFixed(10));
 }
 
 function buildRateCurveAtlas(marketRows, marketParameters) {

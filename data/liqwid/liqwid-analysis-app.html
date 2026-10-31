@@ -657,7 +657,7 @@
   </dialog>
   <script id="payload" type="application/json">{"bundle":null,"deep":null}</script>
   <script>
-    const VIEWER_BUILD = "83b07dbb00af";
+    const VIEWER_BUILD = "59fa8721e40f";
     // src/shared/dates.js
 const UTC_INCLUSIVE_DAY_CONTRACT = "utc-inclusive-day-v1";
 
@@ -3854,8 +3854,9 @@ async function postGraphql(request, options = {}) {
     throw new Error(`Only the official Liqwid endpoint is permitted: ${LIQWID_GRAPHQL_ENDPOINT}`);
   }
   const fetchImpl = options.fetchImpl ?? globalThis.fetch;
-  const retries = options.retries ?? 4;
-  const retryDelayMs = options.retryDelayMs ?? 500;
+  const retries = options.retries ?? 6;
+  const retryDelayMs = options.retryDelayMs !== undefined ? options.retryDelayMs : 35000;
+  const maxRetryDelayMs = options.maxRetryDelayMs ?? 120000;
   const operation = String(request?.query || "").match(/\b(?:query|mutation)\s+([A-Za-z_][A-Za-z0-9_]*)/)?.[1] || "GraphQL request";
   if (typeof fetchImpl !== "function") throw new Error("This browser does not provide fetch().");
 
@@ -3873,7 +3874,15 @@ async function postGraphql(request, options = {}) {
       });
       if (!response.ok) {
         const body = await response.text().catch(() => "");
-        throw new Error(`Liqwid API HTTP ${response.status}: ${body.slice(0, 500)}`);
+        const retryAfterHeader = response.headers?.get?.("retry-after");
+        const retryAfterSec = retryAfterHeader ? parseInt(retryAfterHeader, 10) : NaN;
+        const err = new Error(`Liqwid API HTTP ${response.status}: ${body.slice(0, 500)}`);
+        if (response.status === 429) {
+          err.retryAfterMs = !Number.isNaN(retryAfterSec) && retryAfterSec > 0
+            ? (retryAfterSec * 1000) + 1000
+            : 35000;
+        }
+        throw err;
       }
       const payload = await response.json();
       if (payload.errors?.length) {
@@ -3883,7 +3892,22 @@ async function postGraphql(request, options = {}) {
       return payload.data;
     } catch (error) {
       lastError = error;
-      if (attempt < retries && retryDelayMs > 0) await wait(retryDelayMs * (2 ** attempt));
+      if (attempt < retries && (retryDelayMs > 0 || lastError?.retryAfterMs)) {
+        const calculatedDelay = retryDelayMs > 0
+          ? Math.min(attempt === 0 ? retryDelayMs : retryDelayMs * (2 ** (attempt - 1)), maxRetryDelayMs)
+          : 0;
+        const delay = Math.max(lastError?.retryAfterMs ?? 0, calculatedDelay);
+        if (delay > 0) {
+          options.onRetry?.({
+            operation,
+            attempt: attempt + 1,
+            retries: retries + 1,
+            delayMs: delay,
+            error: lastError
+          });
+          await wait(delay);
+        }
+      }
     }
   }
   throw new Error(`${operation} failed after ${retries + 1} attempts: ${lastError?.message || String(lastError)}`, { cause: lastError });
@@ -3895,7 +3919,9 @@ async function fetchPublicMarkets(options = {}) {
   let totals = null;
   let page = 0;
   let pagesCount = 1;
+  const paceMs = options.requestDelayMs ?? 0;
   while (page < pagesCount) {
+    if (page > 0 && paceMs > 0) await wait(paceMs);
     const request = buildPublicMarketsRequest(page, options.perPage ?? 100);
     const data = await postGraphql(request, options);
     const rawPage = { page, request, payload: data };
@@ -3966,8 +3992,10 @@ async function runRefresh({
   onProgress = () => {},
   now = () => new Date(),
   runId = null,
-  dataRootLabel = null
+  dataRootLabel = null,
+  requestDelayMs
 }) {
+  const paceMs = requestDelayMs ?? (api === defaultApi || !api ? 1250 : 0);
   const startDay = explicitStartDay ?? startDate;
   const endDay = explicitEndDay ?? endDate;
   await store.ensureLayout?.();
@@ -3985,7 +4013,8 @@ async function runRefresh({
     capturedMarketPages.add(page.page);
   };
   onProgress({ phase: "markets" });
-  const currentData = await api.fetchPublicMarkets({ ...apiOptions, onPage: captureMarketPage });
+  const currentData = await api.fetchPublicMarkets({ ...apiOptions, requestDelayMs: paceMs, onPage: captureMarketPage });
+  if (paceMs > 0) await wait(paceMs);
   const markets = currentData.markets ?? [];
   const rawMarketPages = currentData.rawPages ?? [];
   for (const page of rawMarketPages) {
@@ -4066,6 +4095,7 @@ async function runRefresh({
         payload: { rows: fetchedRows }
       });
       await store.writeJson(historyCapturePath, historyCapture, { overwrite: false });
+      if (paceMs > 0) await wait(paceMs);
     }
 
     if (!paramsSkipped) {
@@ -4092,6 +4122,7 @@ async function runRefresh({
         requestedThrough: endDay,
         dateRangeContract: UTC_INCLUSIVE_DAY_CONTRACT
       });
+      if (paceMs > 0) await wait(paceMs);
     }
 
     const normalizedFetchedRows = normalizeMarketHistoryRows(fetchedRows, market);
@@ -4129,6 +4160,7 @@ async function runRefresh({
   if (typeof api.fetchLqStats === "function") {
     try {
       const lqData = await api.fetchLqStats(apiOptions);
+      if (paceMs > 0) await wait(paceMs);
       if (lqData) {
         lqStats = lqData;
         const snap = buildLqStatsSnapshot({ timestamp: fetchedAt, ...lqData });
@@ -6535,7 +6567,7 @@ function buildTechnicalAudit({
       {
         id: "revenue-tolerance",
         label: "Revenue component tolerance",
-        detail: "Protocol and holder totals must each equal interest plus origination components within the larger of $0.01 or 0.000001% of the total."
+        detail: "Protocol totals must equal interest, origination, and liquidation fee share components, and holder totals must equal interest plus origination components, within the larger of $0.01 or 0.000001% of the total."
       },
       {
         id: "raw-clean-lineage",
@@ -6742,13 +6774,21 @@ function revenueCheck(dailyAllocation) {
     if (invalidRows.has(row)) return false;
     const protocolTotal = dataStatusFinite(row.allocatedProtocolRevenueInUsd);
     const holdersTotal = dataStatusFinite(row.allocatedHoldersRevenueInUsd);
+    const liquidationShare = dataStatusNumber(
+      row.allocatedProtocolLiquidationRevenueInUsd ?? row.liquidationFeeShareForProtocolInUsd
+    );
+    const liquidationBonus = dataStatusFinite(row.liquidationBonusInUsd);
+    const liquidationShareInvalid = liquidationShare < -DATA_STATUS_USD_TOLERANCE
+      || (liquidationBonus !== null && liquidationShare > liquidationBonus + DATA_STATUS_USD_TOLERANCE);
     const protocolDifference = protocolTotal
       - dataStatusFinite(row.allocatedProtocolInterestRevenueInUsd)
-      - dataStatusFinite(row.allocatedProtocolOriginationRevenueInUsd);
+      - dataStatusFinite(row.allocatedProtocolOriginationRevenueInUsd)
+      - liquidationShare;
     const holdersDifference = holdersTotal
       - dataStatusFinite(row.allocatedHoldersInterestRevenueInUsd)
       - dataStatusFinite(row.allocatedHoldersOriginationRevenueInUsd);
-    return !withinUsdTolerance(protocolDifference, protocolTotal)
+    return liquidationShareInvalid
+      || !withinUsdTolerance(protocolDifference, protocolTotal)
       || !withinUsdTolerance(holdersDifference, holdersTotal);
   });
   const failedDates = [...new Set([...invalidOperandRows, ...failedRows]
@@ -7707,6 +7747,33 @@ const PROTOCOL_PARAMETER_CHANGE_FIELDS = Object.freeze([
 ]);
 
 const RATE_ATLAS_MARKET_LIMIT = 8;
+const LIP_195_LIQUIDATION_FEE_SPLIT = 0.15;
+const LIP_195_LIQUID_COLLATERAL_KEYS = new Set([
+  "ADA",
+  "NIGHT",
+  "DJED",
+  "USDA",
+  "USDC",
+  "USDCX",
+  "WANUSDC",
+  "USDM",
+  "USDT",
+  "WANUSDT",
+  "IUSD",
+  "DAI",
+  "WANDAI",
+  "EURC",
+  "WANEURC",
+  "PYUSD",
+  "WANPYUSD",
+  "USDRF",
+  "SUSDRF",
+  "SUSDRF-USDCX",
+  "LPM-USDM-USDA",
+  "USDM-USDA",
+  "LPS-USDCX-USDM",
+  "USDCX-USDM"
+]);
 
 function buildProtocolParameterLandscape(input = {}) {
   const markets = (Array.isArray(input.markets) ? input.markets : [])
@@ -7769,7 +7836,7 @@ function buildProtocolParameterLandscape(input = {}) {
     rateCurveAtlas,
     availability: {
       historical: "Rate landmarks, utilization and supply caps, income allocation, and raw rate-model coefficients are reconstructed from exact analytics.marketParamsHistory governance events.",
-      currentOnly: "Liquidation, collateral, fee, and batching guardrails come from the current liqwid.data.markets.parameters snapshot and are not backfilled historically."
+      currentOnly: "Liquidation, collateral, fee, and batching guardrails come from the current liqwid.data.markets.parameters snapshot (with the LIP-195 15% protocol liquidation fee split derived for ADA, NIGHT, and stablecoin collaterals) and are not backfilled historically."
     }
   };
 }
@@ -7790,6 +7857,9 @@ function summarizeCollateralRows(rows) {
     minimumWeightedLiquidationThreshold: finiteMinimum(marketRows.map((row) => row.weightedLiquidationThreshold)),
     maximumLiquidationPenalty: finiteMaximum(marketRows.map((row) => row.liquidationPenalty)),
     maximumLiquidationProfitability: finiteMaximum(marketRows.map((row) => row.liquidationProfitability)),
+    maximumLiquidationFeeSplit: finiteMaximum(marketRows.map((row) => row.liquidationFeeSplit)),
+    maximumTreasuryLiquidationShare: finiteMaximum(marketRows.map((row) => row.treasuryLiquidationShare)),
+    maximumNetLiquidatorProfitability: finiteMaximum(marketRows.map((row) => row.netLiquidatorProfitability)),
     maximumCollateralWeight: finiteMaximum(marketRows.map((row) => row.collateralWeight))
   })).sort((left, right) =>
     right.collateralPairCount - left.collateralPairCount
@@ -7885,8 +7955,51 @@ function currentCollateralRows(market) {
     weightedLiquidationThreshold: ratioNumber(row?.weightedLiquidationThreshold),
     liquidationPenalty: ratioNumber(row?.liquidationPenalty),
     liquidationProfitability: ratioNumber(row?.liquidationProfitability),
+    ...collateralLiquidationMetrics(row),
     collateralWeight: ratioNumber(row?.collateralWeight)
   }));
+}
+
+function collateralLiquidationMetrics(row) {
+  const liquidationPenalty = ratioNumber(row?.liquidationPenalty);
+  const liquidationProfitability = ratioNumber(row?.liquidationProfitability);
+  const liquidationFeeSplit = ratioNumber(row?.liquidationFeeSplit)
+    ?? collateralLiquidationFeeSplit(row?.collateral, liquidationPenalty);
+  const treasuryLiquidationShare = liquidationPenalty != null && liquidationFeeSplit != null
+    ? roundRatio(liquidationPenalty * liquidationFeeSplit)
+    : null;
+  const netLiquidatorProfitability = liquidationProfitability != null && liquidationFeeSplit != null
+    ? roundRatio(liquidationProfitability * (1 - liquidationFeeSplit))
+    : null;
+  return {
+    liquidationFeeSplit,
+    treasuryLiquidationShare,
+    netLiquidatorProfitability
+  };
+}
+
+function collateralLiquidationFeeSplit(collateral, liquidationPenalty) {
+  if (liquidationPenalty == null) return null;
+  if (liquidationPenalty <= 0) return 0;
+  const candidates = [
+    collateral?.id,
+    collateral?.symbol,
+    collateral?.displayName
+  ];
+  for (const raw of candidates) {
+    const upper = String(raw || "").trim().toUpperCase();
+    if (!upper) continue;
+    const stripped = upper.startsWith("Q") && upper.length > 1 ? upper.slice(1) : upper;
+    if (LIP_195_LIQUID_COLLATERAL_KEYS.has(upper) || LIP_195_LIQUID_COLLATERAL_KEYS.has(stripped)) {
+      return LIP_195_LIQUIDATION_FEE_SPLIT;
+    }
+  }
+  return 0;
+}
+
+function roundRatio(value) {
+  const numeric = finiteNumber(value);
+  return numeric == null ? null : Number(numeric.toFixed(10));
 }
 
 function buildRateCurveAtlas(marketRows, marketParameters) {
@@ -10128,11 +10241,13 @@ function normalizeNativeProtocolFees(date, row) {
 
 async function fetchLoans(input, options = {}) {
   const perPage = input.perPage ?? 1000;
+  const paceMs = options.requestDelayMs ?? (options.api ? 0 : 1250);
   let page = 0;
   let pagesCount = 1;
   let totalCount = 0;
   const results = [];
   while (page < pagesCount) {
+    if (page > 0 && paceMs > 0) await workflowPause(paceMs);
     const queryInput = { page, perPage };
     if (Array.isArray(input.filters) && input.filters.length) queryInput.filters = input.filters;
     const variables = { input: queryInput };
@@ -10153,9 +10268,9 @@ async function refreshCompleteDataset(options = {}) {
   }
   const api = options.api ?? completeDefaultApi;
   const apiOptions = options.apiOptions ?? {};
-  const paceMs = options.requestDelayMs ?? (options.api ? 0 : 250);
+  const paceMs = options.requestDelayMs ?? (options.api ? 0 : 1250);
   const onProgress = options.onProgress ?? (() => {});
-  const bundle = await refreshDataset({ ...options, store, api, apiOptions, onProgress });
+  const bundle = await refreshDataset({ ...options, store, api, apiOptions, requestDelayMs: paceMs, onProgress });
   const captureRoot = bundle.rawCapture;
   const fetchedAt = options.now?.().toISOString() ?? new Date().toISOString();
   const firstDate = bundle.protocolSeries[0]?.date ?? options.startDate;
@@ -10170,7 +10285,7 @@ async function refreshCompleteDataset(options = {}) {
   const monthlyFees = aggregateDailyProtocolFeeAllocations(dailyAllocatedFees);
   onProgress({ phase: "loans" });
   const loanSnapshotAt = options.now?.().toISOString() ?? new Date().toISOString();
-  const { allLoans, activeLoans, liquidatableLoans, collateralLoans } = await refreshLoanSnapshots({ store, api, apiOptions, captureRoot, fetchedAt: loanSnapshotAt });
+  const { allLoans, activeLoans, liquidatableLoans, collateralLoans } = await refreshLoanSnapshots({ store, api, apiOptions, captureRoot, fetchedAt: loanSnapshotAt, paceMs });
   const loanSnapshotHistory = await appendCurrentLoanSnapshotHistory({
     store,
     fetchedAt: loanSnapshotAt,
@@ -10390,11 +10505,11 @@ async function refreshDailyOverview({ store, api, apiOptions, captureRoot, fetch
   return rows;
 }
 
-async function refreshLoanSnapshots({ store, api, apiOptions, captureRoot, fetchedAt }) {
+async function refreshLoanSnapshots({ store, api, apiOptions, captureRoot, fetchedAt, paceMs }) {
   const allInput = {};
   let all;
   try {
-    all = await api.fetchLoans(allInput, apiOptions);
+    all = await api.fetchLoans(allInput, { ...apiOptions, requestDelayMs: paceMs });
   } catch (error) {
     await writeRawError(store, `${captureRoot}/loans/error.json`, fetchedAt, LOANS_QUERY, { allInput }, error);
     throw error;
@@ -14812,7 +14927,7 @@ function breakdownEscape(value) {
     },
     "DAO / treasury revenue": {
         "description": "Cumulative accrual-based protocol revenue allocated to the DAO Treasury.",
-        "explanation": "Sums API-reported DAO protocol revenue across every complete daily analytics.fees row: interest and origination accruals plus any liquidation fee share (Proposal 195). This is earned allocation, not repayment-timed collection.",
+        "explanation": "Sums API-reported DAO protocol revenue across every complete daily analytics.fees row: interest and origination accruals plus any liquidation fee share (LIP-195 15% split on ADA, NIGHT, and stablecoin collateral: treasuries migrated 2026-09-03, fee collection live 2026-10-24). This is earned allocation, not repayment-timed collection.",
         "formulaHtml": '<div class="formula-card">&sum;<sub>complete days</sub> <span class="formula-num">dailyProtocolRevenue</span> <span class="formula-paren">=</span> <span class="formula-num">borrowInterestAccruedForProtocol</span> + <span class="formula-num">loanOriginationFeesForProtocol</span> + <span class="formula-num">liquidation fee share</span></div>',
         "formulaText": "sum(Complete daily dailyProtocolRevenue USD) = DAO interest + DAO origination + DAO liquidation fee share"
     },
@@ -14835,8 +14950,8 @@ function breakdownEscape(value) {
         "formulaText": "sum(Complete daily loanOriginationFeesForProtocol USD)"
     },
     "DAO liquidation fee share": {
-        "description": "Cumulative liquidation bonus share routed to the DAO Treasury by Proposal 195 (15% split for ADA, NIGHT and stablecoin collateral, executed 2026-09-03).",
-        "explanation": "The API has no dedicated field for the split. Each complete day takes official dailyProtocolRevenue minus its interest and origination components. The refresh fails if that remainder is negative or larger than the day's reported liquidation bonus.",
+        "description": "Cumulative liquidation bonus share routed to the DAO Treasury by Proposal 195 (15% split for ADA, NIGHT, and stablecoin collateral; treasuries migrated 2026-09-03, fee split live 2026-10-24).",
+        "explanation": "The API has no dedicated field for the split. Each complete day takes official dailyProtocolRevenue minus its interest and origination components. Proposal 195 migrated market treasuries on 2026-09-03 (leaving the on-chain split at 0%) before activating the 15% treasury fee split on 2026-10-24. The refresh fails if that remainder is negative or larger than the day's reported liquidation bonus.",
         "formulaHtml": '<div class="formula-card">&sum;<sub>complete days</sub> <span class="formula-paren">(</span><span class="formula-num">dailyProtocolRevenue</span> &minus; <span class="formula-num">borrowInterestAccruedForProtocol</span> &minus; <span class="formula-num">loanOriginationFeesForProtocol</span><span class="formula-paren">)</span></div>',
         "formulaText": "sum(Complete daily dailyProtocolRevenue - borrowInterestAccruedForProtocol - loanOriginationFeesForProtocol USD), bounded by liquidationBonus"
     },
@@ -14882,8 +14997,8 @@ function breakdownEscape(value) {
         "note": "Excludes governance-protected POL loans."
     },
     "Full-period liquidation profit": {
-        "description": "Net protocol revenue earned from liquidation penalties across observable history.",
-        "explanation": "Cumulative profit accrued from liquidation fees and collateral discounts across all recorded historical observations.",
+        "description": "Cumulative gross liquidation bonus generated across observable history.",
+        "explanation": "Sums official analytics.overview liquidationProfitInUsd across all recorded historical periods. This is the total liquidation bonus from collateral discounts (100% to liquidators before 2026-10-24; split 85% liquidators / 15% DAO Treasury on ADA, NIGHT, and stablecoin collateral from 2026-10-24 onward under LIP-195). The DAO's 15% retained share is tracked separately in Protocol Revenue.",
         "formulaHtml": '<div class="formula-card">&sum; <span class="formula-num">Liquidation Profit<sub>USD</sub></span></div>',
         "formulaText": "sum(Liquidation Profit USD)"
     },
@@ -16535,7 +16650,7 @@ function breakdownEscape(value) {
           ${kpi("DAO / treasury revenue", usd(summary.allocatedProtocolRevenueInUsd))}
           ${kpi("DAO interest allocation", usd(summary.allocatedProtocolInterestRevenueInUsd))}
           ${kpi("DAO origination allocation", usd(summary.allocatedProtocolOriginationRevenueInUsd))}
-          ${kpi("DAO liquidation fee share", usd(summary.allocatedProtocolLiquidationRevenueInUsd), "Proposal 195 split, executed 2026-09-03")}
+          ${kpi("DAO liquidation fee share", usd(summary.allocatedProtocolLiquidationRevenueInUsd), "LIP-195 15% split (migrated 2026-09-03, live 2026-10-24)")}
         `)}
         ${metricPeriodGroup("Recent DAO run rate", runRatePeriod, "Latest 90 consecutive complete days", `
           ${kpi("Annualized run rate", usd(summary.allocatedProtocolRevenueAnnualizedRunRateInUsd), "Trailing 90-day revenue: " + usd(summary.allocatedProtocolRevenueTrailing90DaysInUsd))}
@@ -16543,7 +16658,7 @@ function breakdownEscape(value) {
         `)}
         ${chartSection("Accrued DAO revenue", "How much revenue has accrued to the DAO, and how are its level and composition changing?")}
         ${interactiveChartPanel("Historical annualized DAO revenue run rate", "protocolRevenueRunRate", { defaultPeriod: "all", help: "Each point annualizes the latest 90 consecutive complete UTC days. The current UTC day is excluded until closed." })}
-        ${interactiveChartPanel("Monthly DAO revenue allocation", "protocolDaoRevenueAllocationMonthly", { defaultPeriod: "all", help: "DAO interest, origination, and liquidation fee share allocations are summed from official daily rows. The liquidation fee share is official daily protocol revenue minus its interest and origination components; it can only be non-zero on days with liquidation bonus (Proposal 195 split, executed 2026-09-03). The current partial month remains visible." })}
+        ${interactiveChartPanel("Monthly DAO revenue allocation", "protocolDaoRevenueAllocationMonthly", { defaultPeriod: "all", help: "DAO interest, origination, and liquidation fee share allocations are summed from official daily rows. The liquidation fee share is official daily protocol revenue minus its interest and origination components; it can only be non-zero on days with liquidation bonus (LIP-195 15% split: treasuries migrated 2026-09-03, collection live 2026-10-24). The current partial month remains visible." })}
         ${interactiveChartPanel("Daily DAO revenue allocation", "protocolDaoRevenueAllocationDaily", { defaultPeriod: "all" })}
         ${metricPeriodGroup("Cumulative accrued LQ-staker allocation", allocationPeriod, `${integer(summary.completeAllocationDays)} complete days`, `
           ${kpi("LQ-staker allocation", usd(summary.allocatedHoldersRevenueInUsd))}
@@ -19387,6 +19502,7 @@ function breakdownEscape(value) {
       const workingStore = dataStore.clone();
       workingStore.name = dataLocation.name;
       let lastRefreshStep = "refreshing the public market list";
+      let retryCountdownTimer = null;
       try {
         const refreshed = await refreshCompleteDataset({
           store: workingStore,
@@ -19394,7 +19510,31 @@ function breakdownEscape(value) {
           startDate: DEFAULT_HISTORY_START_DATE,
           endDate: todayDateKey(),
           dataRootLabel: dataLocation.name,
+          requestDelayMs: 1250,
+          apiOptions: {
+            retries: 6,
+            retryDelayMs: 35000,
+            maxRetryDelayMs: 120000,
+            onRetry({ operation, attempt, retries, delayMs }) {
+              let remaining = Math.ceil(delayMs / 1000);
+              status.textContent = `Liqwid API rate limit cooldown: waiting ${remaining}s before retrying ${operation} (${attempt}/${retries})...`;
+              if (retryCountdownTimer) clearInterval(retryCountdownTimer);
+              retryCountdownTimer = setInterval(() => {
+                remaining -= 1;
+                if (remaining > 0) {
+                  status.textContent = `Liqwid API rate limit cooldown: waiting ${remaining}s before retrying ${operation} (${attempt}/${retries})...`;
+                } else {
+                  clearInterval(retryCountdownTimer);
+                  retryCountdownTimer = null;
+                }
+              }, 1000);
+            }
+          },
           onProgress(progress) {
+            if (retryCountdownTimer) {
+              clearInterval(retryCountdownTimer);
+              retryCountdownTimer = null;
+            }
             const formatted = formatRefreshProgress(progress);
             lastRefreshStep = formatted.step;
             status.textContent = formatted.text;
@@ -19417,6 +19557,10 @@ function breakdownEscape(value) {
         status.classList.add("error");
         status.textContent = refreshErrorMessage(error, lastRefreshStep);
       } finally {
+        if (retryCountdownTimer) {
+          clearInterval(retryCountdownTimer);
+          retryCountdownTimer = null;
+        }
         refreshInFlight = false;
         setDataActionsDisabled(false);
         updateDataActionLabels();
@@ -19600,7 +19744,10 @@ function breakdownEscape(value) {
     function refreshErrorMessage(error, step) {
       const detail = error?.message || String(error);
       const context = step ? ` Failure occurred while ${step}.` : "";
-      return `Complete refresh failed; nothing was committed and the last good charts remain visible.${context} ${detail}`;
+      const hint = detail.includes("Failed to fetch")
+        ? " (If this persists in Brave, verify that Brave Shields or privacy extensions are not blocking requests to v2.api.liqwid.finance)."
+        : "";
+      return `Complete refresh failed; nothing was committed and the last good charts remain visible.${context} ${detail}${hint}`;
     }
 
     function lineChart(container, rows, series, yFormat, options = {}) {
@@ -19893,7 +20040,10 @@ function breakdownEscape(value) {
         { key: "liquidationThreshold", label: "Liquidation threshold", format: pct },
         { key: "weightedLiquidationThreshold", label: "Weighted liquidation threshold", format: pct },
         { key: "liquidationPenalty", label: "Liquidation penalty", format: pct },
-        { key: "liquidationProfitability", label: "Liquidation profitability", format: pct },
+        { key: "liquidationProfitability", label: "Liquidation profitability (gross)", format: pct },
+        { key: "liquidationFeeSplit", label: "Protocol fee split (LIP-195)", format: pct },
+        { key: "treasuryLiquidationShare", label: "Treasury seized-collateral share", format: pct },
+        { key: "netLiquidatorProfitability", label: "Net liquidator profitability", format: pct },
         { key: "collateralWeight", label: "Collateral weight", format: pct }
       ]);
     }

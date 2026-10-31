@@ -6,15 +6,15 @@ An open-source, client-side web application and data pipeline for monitoring and
 
 ## Features
 
-- **Protocol & Market Dynamics Analytics**: Explore TVL, utilization rate, borrow/supply APYs, active debt, debt and interest accrual vs repayment flows, risk metrics across all active markets, market participant concentration, and parameter landscape history.
-- **DAO & LQ-Staker Revenue Allocation**: Daily and monthly tracking of protocol fee allocations between the DAO treasury and LQ stakers, with itemized interest accrual, loan origination fees, and Proposal 195 liquidation fee share splits.
+- **Protocol & Market Dynamics Analytics**: Explore TVL, utilization rate, borrow/supply APYs, active debt, debt and interest accrual vs repayment flows, risk metrics across all active markets, market participant concentration, and parameter landscape history (with derived LIP-195 liquidation fee splits, treasury seized-collateral shares, and net liquidator profitability).
+- **DAO & LQ-Staker Revenue Allocation**: Daily and monthly tracking of protocol fee allocations between the DAO treasury and LQ stakers, with itemized interest accrual, loan origination fees, and LIP-195 liquidation fee share splits (15% split on ADA, NIGHT, and stablecoin collateral, active from 2026-10-24).
 - **USD Stablecoin Yields & Circulating Supply**: Comparative historical time series analyzing supply APYs and circulating supplies across all major USD stablecoin markets (USDM, USDA, wanPYUSD, USDCx, and USDrf).
 - **Collateral Usage & Credit Pairing Analytics**: In-depth breakdown of collateral asset composition and borrow-to-collateral pairing flows across active loans and markets.
 - **Protocol-Owned Liquidity (POL) Tracking**: Dedicated monitoring of DAO POL borrowing lines and locked qPOL collateral positions, with custom risk and health factor exclusions.
 - **Client-Side & Offline Ready**: Runs directly in any web browser without needing a backend server or persistent daemon.
 - **Portable Data Store & Zip Archive**: Bundles raw historical fetches, cleaned daily histories, and computed market datasets in a portable ZIP archive (`liqwid-data.zip`) and CSV manifest (`liqwid-portable-manifest.csv`).
-- **On-Demand Data Ingestion**: Does **not** perform always-on or continuous background data ingestion. New protocol observations are queried on-demand from the official Liqwid v2 GraphQL API only when triggered by the user clicking **"Fetch new data"**.
-- **Data Status**: Dedicated diagnostic interface providing data coverage audits, schema consistency verifications, and loan reconciliation checks.
+- **On-Demand Data Ingestion**: Does **not** perform always-on or continuous background data ingestion. New protocol observations are queried on-demand from the official Liqwid v2 GraphQL API only when triggered by the user clicking **"Fetch new data"**, with adaptive request pacing and rate-limit cooldown retries.
+- **Data Status**: Dedicated diagnostic interface providing data coverage audits, schema consistency verifications, strict revenue reconciliation tolerances (interest, origination, and bounded liquidation fee shares), and loan reconciliation checks.
 
 ## Project Layout
 

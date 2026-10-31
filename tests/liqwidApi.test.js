@@ -145,3 +145,56 @@ test("public market pagination preserves each GraphQL page response", async () =
   assert.equal(result.rawPages[1].request.variables.page, 1);
   assert.equal(result.rawPages[1].payload.liqwid.data.markets.results[0].id, "B");
 });
+
+test("postGraphql invokes onRetry and respects 429 retry-after header", async () => {
+  let attempts = 0;
+  const retryEvents = [];
+  const fetchImpl = async () => {
+    attempts += 1;
+    if (attempts === 1) {
+      return {
+        ok: false,
+        status: 429,
+        headers: new Headers({ "retry-after": "1" }),
+        text: async () => JSON.stringify({ error: "rate limited" })
+      };
+    }
+    return {
+      ok: true,
+      json: async () => ({ data: { success: true } })
+    };
+  };
+
+  const data = await postGraphql(
+    { query: "query PublicMarkets { liqwid { __typename } }" },
+    {
+      fetchImpl,
+      retries: 2,
+      retryDelayMs: 0,
+      onRetry(event) {
+        retryEvents.push(event);
+      }
+    }
+  );
+
+  assert.deepEqual(data, { success: true });
+  assert.equal(attempts, 2);
+  assert.equal(retryEvents.length, 1);
+  assert.equal(retryEvents[0].attempt, 1);
+  assert.equal(retryEvents[0].operation, "PublicMarkets");
+  assert.equal(retryEvents[0].delayMs, 2000); // 1s + 1s buffer
+});
+
+test("postGraphql defaults to 6 retries (7 attempts)", async () => {
+  let attempts = 0;
+  const fetchImpl = async () => {
+    attempts += 1;
+    throw new TypeError("Failed to fetch");
+  };
+
+  await assert.rejects(
+    () => postGraphql({ query: "query PublicMarkets { liqwid { __typename } }" }, { fetchImpl, retryDelayMs: 0 }),
+    /PublicMarkets failed after 7 attempts: Failed to fetch/
+  );
+  assert.equal(attempts, 7);
+});

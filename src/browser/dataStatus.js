@@ -1100,7 +1100,7 @@ function buildTechnicalAudit({
       {
         id: "revenue-tolerance",
         label: "Revenue component tolerance",
-        detail: "Protocol and holder totals must each equal interest plus origination components within the larger of $0.01 or 0.000001% of the total."
+        detail: "Protocol totals must equal interest, origination, and liquidation fee share components, and holder totals must equal interest plus origination components, within the larger of $0.01 or 0.000001% of the total."
       },
       {
         id: "raw-clean-lineage",
@@ -1307,13 +1307,21 @@ function revenueCheck(dailyAllocation) {
     if (invalidRows.has(row)) return false;
     const protocolTotal = dataStatusFinite(row.allocatedProtocolRevenueInUsd);
     const holdersTotal = dataStatusFinite(row.allocatedHoldersRevenueInUsd);
+    const liquidationShare = dataStatusNumber(
+      row.allocatedProtocolLiquidationRevenueInUsd ?? row.liquidationFeeShareForProtocolInUsd
+    );
+    const liquidationBonus = dataStatusFinite(row.liquidationBonusInUsd);
+    const liquidationShareInvalid = liquidationShare < -DATA_STATUS_USD_TOLERANCE
+      || (liquidationBonus !== null && liquidationShare > liquidationBonus + DATA_STATUS_USD_TOLERANCE);
     const protocolDifference = protocolTotal
       - dataStatusFinite(row.allocatedProtocolInterestRevenueInUsd)
-      - dataStatusFinite(row.allocatedProtocolOriginationRevenueInUsd);
+      - dataStatusFinite(row.allocatedProtocolOriginationRevenueInUsd)
+      - liquidationShare;
     const holdersDifference = holdersTotal
       - dataStatusFinite(row.allocatedHoldersInterestRevenueInUsd)
       - dataStatusFinite(row.allocatedHoldersOriginationRevenueInUsd);
-    return !withinUsdTolerance(protocolDifference, protocolTotal)
+    return liquidationShareInvalid
+      || !withinUsdTolerance(protocolDifference, protocolTotal)
       || !withinUsdTolerance(holdersDifference, holdersTotal);
   });
   const failedDates = [...new Set([...invalidOperandRows, ...failedRows]

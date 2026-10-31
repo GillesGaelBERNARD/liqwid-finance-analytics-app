@@ -655,3 +655,34 @@ test("market-history coverage fails when a required metric is missing or non-num
   assert.deepEqual(card.affectedMarkets, ["ADA"]);
   assert.match(card.detail, /structural integrity issue/i);
 });
+
+test("revenue reconciliation includes LIP-195 protocol liquidation fee share and rejects out-of-bounds shares", () => {
+  const input = statusInput();
+  input.revenue.dailyAllocation[0] = {
+    ...input.revenue.dailyAllocation[0],
+    allocatedProtocolRevenueInUsd: 6.5,
+    allocatedProtocolInterestRevenueInUsd: 4,
+    allocatedProtocolOriginationRevenueInUsd: 1,
+    allocatedProtocolLiquidationRevenueInUsd: 1.5,
+    liquidationBonusInUsd: 10
+  };
+
+  const passingRevenue = buildDataStatus(input).checks.find((check) => check.id === "revenue");
+  assert.equal(passingRevenue.status, "pass");
+  assert.equal(passingRevenue.reconciliationFailures, 0);
+
+  const exceedingBonusInput = statusInput();
+  exceedingBonusInput.revenue.dailyAllocation[0] = {
+    ...exceedingBonusInput.revenue.dailyAllocation[0],
+    allocatedProtocolRevenueInUsd: 6.5,
+    allocatedProtocolInterestRevenueInUsd: 4,
+    allocatedProtocolOriginationRevenueInUsd: 1,
+    allocatedProtocolLiquidationRevenueInUsd: 1.5,
+    liquidationBonusInUsd: 1.0
+  };
+
+  const failingRevenue = buildDataStatus(exceedingBonusInput).checks.find((check) => check.id === "revenue");
+  assert.equal(failingRevenue.status, "fail");
+  assert.equal(failingRevenue.reconciliationFailures, 1);
+  assert.deepEqual(failingRevenue.failedDates, ["2026-01-01"]);
+});

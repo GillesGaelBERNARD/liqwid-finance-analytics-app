@@ -203,11 +203,13 @@ function normalizeNativeProtocolFees(date, row) {
 
 export async function fetchLoans(input, options = {}) {
   const perPage = input.perPage ?? 1000;
+  const paceMs = options.requestDelayMs ?? (options.api ? 0 : 1250);
   let page = 0;
   let pagesCount = 1;
   let totalCount = 0;
   const results = [];
   while (page < pagesCount) {
+    if (page > 0 && paceMs > 0) await workflowPause(paceMs);
     const queryInput = { page, perPage };
     if (Array.isArray(input.filters) && input.filters.length) queryInput.filters = input.filters;
     const variables = { input: queryInput };
@@ -228,9 +230,9 @@ export async function refreshCompleteDataset(options = {}) {
   }
   const api = options.api ?? completeDefaultApi;
   const apiOptions = options.apiOptions ?? {};
-  const paceMs = options.requestDelayMs ?? (options.api ? 0 : 250);
+  const paceMs = options.requestDelayMs ?? (options.api ? 0 : 1250);
   const onProgress = options.onProgress ?? (() => {});
-  const bundle = await refreshDataset({ ...options, store, api, apiOptions, onProgress });
+  const bundle = await refreshDataset({ ...options, store, api, apiOptions, requestDelayMs: paceMs, onProgress });
   const captureRoot = bundle.rawCapture;
   const fetchedAt = options.now?.().toISOString() ?? new Date().toISOString();
   const firstDate = bundle.protocolSeries[0]?.date ?? options.startDate;
@@ -245,7 +247,7 @@ export async function refreshCompleteDataset(options = {}) {
   const monthlyFees = aggregateDailyProtocolFeeAllocations(dailyAllocatedFees);
   onProgress({ phase: "loans" });
   const loanSnapshotAt = options.now?.().toISOString() ?? new Date().toISOString();
-  const { allLoans, activeLoans, liquidatableLoans, collateralLoans } = await refreshLoanSnapshots({ store, api, apiOptions, captureRoot, fetchedAt: loanSnapshotAt });
+  const { allLoans, activeLoans, liquidatableLoans, collateralLoans } = await refreshLoanSnapshots({ store, api, apiOptions, captureRoot, fetchedAt: loanSnapshotAt, paceMs });
   const loanSnapshotHistory = await appendCurrentLoanSnapshotHistory({
     store,
     fetchedAt: loanSnapshotAt,
@@ -465,11 +467,11 @@ async function refreshDailyOverview({ store, api, apiOptions, captureRoot, fetch
   return rows;
 }
 
-async function refreshLoanSnapshots({ store, api, apiOptions, captureRoot, fetchedAt }) {
+async function refreshLoanSnapshots({ store, api, apiOptions, captureRoot, fetchedAt, paceMs }) {
   const allInput = {};
   let all;
   try {
-    all = await api.fetchLoans(allInput, apiOptions);
+    all = await api.fetchLoans(allInput, { ...apiOptions, requestDelayMs: paceMs });
   } catch (error) {
     await writeRawError(store, `${captureRoot}/loans/error.json`, fetchedAt, LOANS_QUERY, { allInput }, error);
     throw error;

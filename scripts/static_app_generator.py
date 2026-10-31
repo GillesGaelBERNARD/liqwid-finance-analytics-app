@@ -1097,7 +1097,7 @@ HTML_TEMPLATE = r"""<!doctype html>
     },
     "DAO / treasury revenue": {
         "description": "Cumulative accrual-based protocol revenue allocated to the DAO Treasury.",
-        "explanation": "Sums API-reported DAO protocol revenue across every complete daily analytics.fees row: interest and origination accruals plus any liquidation fee share (Proposal 195). This is earned allocation, not repayment-timed collection.",
+        "explanation": "Sums API-reported DAO protocol revenue across every complete daily analytics.fees row: interest and origination accruals plus any liquidation fee share (LIP-195 15% split on ADA, NIGHT, and stablecoin collateral: treasuries migrated 2026-09-03, fee collection live 2026-10-24). This is earned allocation, not repayment-timed collection.",
         "formulaHtml": '<div class="formula-card">&sum;<sub>complete days</sub> <span class="formula-num">dailyProtocolRevenue</span> <span class="formula-paren">=</span> <span class="formula-num">borrowInterestAccruedForProtocol</span> + <span class="formula-num">loanOriginationFeesForProtocol</span> + <span class="formula-num">liquidation fee share</span></div>',
         "formulaText": "sum(Complete daily dailyProtocolRevenue USD) = DAO interest + DAO origination + DAO liquidation fee share"
     },
@@ -1120,8 +1120,8 @@ HTML_TEMPLATE = r"""<!doctype html>
         "formulaText": "sum(Complete daily loanOriginationFeesForProtocol USD)"
     },
     "DAO liquidation fee share": {
-        "description": "Cumulative liquidation bonus share routed to the DAO Treasury by Proposal 195 (15% split for ADA, NIGHT and stablecoin collateral, executed 2026-09-03).",
-        "explanation": "The API has no dedicated field for the split. Each complete day takes official dailyProtocolRevenue minus its interest and origination components. The refresh fails if that remainder is negative or larger than the day's reported liquidation bonus.",
+        "description": "Cumulative liquidation bonus share routed to the DAO Treasury by Proposal 195 (15% split for ADA, NIGHT, and stablecoin collateral; treasuries migrated 2026-09-03, fee split live 2026-10-24).",
+        "explanation": "The API has no dedicated field for the split. Each complete day takes official dailyProtocolRevenue minus its interest and origination components. Proposal 195 migrated market treasuries on 2026-09-03 (leaving the on-chain split at 0%) before activating the 15% treasury fee split on 2026-10-24. The refresh fails if that remainder is negative or larger than the day's reported liquidation bonus.",
         "formulaHtml": '<div class="formula-card">&sum;<sub>complete days</sub> <span class="formula-paren">(</span><span class="formula-num">dailyProtocolRevenue</span> &minus; <span class="formula-num">borrowInterestAccruedForProtocol</span> &minus; <span class="formula-num">loanOriginationFeesForProtocol</span><span class="formula-paren">)</span></div>',
         "formulaText": "sum(Complete daily dailyProtocolRevenue - borrowInterestAccruedForProtocol - loanOriginationFeesForProtocol USD), bounded by liquidationBonus"
     },
@@ -1167,8 +1167,8 @@ HTML_TEMPLATE = r"""<!doctype html>
         "note": "Excludes governance-protected POL loans."
     },
     "Full-period liquidation profit": {
-        "description": "Net protocol revenue earned from liquidation penalties across observable history.",
-        "explanation": "Cumulative profit accrued from liquidation fees and collateral discounts across all recorded historical observations.",
+        "description": "Cumulative gross liquidation bonus generated across observable history.",
+        "explanation": "Sums official analytics.overview liquidationProfitInUsd across all recorded historical periods. This is the total liquidation bonus from collateral discounts (100% to liquidators before 2026-10-24; split 85% liquidators / 15% DAO Treasury on ADA, NIGHT, and stablecoin collateral from 2026-10-24 onward under LIP-195). The DAO's 15% retained share is tracked separately in Protocol Revenue.",
         "formulaHtml": '<div class="formula-card">&sum; <span class="formula-num">Liquidation Profit<sub>USD</sub></span></div>',
         "formulaText": "sum(Liquidation Profit USD)"
     },
@@ -2820,7 +2820,7 @@ HTML_TEMPLATE = r"""<!doctype html>
           ${kpi("DAO / treasury revenue", usd(summary.allocatedProtocolRevenueInUsd))}
           ${kpi("DAO interest allocation", usd(summary.allocatedProtocolInterestRevenueInUsd))}
           ${kpi("DAO origination allocation", usd(summary.allocatedProtocolOriginationRevenueInUsd))}
-          ${kpi("DAO liquidation fee share", usd(summary.allocatedProtocolLiquidationRevenueInUsd), "Proposal 195 split, executed 2026-09-03")}
+          ${kpi("DAO liquidation fee share", usd(summary.allocatedProtocolLiquidationRevenueInUsd), "LIP-195 15% split (migrated 2026-09-03, live 2026-10-24)")}
         `)}
         ${metricPeriodGroup("Recent DAO run rate", runRatePeriod, "Latest 90 consecutive complete days", `
           ${kpi("Annualized run rate", usd(summary.allocatedProtocolRevenueAnnualizedRunRateInUsd), "Trailing 90-day revenue: " + usd(summary.allocatedProtocolRevenueTrailing90DaysInUsd))}
@@ -2828,7 +2828,7 @@ HTML_TEMPLATE = r"""<!doctype html>
         `)}
         ${chartSection("Accrued DAO revenue", "How much revenue has accrued to the DAO, and how are its level and composition changing?")}
         ${interactiveChartPanel("Historical annualized DAO revenue run rate", "protocolRevenueRunRate", { defaultPeriod: "all", help: "Each point annualizes the latest 90 consecutive complete UTC days. The current UTC day is excluded until closed." })}
-        ${interactiveChartPanel("Monthly DAO revenue allocation", "protocolDaoRevenueAllocationMonthly", { defaultPeriod: "all", help: "DAO interest, origination, and liquidation fee share allocations are summed from official daily rows. The liquidation fee share is official daily protocol revenue minus its interest and origination components; it can only be non-zero on days with liquidation bonus (Proposal 195 split, executed 2026-09-03). The current partial month remains visible." })}
+        ${interactiveChartPanel("Monthly DAO revenue allocation", "protocolDaoRevenueAllocationMonthly", { defaultPeriod: "all", help: "DAO interest, origination, and liquidation fee share allocations are summed from official daily rows. The liquidation fee share is official daily protocol revenue minus its interest and origination components; it can only be non-zero on days with liquidation bonus (LIP-195 15% split: treasuries migrated 2026-09-03, collection live 2026-10-24). The current partial month remains visible." })}
         ${interactiveChartPanel("Daily DAO revenue allocation", "protocolDaoRevenueAllocationDaily", { defaultPeriod: "all" })}
         ${metricPeriodGroup("Cumulative accrued LQ-staker allocation", allocationPeriod, `${integer(summary.completeAllocationDays)} complete days`, `
           ${kpi("LQ-staker allocation", usd(summary.allocatedHoldersRevenueInUsd))}
@@ -5672,6 +5672,7 @@ HTML_TEMPLATE = r"""<!doctype html>
       const workingStore = dataStore.clone();
       workingStore.name = dataLocation.name;
       let lastRefreshStep = "refreshing the public market list";
+      let retryCountdownTimer = null;
       try {
         const refreshed = await refreshCompleteDataset({
           store: workingStore,
@@ -5679,7 +5680,31 @@ HTML_TEMPLATE = r"""<!doctype html>
           startDate: DEFAULT_HISTORY_START_DATE,
           endDate: todayDateKey(),
           dataRootLabel: dataLocation.name,
+          requestDelayMs: 1250,
+          apiOptions: {
+            retries: 6,
+            retryDelayMs: 35000,
+            maxRetryDelayMs: 120000,
+            onRetry({ operation, attempt, retries, delayMs }) {
+              let remaining = Math.ceil(delayMs / 1000);
+              status.textContent = `Liqwid API rate limit cooldown: waiting ${remaining}s before retrying ${operation} (${attempt}/${retries})...`;
+              if (retryCountdownTimer) clearInterval(retryCountdownTimer);
+              retryCountdownTimer = setInterval(() => {
+                remaining -= 1;
+                if (remaining > 0) {
+                  status.textContent = `Liqwid API rate limit cooldown: waiting ${remaining}s before retrying ${operation} (${attempt}/${retries})...`;
+                } else {
+                  clearInterval(retryCountdownTimer);
+                  retryCountdownTimer = null;
+                }
+              }, 1000);
+            }
+          },
           onProgress(progress) {
+            if (retryCountdownTimer) {
+              clearInterval(retryCountdownTimer);
+              retryCountdownTimer = null;
+            }
             const formatted = formatRefreshProgress(progress);
             lastRefreshStep = formatted.step;
             status.textContent = formatted.text;
@@ -5702,6 +5727,10 @@ HTML_TEMPLATE = r"""<!doctype html>
         status.classList.add("error");
         status.textContent = refreshErrorMessage(error, lastRefreshStep);
       } finally {
+        if (retryCountdownTimer) {
+          clearInterval(retryCountdownTimer);
+          retryCountdownTimer = null;
+        }
         refreshInFlight = false;
         setDataActionsDisabled(false);
         updateDataActionLabels();
@@ -5885,7 +5914,10 @@ HTML_TEMPLATE = r"""<!doctype html>
     function refreshErrorMessage(error, step) {
       const detail = error?.message || String(error);
       const context = step ? ` Failure occurred while ${step}.` : "";
-      return `Complete refresh failed; nothing was committed and the last good charts remain visible.${context} ${detail}`;
+      const hint = detail.includes("Failed to fetch")
+        ? " (If this persists in Brave, verify that Brave Shields or privacy extensions are not blocking requests to v2.api.liqwid.finance)."
+        : "";
+      return `Complete refresh failed; nothing was committed and the last good charts remain visible.${context} ${detail}${hint}`;
     }
 
     function lineChart(container, rows, series, yFormat, options = {}) {
@@ -6178,7 +6210,10 @@ HTML_TEMPLATE = r"""<!doctype html>
         { key: "liquidationThreshold", label: "Liquidation threshold", format: pct },
         { key: "weightedLiquidationThreshold", label: "Weighted liquidation threshold", format: pct },
         { key: "liquidationPenalty", label: "Liquidation penalty", format: pct },
-        { key: "liquidationProfitability", label: "Liquidation profitability", format: pct },
+        { key: "liquidationProfitability", label: "Liquidation profitability (gross)", format: pct },
+        { key: "liquidationFeeSplit", label: "Protocol fee split (LIP-195)", format: pct },
+        { key: "treasuryLiquidationShare", label: "Treasury seized-collateral share", format: pct },
+        { key: "netLiquidatorProfitability", label: "Net liquidator profitability", format: pct },
         { key: "collateralWeight", label: "Collateral weight", format: pct }
       ]);
     }

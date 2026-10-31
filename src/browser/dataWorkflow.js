@@ -202,8 +202,9 @@ export async function postGraphql(request, options = {}) {
     throw new Error(`Only the official Liqwid endpoint is permitted: ${LIQWID_GRAPHQL_ENDPOINT}`);
   }
   const fetchImpl = options.fetchImpl ?? globalThis.fetch;
-  const retries = options.retries ?? 4;
-  const retryDelayMs = options.retryDelayMs ?? 500;
+  const retries = options.retries ?? 6;
+  const retryDelayMs = options.retryDelayMs !== undefined ? options.retryDelayMs : 35000;
+  const maxRetryDelayMs = options.maxRetryDelayMs ?? 120000;
   const operation = String(request?.query || "").match(/\b(?:query|mutation)\s+([A-Za-z_][A-Za-z0-9_]*)/)?.[1] || "GraphQL request";
   if (typeof fetchImpl !== "function") throw new Error("This browser does not provide fetch().");
 
@@ -221,7 +222,15 @@ export async function postGraphql(request, options = {}) {
       });
       if (!response.ok) {
         const body = await response.text().catch(() => "");
-        throw new Error(`Liqwid API HTTP ${response.status}: ${body.slice(0, 500)}`);
+        const retryAfterHeader = response.headers?.get?.("retry-after");
+        const retryAfterSec = retryAfterHeader ? parseInt(retryAfterHeader, 10) : NaN;
+        const err = new Error(`Liqwid API HTTP ${response.status}: ${body.slice(0, 500)}`);
+        if (response.status === 429) {
+          err.retryAfterMs = !Number.isNaN(retryAfterSec) && retryAfterSec > 0
+            ? (retryAfterSec * 1000) + 1000
+            : 35000;
+        }
+        throw err;
       }
       const payload = await response.json();
       if (payload.errors?.length) {
@@ -231,7 +240,22 @@ export async function postGraphql(request, options = {}) {
       return payload.data;
     } catch (error) {
       lastError = error;
-      if (attempt < retries && retryDelayMs > 0) await wait(retryDelayMs * (2 ** attempt));
+      if (attempt < retries && (retryDelayMs > 0 || lastError?.retryAfterMs)) {
+        const calculatedDelay = retryDelayMs > 0
+          ? Math.min(attempt === 0 ? retryDelayMs : retryDelayMs * (2 ** (attempt - 1)), maxRetryDelayMs)
+          : 0;
+        const delay = Math.max(lastError?.retryAfterMs ?? 0, calculatedDelay);
+        if (delay > 0) {
+          options.onRetry?.({
+            operation,
+            attempt: attempt + 1,
+            retries: retries + 1,
+            delayMs: delay,
+            error: lastError
+          });
+          await wait(delay);
+        }
+      }
     }
   }
   throw new Error(`${operation} failed after ${retries + 1} attempts: ${lastError?.message || String(lastError)}`, { cause: lastError });
@@ -243,7 +267,9 @@ export async function fetchPublicMarkets(options = {}) {
   let totals = null;
   let page = 0;
   let pagesCount = 1;
+  const paceMs = options.requestDelayMs ?? 0;
   while (page < pagesCount) {
+    if (page > 0 && paceMs > 0) await wait(paceMs);
     const request = buildPublicMarketsRequest(page, options.perPage ?? 100);
     const data = await postGraphql(request, options);
     const rawPage = { page, request, payload: data };
@@ -314,8 +340,10 @@ async function runRefresh({
   onProgress = () => {},
   now = () => new Date(),
   runId = null,
-  dataRootLabel = null
+  dataRootLabel = null,
+  requestDelayMs
 }) {
+  const paceMs = requestDelayMs ?? (api === defaultApi || !api ? 1250 : 0);
   const startDay = explicitStartDay ?? startDate;
   const endDay = explicitEndDay ?? endDate;
   await store.ensureLayout?.();
@@ -333,7 +361,8 @@ async function runRefresh({
     capturedMarketPages.add(page.page);
   };
   onProgress({ phase: "markets" });
-  const currentData = await api.fetchPublicMarkets({ ...apiOptions, onPage: captureMarketPage });
+  const currentData = await api.fetchPublicMarkets({ ...apiOptions, requestDelayMs: paceMs, onPage: captureMarketPage });
+  if (paceMs > 0) await wait(paceMs);
   const markets = currentData.markets ?? [];
   const rawMarketPages = currentData.rawPages ?? [];
   for (const page of rawMarketPages) {
@@ -414,6 +443,7 @@ async function runRefresh({
         payload: { rows: fetchedRows }
       });
       await store.writeJson(historyCapturePath, historyCapture, { overwrite: false });
+      if (paceMs > 0) await wait(paceMs);
     }
 
     if (!paramsSkipped) {
@@ -440,6 +470,7 @@ async function runRefresh({
         requestedThrough: endDay,
         dateRangeContract: UTC_INCLUSIVE_DAY_CONTRACT
       });
+      if (paceMs > 0) await wait(paceMs);
     }
 
     const normalizedFetchedRows = normalizeMarketHistoryRows(fetchedRows, market);
@@ -477,6 +508,7 @@ async function runRefresh({
   if (typeof api.fetchLqStats === "function") {
     try {
       const lqData = await api.fetchLqStats(apiOptions);
+      if (paceMs > 0) await wait(paceMs);
       if (lqData) {
         lqStats = lqData;
         const snap = buildLqStatsSnapshot({ timestamp: fetchedAt, ...lqData });
