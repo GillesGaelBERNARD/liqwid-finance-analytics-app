@@ -673,5 +673,125 @@ test("dual Y-axis supports independent left and right scales and hideYScaleToggl
   assert.ok(Number.isFinite(yRight));
 });
 
+test("interactive time series chart dynamically expands left and right margins for wide Y-axis tick labels", () => {
+  const createMockContainer = (id, clientWidth = 1000) => {
+    let mainSvgInnerHTML = "";
+    return {
+      container: {
+        id,
+        clientWidth,
+        clientHeight: 420,
+        innerHTML: "",
+        querySelector(sel) {
+          if (sel === ".chart-y-scale-group") return { set hidden(_) {} };
+          if (sel === "svg.chart-main") return {
+            classList: { toggle() {}, add() {}, remove() {} },
+            setAttribute() {},
+            addEventListener() {},
+            querySelector() {},
+            set innerHTML(val) { mainSvgInnerHTML = val; },
+            get innerHTML() { return mainSvgInnerHTML; }
+          };
+          if (sel === "svg.chart-navigator") return {
+            classList: { toggle() {}, add() {}, remove() {} },
+            setAttribute() {},
+            addEventListener() {},
+            querySelector() {},
+            set innerHTML(_) {},
+            get innerHTML() { return ""; }
+          };
+          if (sel === ".chart-tooltip") return { hidden: true, setAttribute() {}, classList: { add() {}, remove() {} } };
+          if (sel === ".chart-visible-range") return { textContent: "" };
+          if (sel === ".chart-live-legend") return { innerHTML: "" };
+          if (sel === ".chart-range-summary") return { innerHTML: "" };
+          if (sel === ".chart-comparison") return { classList: { add() {} }, innerHTML: "" };
+          if (sel === ".chart-range-start" || sel === ".chart-range-end") return { min: "", max: "", value: "" };
+          if (sel === ".chart-main-shell") return { clientWidth, clientHeight: 420 };
+          return null;
+        },
+        querySelectorAll() { return []; },
+        addEventListener() {}
+      },
+      getMainSvgInnerHTML: () => mainSvgInnerHTML
+    };
+  };
+
+  const shortHarness = createMockContainer("test-short-labels");
+  const shortRows = [
+    { date: "2026-01-01", util: 0.1 },
+    { date: "2026-01-02", util: 0.5 }
+  ];
+  const shortSeries = [{ key: "util", label: "Utilization", color: "#19b5fe" }];
+  const shortState = renderInteractiveTimeSeriesChart(shortHarness.container, {
+    chartId: "shortLabels",
+    rows: shortRows,
+    series: shortSeries,
+    valueFormatter: v => `${(v * 100).toFixed(0)}%`
+  });
+  assert.equal(shortState.geometry.plotLeft, 88);
+
+  const wideHarness = createMockContainer("test-wide-labels");
+  const wideRows = [
+    { date: "2026-01-01", supplyCap: 80000000 },
+    { date: "2026-01-02", supplyCap: 160000000 }
+  ];
+  const wideSeries = [{ key: "supplyCap", label: "Supply cap", color: "#19b5fe" }];
+  const wideState = renderInteractiveTimeSeriesChart(wideHarness.container, {
+    chartId: "wideLabels",
+    rows: wideRows,
+    series: wideSeries,
+    valueFormatter: v => `${(v / 1e6).toFixed(0)}M NIGHT`
+  });
+  assert.ok(wideState.geometry.plotLeft > 88, `plotLeft should widen beyond 88, got ${wideState.geometry.plotLeft}`);
+  const expectedTickX = (wideState.geometry.plotLeft - 10).toFixed(2);
+  assert.ok(
+    wideHarness.getMainSvgInnerHTML().includes(`x="${wideState.geometry.plotLeft - 10}"`) ||
+    wideHarness.getMainSvgInnerHTML().includes(`x="${expectedTickX}"`),
+    "Y-axis ticks must be anchored to the widened plotLeft"
+  );
+});
+
+test("renderInteractiveBoxplotChart dynamically expands plotLeft for wide formatted tick labels", () => {
+  let mainSvgInnerHTML = "";
+  const container = {
+    id: "test-boxplot-wide-labels",
+    clientWidth: 1000,
+    clientHeight: 400,
+    innerHTML: "",
+    querySelector(sel) {
+      if (sel === ".chart-y-scale-group") return { set hidden(_) {} };
+      if (sel === "svg.chart-main") return {
+        classList: { toggle() {}, add() {}, remove() {} },
+        setAttribute() {},
+        addEventListener() {},
+        querySelector() {},
+        set innerHTML(val) { mainSvgInnerHTML = val; },
+        get innerHTML() { return mainSvgInnerHTML; }
+      };
+      if (sel === ".chart-tooltip") return { hidden: true, setAttribute() {}, classList: { add() {}, remove() {} } };
+      if (sel === ".chart-range-summary") return { innerHTML: "" };
+      if (sel === ".chart-main-shell") return { clientWidth: 1000, clientHeight: 400 };
+      return null;
+    },
+    querySelectorAll() { return []; },
+    addEventListener() {}
+  };
+
+  const rows = [
+    { date: "2026-01-01", repaid: 50000 },
+    { date: "2026-01-02", repaid: 100000 },
+    { date: "2026-01-03", repaid: 200000 }
+  ];
+
+  const state = renderInteractiveBoxplotChart(container, {
+    chartId: "boxplotWide",
+    rows,
+    yKey: "repaid",
+    valueFormatter: v => `${v.toLocaleString("en-US")} NIGHT`
+  });
+
+  assert.ok(state.geometry.plotLeft > 88, `Boxplot plotLeft should expand for wide labels, got ${state.geometry.plotLeft}`);
+});
+
 
 

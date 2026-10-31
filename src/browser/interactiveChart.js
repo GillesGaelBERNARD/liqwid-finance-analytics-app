@@ -698,16 +698,9 @@ function chartRenderMain(container, state) {
   const leftSeries = visibleSeries.filter(item => item.yAxis !== "right");
   const rightSeries = visibleSeries.filter(item => item.yAxis === "right");
   const hasRightAxis = rightSeries.length > 0;
-  const margin = { left: mobile ? 67 : 88, right: hasRightAxis ? (mobile ? 67 : 88) : (mobile ? 18 : 28), top: supportsYScale ? 62 : 24, bottom: 48 };
-  const plotLeft = margin.left;
-  const plotRight = width - margin.right;
-  const plotTop = margin.top;
-  const plotBottom = height - margin.bottom;
-  const plotWidth = Math.max(40, plotRight - plotLeft);
+  const plotTop = supportsYScale ? 62 : 24;
+  const plotBottom = height - 48;
   const plotHeight = Math.max(40, plotBottom - plotTop);
-  const timeDomain = chartTimeDomain(state.rows, state.startIndex, state.endIndex, state.calendarPeriod);
-  const { min: timeMin, max: timeMax, singleDateRange } = timeDomain;
-  const xScale = timestamp => plotLeft + ((timestamp - timeMin) / (timeMax - timeMin)) * plotWidth;
   const leftValues = [];
   const rightValues = [];
   let stackedBands = [];
@@ -738,17 +731,47 @@ function chartRenderMain(container, state) {
       ? Number(state.ySymlogConstant)
       : chartSymlogConstant(autoLeftDomain)
     : 1;
-  const yScaleLeftModel = chartCreateYScale(leftDomain, yScaleMode, symlogConstant, plotTop, plotBottom);
-  const yScaleLeft = yScaleLeftModel.map;
   const yTicksLeft = chartYTickValues(leftDomain, yScaleMode, symlogConstant, 5);
 
-  let yScaleRight = null;
+  let autoRightDomain = null;
   let yTicksRight = [];
   if (hasRightAxis) {
-    const autoRightDomain = chartValueDomainForMode(rightValues, null);
+    autoRightDomain = chartValueDomainForMode(rightValues, null);
+    yTicksRight = chartYTickValues(autoRightDomain, "linear", 1, 5);
+  }
+
+  const leftTickStrings = yTicksLeft.map(value => chartFormatValue(state, value, leftSeries[0]?.key));
+  const maxLeftTickLength = Math.max(0, ...leftTickStrings.map(str => String(str ?? "").length));
+  const baseLeftMargin = mobile ? 67 : 88;
+  const requiredLeftMargin = Math.ceil(maxLeftTickLength * 8.5) + 24;
+  const maxAllowedLeftMargin = Math.floor(width * 0.40);
+  const marginLeft = Math.min(maxAllowedLeftMargin, Math.max(baseLeftMargin, requiredLeftMargin));
+
+  let marginRight = mobile ? 18 : 28;
+  if (hasRightAxis) {
+    const rightTickStrings = yTicksRight.map(value => chartFormatValue(state, value, rightSeries[0]?.key));
+    const maxRightTickLength = Math.max(0, ...rightTickStrings.map(str => String(str ?? "").length));
+    const baseRightMargin = mobile ? 67 : 88;
+    const requiredRightMargin = Math.ceil(maxRightTickLength * 8.5) + 24;
+    const maxAllowedRightMargin = Math.floor(width * 0.35);
+    marginRight = Math.min(maxAllowedRightMargin, Math.max(baseRightMargin, requiredRightMargin));
+  }
+
+  const margin = { left: marginLeft, right: marginRight, top: plotTop, bottom: height - plotBottom };
+  const plotLeft = margin.left;
+  const plotRight = width - margin.right;
+  const plotWidth = Math.max(40, plotRight - plotLeft);
+  const timeDomain = chartTimeDomain(state.rows, state.startIndex, state.endIndex, state.calendarPeriod);
+  const { min: timeMin, max: timeMax, singleDateRange } = timeDomain;
+  const xScale = timestamp => plotLeft + ((timestamp - timeMin) / (timeMax - timeMin)) * plotWidth;
+
+  const yScaleLeftModel = chartCreateYScale(leftDomain, yScaleMode, symlogConstant, plotTop, plotBottom);
+  const yScaleLeft = yScaleLeftModel.map;
+
+  let yScaleRight = null;
+  if (hasRightAxis) {
     const yScaleRightModel = chartCreateYScale(autoRightDomain, "linear", 1, plotTop, plotBottom);
     yScaleRight = yScaleRightModel.map;
-    yTicksRight = chartYTickValues(autoRightDomain, "linear", 1, 5);
   }
 
   const yScaleForItem = item => (item?.yAxis === "right" && hasRightAxis ? yScaleRight : yScaleLeft);
@@ -1801,12 +1824,10 @@ function chartRenderBoxplotState(container, state) {
   const shell = container.querySelector(".chart-main-shell");
   const svg = container.querySelector("svg.chart-main");
   const width = Math.max(320, Math.round(shell.clientWidth || container.clientWidth || 1000));
-  const height = width < 720 ? 340 : 400;
-  const plotLeft = 88;
-  const plotRight = width - 28;
+  const mobile = width < 720;
+  const height = mobile ? 340 : 400;
   const plotTop = 40;
   const plotBottom = height - 52;
-  const plotWidth = Math.max(40, plotRight - plotLeft);
 
   const minDomain = totalObs ? Math.min(0, globalMin) : 0;
   const maxDomain = totalObs ? Math.max(1, globalMax * 1.08) : 100;
@@ -1817,6 +1838,15 @@ function chartRenderBoxplotState(container, state) {
   const yScaleModel = chartCreateYScale(domain, yScaleMode, symlogConstant, plotTop, plotBottom);
   const yScale = yScaleModel.map;
   const yTicks = chartYTickValues(domain, yScaleMode, symlogConstant, 5);
+
+  const yTickStrings = yTicks.map(value => chartFormatValue(state, value));
+  const maxTickLength = Math.max(0, ...yTickStrings.map(str => String(str ?? "").length));
+  const baseLeftMargin = mobile ? 67 : 88;
+  const requiredLeftMargin = Math.ceil(maxTickLength * 8.5) + 24;
+  const maxAllowedLeftMargin = Math.floor(width * 0.40);
+  const plotLeft = Math.min(maxAllowedLeftMargin, Math.max(baseLeftMargin, requiredLeftMargin));
+  const plotRight = width - 28;
+  const plotWidth = Math.max(40, plotRight - plotLeft);
 
   const grid = yTicks.map(value => {
     const y = yScale(value);

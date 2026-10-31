@@ -991,9 +991,6 @@ function breakdownRenderScatterState(container, state) {
   const supportsYScale = !fixedYDomain;
   const width = Math.max(breakdownChartMinimumWidth(options.minWidth), Math.round(Number(container.clientWidth) || 900));
   const height = width < 660 ? 390 : 440;
-  const margin = { left: width < 660 ? 66 : 84, right: 28, top: supportsYScale ? 64 : 28, bottom: 58 };
-  const plotWidth = width - margin.left - margin.right;
-  const plotHeight = height - margin.top - margin.bottom;
   const xDataMin = Math.min(...points.map(point => point.x));
   const xDataMax = Math.max(...points.map(point => point.x));
   let xMin = fixedXDomain?.min ?? xDataMin;
@@ -1035,6 +1032,17 @@ function breakdownRenderScatterState(container, state) {
       ? Number(state.ySymlogConstant)
       : chartSymlogConstant(autoYDomain)
     : 1;
+
+  const yTicks = chartYTickValues(yDomain, yScaleMode, ySymlogConstant, 5);
+  const yTickStrings = yTicks.map(value => breakdownFormat(yFormatter, value));
+  const maxLeftTickLength = Math.max(0, ...yTickStrings.map(str => String(str ?? "").length));
+  const baseLeftMargin = width < 660 ? 66 : 84;
+  const requiredLeftMargin = Math.ceil(maxLeftTickLength * 7.5) + 22;
+  const maxAllowedLeftMargin = Math.floor(width * 0.40);
+  const marginLeft = Math.min(maxAllowedLeftMargin, Math.max(baseLeftMargin, requiredLeftMargin));
+  const margin = { left: marginLeft, right: 28, top: supportsYScale ? 64 : 28, bottom: 58 };
+  const plotWidth = width - margin.left - margin.right;
+  const plotHeight = height - margin.top - margin.bottom;
 
   const transformX = value => xScaleType === "log"
     ? Math.log10(value)
@@ -1082,7 +1090,6 @@ function breakdownRenderScatterState(container, state) {
     : options.integerXTicks
       ? breakdownIntegerTicks(xMin, xMax, 6)
       : breakdownLinearTicks(xMin, xMax, 5);
-  const yTicks = chartYTickValues(yDomain, yScaleMode, ySymlogConstant, 5);
   const grid = [
     ...xTicks.map(value => {
       const x = scaleX(value);

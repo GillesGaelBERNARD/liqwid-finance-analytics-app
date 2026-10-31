@@ -532,7 +532,7 @@ HTML_TEMPLATE = r"""<!doctype html>
     .chart-help { margin: 0 0 10px; color: var(--muted); font-size: .78rem; }
     .chart { min-height: 390px; }
     .chart svg { width: 100%; min-height: 390px; display: block; }
-    .axis { fill: var(--muted); font-size: 15px; }
+    .axis { fill: var(--muted); font-size: 13px; }
     .legend { display: flex; flex-wrap: wrap; gap: 14px; color: var(--muted); margin: 8px 0 16px; }
     .legend span::before { content: ""; display: inline-block; width: 12px; height: 12px; border-radius: 99px; margin-right: 7px; background: currentColor; }
     .hidden { display: none !important; }
