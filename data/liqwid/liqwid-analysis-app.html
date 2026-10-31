@@ -185,7 +185,7 @@
     .data-status-audit-rule { padding: 11px 12px; border-left: 2px solid rgba(25,181,254,.55); background: rgba(16,42,68,.44); }
     .data-status-audit-rule strong { display: block; margin-bottom: 3px; font-size: .76rem; }
     .data-status-audit-rule span { display: block; color: var(--muted); font-size: .7rem; line-height: 1.45; }
-    main { width: min(1500px, calc(100% - 32px)); margin: 22px auto 70px; }
+    main { width: min(1500px, calc(100% - 32px)); margin: 22px auto 70px; min-width: 0; }
     .analytics-nav {
       position: sticky;
       top: 0;
@@ -247,6 +247,8 @@
     }
     .view {
       scroll-margin-top: 190px;
+      min-width: 0;
+      max-width: 100%;
     }
     button, select, input {
       border: 1px solid var(--line);
@@ -543,10 +545,12 @@
     table { width: 100%; border-collapse: collapse; font-size: 1rem; }
     th, td { text-align: left; padding: 12px 10px; border-bottom: 1px solid rgba(36,72,102,.75); vertical-align: top; }
     th { color: var(--mint); font-weight: 800; }
-    .table-scroll { max-height: 620px; overflow: auto; border: 1px solid rgba(36,72,102,.58); border-radius: 8px; }
+    .table-scroll { width: 100%; max-width: 100%; max-height: 620px; overflow: auto; border: 1px solid rgba(36,72,102,.58); border-radius: 8px; scrollbar-color: var(--line) transparent; }
     .table-scroll thead { position: sticky; top: 0; z-index: 1; background: var(--panel2); }
-    .data-tables { margin-top: 46px; padding-top: 8px; border-top: 1px solid rgba(36,72,102,.72); }
-    .data-table-grid { display: grid; grid-template-columns: 1fr; gap: 18px; }
+    .table-wrap { width: 100%; max-width: 100%; overflow-x: auto; scrollbar-color: var(--line) transparent; }
+    .data-tables { margin-top: 46px; padding-top: 8px; border-top: 1px solid rgba(36,72,102,.72); min-width: 0; max-width: 100%; }
+    .data-table-grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: 18px; min-width: 0; max-width: 100%; }
+    .data-table-grid > .panel { min-width: 0; max-width: 100%; overflow: hidden; }
     .controls { display: flex; gap: 12px; flex-wrap: wrap; align-items: end; margin: 18px 0; }
     label { display: grid; gap: 6px; color: var(--muted); }
     select { min-width: 280px; }
@@ -657,7 +661,7 @@
   </dialog>
   <script id="payload" type="application/json">{"bundle":null,"deep":null}</script>
   <script>
-    const VIEWER_BUILD = "a855477a1b45";
+    const VIEWER_BUILD = "9e0a965ce28b";
     // src/shared/dates.js
 const UTC_INCLUSIVE_DAY_CONTRACT = "utc-inclusive-day-v1";
 
