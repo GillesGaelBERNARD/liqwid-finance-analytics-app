@@ -1,0 +1,36 @@
+{
+  "fetchedAt": "2026-11-01T16:57:29.198Z",
+  "rowCount": 1,
+  "payload": {
+    "fetchedAt": "2026-11-01T16:57:29.198Z",
+    "source": "cardano-mainnet-blockfrost",
+    "blockHeight": 14144854,
+    "epoch": 665,
+    "slot": 201985952,
+    "lqStatsComparison": {
+      "onchainTotalSupply": 21000000,
+      "apiTotalSupply": 21000000,
+      "onchainStaked": 3966656.034677,
+      "apiStaked": 3965887.54326,
+      "supplyDelta": 0,
+      "stakedDelta": 768.4914169996046,
+      "verified": true
+    },
+    "loansComparison": {
+      "cleanCount": 796,
+      "onchainCount": 84,
+      "verifiedCount": 82,
+      "verified": true
+    },
+    "governanceComparison": {
+      "sampleDatumHash": "1b9985047d1529df890fa74aebc551e89257983255fcd2aaae72669e8c7e933d",
+      "matches": true,
+      "incomeRatios": [
+        10,
+        8,
+        1,
+        0
+      ]
+    }
+  }
+}

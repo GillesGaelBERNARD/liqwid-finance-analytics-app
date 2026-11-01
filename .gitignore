@@ -1,6 +1,11 @@
 # Dependencies
 node_modules/
 
+# Environment and Secrets
+.env
+.env.*
+!.env.example
+
 # AI Coding Project & Scratch files
 AGENTS.md
 scratch/

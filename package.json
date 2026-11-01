@@ -8,6 +8,7 @@
     "build:app": "python scripts/static_app_generator.py --data-root data/liqwid",
     "refresh:data": "node scripts/refresh_official_data.js data/liqwid",
     "rebuild:data-archive": "node scripts/rebuild_data_archive.js data/liqwid",
+    "verify:onchain": "node scripts/verify_onchain_data.js",
     "test": "node --test"
   },
   "engines": {

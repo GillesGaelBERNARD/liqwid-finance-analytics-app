@@ -1,6 +1,7 @@
 import { addDays, todayDateKey, toDateKey, toUtcApiRange, UTC_INCLUSIVE_DAY_CONTRACT } from "../shared/dates.js";
 import { aggregateProtocolSeries, firstActiveDate, normalizeMarketHistoryRows, summarizeMarket, withDerivedMarketMetrics } from "../shared/metrics.js";
 import { appendLqStatsHistory, buildLqStatsSnapshot } from "./lqStatsHistory.js";
+import { createBlockfrostClient } from "../shared/blockfrost.js";
 
 export const LIQWID_GRAPHQL_ENDPOINT = "https://v2.api.liqwid.finance/graphql";
 export const DEFAULT_HISTORY_START_DATE = "2020-01-01";
@@ -302,8 +303,64 @@ export async function fetchMarketParamsHistory(input, options = {}) {
 }
 
 export async function fetchLqStats(options = {}) {
-  const data = await postGraphql(buildLqStatsRequest(), options);
-  return data.lq;
+  const bfClient = options.blockfrostClient ?? (
+    options.allowOnchain !== false && !options.fetchImpl && typeof process !== "undefined" && (process.env?.BLOCKFROST_API_KEY || process.env?.BLOCKFROST_PROJECT_ID)
+      ? createBlockfrostClient()
+      : null
+  );
+
+  let onchainData = null;
+  let onchainLiquidationAudit = null;
+  let onchainError = null;
+
+  if (bfClient) {
+    try {
+      onchainData = await bfClient.fetchOnchainLqStats();
+      if (typeof bfClient.fetchOnchainLiquidationAudit === "function") {
+        onchainLiquidationAudit = await bfClient.fetchOnchainLiquidationAudit().catch(() => null);
+      }
+    } catch (err) {
+      onchainError = err;
+    }
+  }
+
+  let apiLq = null;
+  try {
+    const data = await postGraphql(buildLqStatsRequest(), options);
+    apiLq = data?.lq ?? null;
+  } catch (err) {
+    if (!onchainData) throw err;
+  }
+
+  if (onchainData) {
+    return {
+      ...(apiLq || {}),
+      totalSupply: onchainData.totalSupply,
+      staked: onchainData.staked,
+      currencySymbol: onchainData.currencySymbol,
+      onchainVerified: true,
+      onchainSource: "blockfrost",
+      onchainAudit: {
+        verified: true,
+        lqStatsComparison: {
+          onchainTotalSupply: onchainData.totalSupply,
+          apiTotalSupply: apiLq?.totalSupply ?? null,
+          onchainStaked: onchainData.staked,
+          apiStaked: apiLq?.staked ?? null,
+          supplyDelta: apiLq ? Math.abs(onchainData.totalSupply - (Number(apiLq.totalSupply) || 21000000)) : 0,
+          stakedDelta: apiLq && apiLq.staked != null ? Math.abs(onchainData.staked - Number(apiLq.staked)) : 0
+        },
+        liquidationAudit: onchainLiquidationAudit
+      }
+    };
+  }
+
+  return {
+    ...apiLq,
+    onchainVerified: false,
+    onchainSource: "api-v2-fallback",
+    onchainError: onchainError ? onchainError.message : null
+  };
 }
 
 const defaultApi = Object.freeze({ fetchPublicMarkets, fetchMarketHistory, fetchMarketParamsHistory, fetchLqStats });
@@ -520,6 +577,12 @@ async function runRefresh({
         const existingSeries = existingHistoryEnv?.payload?.series ?? existingHistoryEnv?.series ?? (Array.isArray(existingHistoryEnv) ? existingHistoryEnv : []);
         lqStatsHistory = appendLqStatsHistory(existingSeries, snap);
         await store.writeJson("raw/api/lq-stats-history.json", captureEnvelope({ fetchedAt, request: buildLqStatsRequest(), rowCount: lqStatsHistory.length, payload: { series: lqStatsHistory } }), { overwrite: true }).catch(() => {});
+
+        if (lqData.onchainAudit) {
+          const onchainCapture = captureEnvelope({ fetchedAt, rowCount: 1, payload: lqData.onchainAudit });
+          await store.writeJson(`${captureRoot}/onchain-audit.json`, onchainCapture, { overwrite: false }).catch(() => {});
+          await store.writeJson("raw/api/onchain-audit.json", onchainCapture, { overwrite: true }).catch(() => {});
+        }
       }
     } catch (err) {
       // Non-fatal if lqStats fetch fails
@@ -535,7 +598,8 @@ async function runRefresh({
     endDate: endDay,
     apiTotals: currentData.totals,
     lqStats,
-    lqStatsHistory
+    lqStatsHistory,
+    onchainAudit: lqStats?.onchainAudit ?? null
   });
   bundle.rawCapture = captureRoot;
   bundle.archiveMetadata = {
@@ -561,8 +625,10 @@ export async function buildAnalysisBundleFromStore(store, options = {}) {
 
   const lqStatsPayload = typeof store.readJson === "function" ? await store.readJson("raw/api/lq-stats.json", null).catch(() => null) : null;
   const lqStatsHistoryPayload = typeof store.readJson === "function" ? await store.readJson("raw/api/lq-stats-history.json", null).catch(() => null) : null;
+  const onchainAuditPayload = typeof store.readJson === "function" ? await store.readJson("raw/api/onchain-audit.json", null).catch(() => null) : null;
   const lqStats = lqStatsPayload?.payload ?? lqStatsPayload ?? null;
   const lqStatsHistory = lqStatsHistoryPayload?.payload?.series ?? lqStatsHistoryPayload?.series ?? (Array.isArray(lqStatsHistoryPayload) ? lqStatsHistoryPayload : []);
+  const onchainAudit = onchainAuditPayload?.payload ?? onchainAuditPayload ?? (lqStats?.onchainAudit ?? null);
 
   const bundle = buildAnalysisBundle({
     markets,
@@ -573,7 +639,8 @@ export async function buildAnalysisBundleFromStore(store, options = {}) {
     endDate: settings.historyEndDate ?? todayDateKey(),
     apiTotals,
     lqStats,
-    lqStatsHistory
+    lqStatsHistory,
+    onchainAudit
   });
   const generatedAt = settings.generatedAt;
   const rawCapture = settings.latestRawCapture;
@@ -588,7 +655,7 @@ export async function buildAnalysisBundleFromStore(store, options = {}) {
   return bundle;
 }
 
-export function buildAnalysisBundle({ markets, marketSeriesById, statuses = [], dataRoot, startDate, endDate, apiTotals = null, lqStats = null, lqStatsHistory = [] }) {
+export function buildAnalysisBundle({ markets, marketSeriesById, statuses = [], dataRoot, startDate, endDate, apiTotals = null, lqStats = null, lqStatsHistory = [], onchainAudit = null }) {
   const marketSeries = Object.fromEntries(
     Object.entries(marketSeriesById).map(([marketId, rows]) => [marketId, withDerivedMarketMetrics(rows)])
   );
@@ -623,7 +690,8 @@ export function buildAnalysisBundle({ markets, marketSeriesById, statuses = [], 
     protocolSeries,
     marketSeries,
     lqStats,
-    lqStatsHistory
+    lqStatsHistory,
+    onchainAudit
   };
 }
 

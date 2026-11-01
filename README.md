@@ -14,7 +14,9 @@ An open-source, client-side web application and data pipeline for monitoring and
 - **Client-Side & Offline Ready**: Runs directly in any web browser without needing a backend server or persistent daemon.
 - **Portable Data Store & Zip Archive**: Bundles raw historical fetches, cleaned daily histories, and computed market datasets in a portable ZIP archive (`liqwid-data.zip`) and CSV manifest (`liqwid-portable-manifest.csv`).
 - **On-Demand Data Ingestion**: Does **not** perform always-on or continuous background data ingestion. New protocol observations are queried on-demand from the official Liqwid v2 GraphQL API only when triggered by the user clicking **"Fetch new data"**, with adaptive request pacing and rate-limit cooldown retries.
-- **Data Status**: Dedicated diagnostic interface providing data coverage audits, schema consistency verifications, strict revenue reconciliation tolerances (interest, origination, and bounded liquidation fee shares), and loan reconciliation checks.
+- **On-Chain Cardano Ledger Verification & Proof of Reserves**: Supports querying live Cardano mainnet eUTXO state via Blockfrost (LQ token total supply, staked LQ in governance scripts, active loan contract UTXOs, and Plutus datum market parameters) with automatic fallback to Liqwid APIv2 if Blockfrost is offline or unconfigured.
+- **On-Chain Liquidation Reconciliation**: Reconciles liquidation event history directly against the Cardano ledger Plutus liquidation withdrawal validator, resolving official API indexer omissions and maintaining an accurate dry-spell duration while filtering out administrative bad-debt settlements.
+- **Data Status & On-Chain Integrity**: Dedicated diagnostic interface providing data coverage audits, schema consistency verifications, strict revenue reconciliation tolerances (interest, origination, and bounded liquidation fee shares), loan reconciliation checks, and live on-chain ledger vs. APIv2 cross-reconciliation audits.
 
 ## Project Layout
 
@@ -53,6 +55,31 @@ An open-source, client-side web application and data pipeline for monitoring and
    - The application will instantaneously unpack and render the entire historical analytics workspace, protocol aggregates, and per-market dynamics offline.
 3. **Fetch New Data (On-Demand Data Ingestion)**:
    - Note: The app does **not** ingest data continuously in the background. To update the dataset with the latest metrics from the API, click the **"Fetch new data"** button inside the app.
+
+### On-Chain Verification with Blockfrost (Optional)
+
+The application can verify live protocol state (LQ token total supply, staked governance reserves, active loan UTXOs, and market parameter datums) directly against the Cardano blockchain via [Blockfrost](https://blockfrost.io).
+
+1. **Configure API Key**:
+   - Copy `.env.example` to `.env`:
+     ```bash
+     cp .env.example .env
+     ```
+   - Add your Blockfrost mainnet project ID:
+     ```bash
+     BLOCKFROST_PROJECT_ID=mainnetYourApiKeyHere
+     ```
+   - *Note*: `.env` is ignored by git and will never be committed.
+
+2. **Run Live On-Chain Verification & Audit Sync**:
+   ```bash
+   npm run verify:onchain
+   ```
+   This queries Cardano mainnet in real time and writes `data/liqwid/raw/api/onchain-audit.json`, checking discrepancies between on-chain ledger truth and Liqwid APIv2.
+
+3. **Seamless Fallback**:
+   - If no Blockfrost key is provided or if Blockfrost is unreachable, the system automatically falls back to Liqwid APIv2 without interruption.
+   - For detailed contract addresses, benchmark latency numbers, and architecture feasibility breakdown, see [`docs/blockfrost-integration.md`](docs/blockfrost-integration.md).
 
 ### Rebuilding the Application Bundle
 
@@ -95,10 +122,12 @@ To re-generate the portable `.zip` data archive (`liqwid-data.zip`) and its CSV 
 npm run rebuild:data-archive
 ```
 
-## Data Source
+## Data Sources
 
-All protocol data is sourced from the official Liqwid v2 GraphQL endpoint:
-`https://v2.api.liqwid.finance/graphql`
+1. **Official Liqwid v2 GraphQL API**: Primary source for historical market dynamics, protocol fees, interest accruals, and repayments:
+   `https://v2.api.liqwid.finance/graphql`
+2. **Cardano Mainnet via Blockfrost** (Optional Verification): Direct on-chain verification source for Proof of Reserves (LQ total supply, staked governance script balances, active loan eUTXOs, liquidation withdrawal validator executions, and Plutus datum state):
+   `https://cardano-mainnet.blockfrost.io/api/v0`
 
 ## Protocol-Owned Liquidity (POL) & Data Notice
 

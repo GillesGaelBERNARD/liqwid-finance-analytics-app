@@ -10644,6 +10644,7 @@ liqwid-portable-data,1,"raw/api/market-params-history/usdm.json",971,726B691A
 liqwid-portable-data,1,"raw/api/market-params-history/usdt.json",967,B3447235
 liqwid-portable-data,1,"raw/api/market-params-history/wmt.json",944,D08A9AF2
 liqwid-portable-data,1,"raw/api/markets-current.json",25261,5988AD65
+liqwid-portable-data,1,"raw/api/onchain-audit.json",868,2B765EC1
 liqwid-portable-data,1,"raw/api/protocol-fees-monthly.json",10836,AB5646F5
 liqwid-portable-data,1,"raw/api/protocol-observed-fee-flow-monthly.json",24002,967CD39D
 liqwid-portable-data,1,"raw/api/protocol-overview-daily.json",352357,85A22862

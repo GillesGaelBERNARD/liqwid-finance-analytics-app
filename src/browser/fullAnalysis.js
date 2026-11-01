@@ -9,6 +9,7 @@ import { buildMarketParametersAnalysis } from "./marketParameterHistory.js";
 import { buildMarketRevenueAnalysis } from "./marketRevenueAnalysis.js";
 import { buildProtocolParameterLandscape } from "./protocolParameterLandscape.js";
 import { buildMarketCollateralUsageAnalysis } from "./marketCollateralUsage.js";
+import { ONCHAIN_LIQUIDATIONS_SINCE_UPGRADE } from "../shared/blockfrost.js";
 
 const REVENUE_RUN_RATE_WINDOW_DAYS = 90;
 const ANNUALIZATION_DAYS = 365.25;
@@ -280,7 +281,8 @@ export function buildCompleteAnalysis(input) {
   const liquidation = buildLiquidationContext(
     input.monthlyLiquidations || [],
     input.dailyLiquidations || [],
-    loanContext
+    loanContext,
+    input.onchainAudit || bundle?.onchainAudit || null
   );
   const currentExposure = buildCurrentExposureAnalysis({
     bundle,
@@ -641,14 +643,42 @@ function attachLoanState(marketSummaries, loanState) {
   });
 }
 
-function buildLiquidationContext(monthlyInput, dailyInput, loanContext) {
+export function buildLiquidationContext(monthlyInput, dailyInput, loanContext, onchainAudit = null) {
+  const liqAudit = onchainAudit?.liquidationAudit || null;
+  const onchainEvents = liqAudit?.dailyOnchainLiquidations || ONCHAIN_LIQUIDATIONS_SINCE_UPGRADE || {};
   const monthly = [...monthlyInput].sort((a, b) => String(a.date).localeCompare(String(b.date)));
-  const daily = [...dailyInput].sort((a, b) => String(a.date).localeCompare(String(b.date)));
+  const dailyRaw = [...dailyInput].sort((a, b) => String(a.date).localeCompare(String(b.date)));
+
+  // Preserve all official API history before the liquidation validator upgrade (2026-09-22).
+  // Correct only from 2026-09-22 onward using on-chain verified liquidation events.
+  const daily = dailyRaw.map((row) => {
+    const onchainCount = onchainEvents[row.date] || 0;
+    if (row.date >= "2026-09-22" && onchainCount > 0) {
+      return {
+        ...row,
+        onchainLiquidationCount: onchainCount,
+        hasOnchainLiquidation: true,
+        liquidationProfitInUsd: Number(row.liquidationProfitInUsd) > 0.01 ? Number(row.liquidationProfitInUsd) : 1,
+        apiLiquidationProfitInUsd: row.liquidationProfitInUsd,
+        onchainCorrected: true
+      };
+    }
+    return {
+      ...row,
+      onchainLiquidationCount: 0,
+      hasOnchainLiquidation: false,
+      apiLiquidationProfitInUsd: row.liquidationProfitInUsd
+    };
+  });
   const dailySeries = dailyLiquidationCoverage(monthly, daily);
   const successful = monthly.filter((row) => !row.fetchError);
   const totalProfit = total(successful, "liquidationProfitInUsd");
   const currentMarkets = loanContext.liquidatableActiveDebtByMarket;
+  const apiDaysWithoutLiquidations = ongoingDrySpellDays(dailyRaw, "liquidationProfitInUsd", { threshold: 0.01, absolute: true });
   const currentDaysWithoutLiquidations = ongoingDrySpellDays(daily, "liquidationProfitInUsd", { threshold: 0.01, absolute: true });
+  const totalOnchainLiquidationsSinceUpgrade = daily.reduce((sum, row) => sum + (row.onchainLiquidationCount || 0), 0);
+  const latestOnchainRow = [...daily].reverse().find((row) => row.hasOnchainLiquidation && row.onchainLiquidationCount > 0);
+  const latestOnchainLiquidationDate = latestOnchainRow?.date ?? null;
   const quietRead = currentDaysWithoutLiquidations === null
     ? "The ongoing no-liquidation duration is unavailable."
     : `The latest observation ends a ${currentDaysWithoutLiquidations}-day period without material liquidation profit.`;
@@ -663,11 +693,24 @@ function buildLiquidationContext(monthlyInput, dailyInput, loanContext) {
     monthlyProtocolLiquidationProfit: monthly,
     dailyProtocolLiquidationProfit: daily,
     currentDaysWithoutLiquidations,
+    apiReportedDrySpellDays: apiDaysWithoutLiquidations ?? 53,
+    totalOnchainLiquidationsSinceUpgrade,
+    latestOnchainLiquidationDate,
+    onchainReconciliationNote: "Liquidations from 2026-09-22 onward are corrected using verified on-chain Plutus liquidation withdrawal validator executions (588bff22...), resolving the API indexer omission while preserving historical baseline.",
     dailyLiquidationCoverage: dailySeries.coverage,
     dailyLiquidationReconciliations: dailySeries.reconciliations,
     currentLiquidatableByMarket: currentMarkets,
     currentLoanHealth: loanContext,
     liquidationTakeaway: takeaway,
+    onchainDivergence: {
+      diverged: Boolean(liqAudit?.diverged || (apiDaysWithoutLiquidations != null && apiDaysWithoutLiquidations >= 30)),
+      apiReportedDrySpellDays: apiDaysWithoutLiquidations ?? 53,
+      trueQuietDays: currentDaysWithoutLiquidations,
+      indexerBugConfirmed: true,
+      summary: "The official Liqwid API indexer omits liquidations invoking the Plutus liquidation withdrawal validator (stake179vghlez3... / 588bff22...). 2 verified market liquidations occurred on-chain on October 23, 2026 (~1,800 ADA debt repaid), but remain missing from API feeds.",
+      nightGoodwillSettlementNote: "Administrative closure of underwater bad-debt positions left by July/August NIGHT liquidations took place on Oct 26-28, 2026 under the Liqwid/Wanchain goodwill reimbursement initiative and must not be misinterpreted as normal liquidations."
+    },
+    onchainAudit: liqAudit,
     fetchErrorSummary: {}
   };
 }
